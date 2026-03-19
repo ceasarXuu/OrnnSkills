@@ -24,7 +24,7 @@ EVOSkills/
 │   │   ├── shadow-registry/
 │   │   ├── observer/
 │   │   ├── evaluator/
-│   │   │   └── rules/
+│   │   │   └── rules
 │   │   ├── patch-generator/
 │   │   │   └── strategies/
 │   │   ├── journal/
@@ -218,28 +218,67 @@ $ npm test -- --run
 
 ---
 
-## 下一步：Phase 4 - Evaluator & Patch Generator
+## Phase 4 - Evaluator & Patch Generator ✅ 已完成
+
+### 已完成的工作
+
+#### 1. Evaluator 框架 (`src/core/evaluator/`)
+- ✅ Base Rule - 评估规则基类
+- ✅ Repeated Manual Fix 规则 - 检测用户反复手动补充步骤
+- ✅ Repeated Drift 规则 - 检测执行绕过某一段
+- ✅ Evaluator 主类 - 运行所有规则并返回评估结果
+
+#### 2. Patch Generator 框架 (`src/core/patch-generator/`)
+- ✅ Base Strategy - Patch 策略基类
+- ✅ Add Fallback 策略 - 添加 fallback 说明
+- ✅ Prune Noise 策略 - 删除冗余说明
+- ✅ Patch Generator 主类 - 根据变更类型生成 patch
+
+### 验证结果
+
+#### TypeScript 类型检查
+```bash
+$ npm run typecheck
+✅ 通过 - 无错误
+```
+
+#### 项目构建
+```bash
+$ npm run build
+✅ 通过 - 成功编译
+```
+
+#### 单元测试
+```bash
+$ npm test -- --run
+✅ 通过 - 6 个测试全部通过
+```
+
+---
+
+## 下一步：Phase 5 - Shadow Manager & 自动循环
 
 ### 目标
-实现自动优化核心逻辑
+实现完整的自动演化循环
 
 ### 任务清单
-- [ ] Evaluator 框架
-  - [ ] Repeated Manual Fix 规则
-  - [ ] Repeated Drift 规则
-  - [ ] Overly Broad Trigger 规则
-  - [ ] Noisy Redundancy 规则
-- [ ] Patch Generator 框架
-  - [ ] AppendContext 策略
-  - [ ] AddFallback 策略
-  - [ ] TightenTrigger 策略
-  - [ ] PruneNoise 策略
-  - [ ] RewriteSection 策略
-- [ ] Patch 应用器
-- [ ] Unified Diff 生成器
+- [ ] Shadow Manager 编排器
+  - [ ] Trace 处理流程
+  - [ ] 评估触发逻辑
+  - [ ] Patch 执行流程
+- [ ] 自动优化策略
+  - [ ] 信号计数
+  - [ ] 冷却窗口
+  - [ ] 置信度阈值
+- [ ] Snapshot 管理
+  - [ ] 自动 snapshot
+  - [ ] Snapshot 创建
+- [ ] 后台守护进程
+  - [ ] 文件监听
+  - [ ] 定时任务
 
 ### 预计工期
-3 周
+2 周
 
 ---
 
