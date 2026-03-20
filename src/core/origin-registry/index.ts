@@ -19,7 +19,7 @@ export class OriginRegistry {
   /**
    * 扫描所有配置的 skill 目录
    */
-  async scan(): Promise<OriginSkill[]> {
+  scan(): OriginSkill[] {
     const paths = configManager.getOriginPaths();
     const allSkills: OriginSkill[] = [];
 
@@ -31,7 +31,7 @@ export class OriginRegistry {
       }
 
       try {
-        const skills = await this.scanDirectory(expandedPath);
+        const skills = this.scanDirectory(expandedPath);
         allSkills.push(...skills);
       } catch (error) {
         logger.warn(`Failed to scan directory: ${expandedPath}`, { error });
@@ -53,7 +53,7 @@ export class OriginRegistry {
   /**
    * 扫描单个目录
    */
-  private async scanDirectory(dirPath: string): Promise<OriginSkill[]> {
+  private scanDirectory(dirPath: string): OriginSkill[] {
     const skills: OriginSkill[] = [];
 
     if (!isDirectory(dirPath)) {
@@ -193,15 +193,15 @@ export class OriginRegistry {
   /**
    * 读取 origin skill 内容
    */
-  readContent(skillId: string): string | null {
+  async readContent(skillId: string): Promise<string | null> {
     const skill = this.skills.get(skillId);
     if (!skill) {
       return null;
     }
 
     try {
-      const { readFileSync } = require('node:fs');
-
+      const { readFileSync } = await import('node:fs');
+      
       // 如果是目录，查找主文件
       if (isDirectory(skill.origin_path)) {
         const possibleFiles = ['current.md', 'skill.md', `${skillId}.md`];

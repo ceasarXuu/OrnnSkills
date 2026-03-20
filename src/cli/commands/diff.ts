@@ -6,6 +6,12 @@ import { createJournalManager } from '../../core/journal/index.js';
 import { originRegistry } from '../../core/origin-registry/index.js';
 import { createUnifiedDiff } from '../../utils/diff.js';
 
+interface DiffOptions {
+  project: string;
+  revision?: string;
+  origin?: boolean;
+}
+
 /**
  * Diff 命令
  * 查看当前内容与 origin 的 diff
@@ -19,9 +25,9 @@ export function createDiffCommand(): Command {
     .option('-r, --revision <number>', 'Compare with specific revision')
     .option('-o, --origin', 'Compare with origin skill')
     .option('-p, --project <path>', 'Project root path', process.cwd())
-    .action(async (skillId: string, options) => {
+    .action(async (skillId: string, options: DiffOptions) => {
       try {
-        const projectRoot = options.project;
+        const projectRoot: string = options.project;
 
         // 检查 .sea 目录是否存在
         const seaDir = join(projectRoot, '.sea');
@@ -38,14 +44,14 @@ export function createDiffCommand(): Command {
         await journalManager.init();
 
         // 检查 shadow 是否存在
-        const shadow = await shadowRegistry.get(skillId);
+        const shadow = shadowRegistry.get(skillId);
         if (!shadow) {
           console.error(`Error: Shadow skill "${skillId}" not found`);
           process.exit(1);
         }
 
         // 读取当前内容
-        const currentContent = await shadowRegistry.readContent(skillId);
+        const currentContent = shadowRegistry.readContent(skillId);
         if (!currentContent) {
           console.error(`Error: Cannot read shadow content for "${skillId}"`);
           process.exit(1);
@@ -55,7 +61,7 @@ export function createDiffCommand(): Command {
 
         if (options.origin) {
           // 与 origin 比较
-          await originRegistry.scan();
+          originRegistry.scan();
           const origin = originRegistry.get(skillId);
 
           if (!origin) {
@@ -63,7 +69,7 @@ export function createDiffCommand(): Command {
             process.exit(1);
           }
 
-          const originContent = originRegistry.readContent(skillId);
+          const originContent = await originRegistry.readContent(skillId);
           if (!originContent) {
             console.error(`Error: Cannot read origin content for "${skillId}"`);
             process.exit(1);
@@ -119,13 +125,13 @@ export function createDiffCommand(): Command {
           }
         } else {
           // 默认显示与 origin 的 diff
-          await originRegistry.scan();
+          originRegistry.scan();
           const origin = originRegistry.get(skillId);
 
           if (!origin) {
             console.log(`Origin skill "${skillId}" not found, cannot show diff`);
           } else {
-            const originContent = originRegistry.readContent(skillId);
+            const originContent = await originRegistry.readContent(skillId);
             if (originContent) {
               const diffOutput = createUnifiedDiff(
                 `origin/${skillId}`,

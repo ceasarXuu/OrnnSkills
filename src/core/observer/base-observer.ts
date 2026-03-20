@@ -20,7 +20,7 @@ export abstract class BaseObserver {
   /**
    * 启动 observer
    */
-  abstract start(): Promise<void>;
+  abstract start(): void | Promise<void>;
 
   /**
    * 停止 observer

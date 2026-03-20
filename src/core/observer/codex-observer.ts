@@ -34,7 +34,7 @@ export class CodexObserver extends BaseObserver {
   /**
    * 启动 observer
    */
-  async start(): Promise<void> {
+  start(): void {
     if (this.isRunning) {
       logger.warn('Observer already running');
       return;
@@ -130,7 +130,7 @@ export class CodexObserver extends BaseObserver {
 
       for (const line of lines) {
         try {
-          const event = JSON.parse(line);
+          const event = JSON.parse(line) as Record<string, unknown>;
           this.processEvent(sessionId, event);
         } catch {
           // 忽略解析错误
@@ -161,7 +161,7 @@ export class CodexObserver extends BaseObserver {
       rl.on('line', (line) => {
         if (line.trim()) {
           try {
-            const event = JSON.parse(line);
+            const event = JSON.parse(line) as Record<string, unknown>;
             this.processEvent(sessionId, event);
           } catch {
             // 忽略解析错误
@@ -272,7 +272,7 @@ export class CodexObserver extends BaseObserver {
   /**
    * 手动处理一个 session 文件
    */
-  async processSessionFile(filePath: string): Promise<void> {
+  processSessionFile(filePath: string): void {
     if (!existsSync(filePath)) {
       throw new Error(`Session file not found: ${filePath}`);
     }

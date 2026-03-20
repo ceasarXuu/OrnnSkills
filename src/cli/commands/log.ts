@@ -3,6 +3,14 @@ import { join } from 'node:path';
 import { existsSync } from 'node:fs';
 import { createShadowRegistry } from '../../core/shadow-registry/index.js';
 import { createJournalManager } from '../../core/journal/index.js';
+import type { ChangeType } from '../../types/index.js';
+
+interface LogOptions {
+  project: string;
+  limit: string;
+  follow?: boolean;
+  type?: string;
+}
 
 /**
  * Log 命令
@@ -18,9 +26,9 @@ export function createLogCommand(): Command {
     .option('-f, --follow', 'Follow log output (like tail -f)')
     .option('-t, --type <type>', 'Filter by change type')
     .option('-p, --project <path>', 'Project root path', process.cwd())
-    .action(async (skillId: string, options) => {
+    .action(async (skillId: string, options: LogOptions) => {
       try {
-        const projectRoot = options.project;
+        const projectRoot: string = options.project;
 
         // 检查 .sea 目录是否存在
         const seaDir = join(projectRoot, '.sea');
@@ -37,7 +45,7 @@ export function createLogCommand(): Command {
         await journalManager.init();
 
         // 检查 shadow 是否存在
-        const shadow = await shadowRegistry.get(skillId);
+        const shadow = shadowRegistry.get(skillId);
         if (!shadow) {
           console.error(`Error: Shadow skill "${skillId}" not found`);
           process.exit(1);
@@ -47,9 +55,10 @@ export function createLogCommand(): Command {
         const limit = parseInt(options.limit, 10);
 
         // 获取 journal 记录
+        const changeType = options.type as ChangeType | undefined;
         const records = await journalManager.getJournalRecords(shadowId, {
           limit,
-          changeType: options.type as any,
+          changeType,
         });
 
         if (records.length === 0) {

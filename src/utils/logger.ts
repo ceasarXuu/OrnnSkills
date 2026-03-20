@@ -21,8 +21,9 @@ const logFormat = winston.format.combine(
   winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
   winston.format.errors({ stack: true }),
   winston.format.printf(({ timestamp, level, message, stack }) => {
-    const baseMessage = `[${timestamp}] ${level.toUpperCase()}: ${message}`;
-    return stack ? `${baseMessage}\n${stack}` : baseMessage;
+    const baseMessage = `[${timestamp}] ${String(level).toUpperCase()}: ${String(message)}`;
+    const stackStr = typeof stack === 'string' ? stack : undefined;
+    return stackStr ? `${baseMessage}\n${stackStr}` : baseMessage;
   })
 );
 

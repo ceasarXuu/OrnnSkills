@@ -3,6 +3,7 @@ import { configManager } from '../../config/index.js';
 import { createShadowRegistry } from '../shadow-registry/index.js';
 import { createJournalManager } from '../journal/index.js';
 import { createTraceManager } from '../observer/trace-manager.js';
+import { createTraceSkillMapper } from '../trace-skill-mapper/index.js';
 import { evaluator } from '../evaluator/index.js';
 import { patchGenerator } from '../patch-generator/index.js';
 import { hashString } from '../../utils/hash.js';
@@ -18,6 +19,7 @@ export class ShadowManager {
   private shadowRegistry;
   private journalManager;
   private traceManager;
+  private traceSkillMapper;
   private policy: AutoOptimizePolicy;
   private lastPatchTime: Map<string, number> = new Map();
   private patchCountToday: Map<string, number> = new Map();
@@ -26,6 +28,7 @@ export class ShadowManager {
     this.shadowRegistry = createShadowRegistry(projectRoot);
     this.journalManager = createJournalManager(projectRoot);
     this.traceManager = createTraceManager(projectRoot);
+    this.traceSkillMapper = createTraceSkillMapper(projectRoot);
 
     const patchConfig = configManager.getPatchConfig();
     this.policy = {
@@ -45,6 +48,7 @@ export class ShadowManager {
     await this.shadowRegistry.init();
     await this.journalManager.init();
     await this.traceManager.init();
+    await this.traceSkillMapper.init();
     logger.info('Shadow manager initialized');
   }
 
@@ -56,7 +60,7 @@ export class ShadowManager {
     this.traceManager.recordTrace(trace);
 
     // 检查是否需要触发评估
-    const shadowId = await this.findShadowForTrace(trace);
+    const shadowId = this.findShadowForTrace(trace);
     if (!shadowId) {
       return;
     }
@@ -74,11 +78,40 @@ export class ShadowManager {
 
   /**
    * 查找 trace 对应的 shadow
+   * 使用 TraceSkillMapper 的多策略映射
    */
-  private async findShadowForTrace(_trace: Trace): Promise<string | null> {
-    // 这里需要根据 trace 的内容推断对应的 skill
-    // 简化实现：返回 null，实际需要更复杂的逻辑
-    return null;
+  private findShadowForTrace(trace: Trace): string | null {
+    try {
+      // 使用 TraceSkillMapper 进行映射
+      const mapping = this.traceSkillMapper.mapTrace(trace);
+
+      // 如果映射成功且置信度足够
+      if (mapping.shadow_id && mapping.confidence >= 0.5) {
+        logger.debug('Shadow found for trace', {
+          trace_id: trace.trace_id,
+          skill_id: mapping.skill_id,
+          shadow_id: mapping.shadow_id,
+          confidence: mapping.confidence,
+          reason: mapping.reason,
+        });
+        return mapping.shadow_id;
+      }
+
+      // 映射失败，记录日志
+      logger.debug('No shadow found for trace', {
+        trace_id: trace.trace_id,
+        event_type: trace.event_type,
+        reason: mapping.reason,
+      });
+
+      return null;
+    } catch (error) {
+      logger.error('Error finding shadow for trace', {
+        trace_id: trace.trace_id,
+        error,
+      });
+      return null;
+    }
   }
 
   /**
@@ -102,7 +135,7 @@ export class ShadowManager {
     }
 
     // 检查是否被冻结
-    const shadow = await this.shadowRegistry.get(shadowId.split('@')[0]);
+    const shadow = this.shadowRegistry.get(shadowId.split('@')[0]);
     if (shadow?.status === 'frozen') {
       logger.debug(`Shadow ${shadowId} is frozen, skipping patch`);
       return;
@@ -154,7 +187,7 @@ export class ShadowManager {
       const currentRevision = await this.journalManager.getLatestRevision(shadowId);
 
       // 写入新内容
-      await this.shadowRegistry.writeContent(skillId, patchResult.newContent);
+      this.shadowRegistry.writeContent(skillId, patchResult.newContent);
 
       // 记录演化
       await this.journalManager.record(shadowId, {
@@ -226,7 +259,7 @@ export class ShadowManager {
     const evaluation = evaluator.evaluate(traces);
 
     if (evaluation && evaluation.should_patch) {
-      await this.executePatch(shadowId, evaluation);
+      this.handleEvaluation(shadowId, evaluation, traces);
     }
 
     return evaluation;
@@ -237,14 +270,14 @@ export class ShadowManager {
    */
   async getShadowState(shadowId: string) {
     const skillId = shadowId.split('@')[0];
-    const shadow = await this.shadowRegistry.get(skillId);
+    const shadow = this.shadowRegistry.get(skillId);
 
     if (!shadow) {
       return null;
     }
 
     const latestRevision = await this.journalManager.getLatestRevision(shadowId);
-    const snapshots = await this.journalManager.getSnapshots(shadowId);
+    const snapshots = this.journalManager.getSnapshots(shadowId);
 
     return {
       shadow,
@@ -257,7 +290,7 @@ export class ShadowManager {
   /**
    * 清理旧 traces
    */
-  async cleanupOldTraces(retentionDays: number): Promise<number> {
+  cleanupOldTraces(retentionDays: number): number {
     return this.traceManager.cleanupOldTraces(retentionDays);
   }
 
@@ -268,6 +301,7 @@ export class ShadowManager {
     this.shadowRegistry.close();
     this.journalManager.close();
     this.traceManager.close();
+    this.traceSkillMapper.close();
     logger.info('Shadow manager closed');
   }
 }
