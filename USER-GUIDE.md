@@ -1,12 +1,12 @@
-# SEA Skills 用户使用指南
+# EVO Skills 用户使用指南
 
-## 什么是 SEA Skills？
+## 什么是 EVO Skills？
 
-SEA Skills 是一个后台运行的智能助手，它会自动观察你使用 AI Agent（比如 Codex、OpenCode、Claude）的过程，然后帮你优化你的 skill 文件。
+EVO Skills 是一个后台运行的智能助手，它会自动观察你使用 AI Agent（比如 Codex、OpenCode、Claude）的过程，然后帮你优化你的 skill 文件。
 
 简单来说：
 - 你正常使用 AI Agent 干活
-- SEA Skills 在后台默默观察
+- EVO Skills 在后台默默观察
 - 它发现你经常手动补充某些步骤，就会自动把这些步骤加到你的 skill 里
 - 下次遇到类似情况，AI Agent 就能自动完成，不用你再手动补充了
 
@@ -15,7 +15,7 @@ SEA Skills 是一个后台运行的智能助手，它会自动观察你使用 AI
 ## 安装
 
 ```bash
-npm install -g sea-skills
+npm install -g evo-skills
 ```
 
 ---
@@ -25,7 +25,7 @@ npm install -g sea-skills
 ### 1. 查看当前项目有哪些 shadow skills
 
 ```bash
-sea skills status
+evo skills status
 ```
 
 输出示例：
@@ -42,7 +42,7 @@ testing                 frozen      5         2026-03-10
 ### 2. 查看某个 skill 的详细状态
 
 ```bash
-sea skills status --skill coding-standards
+evo skills status --skill coding-standards
 ```
 
 输出示例：
@@ -69,13 +69,13 @@ Recent Snapshots:
 
 ```bash
 # 查看最近 20 条记录
-sea skills log coding-standards
+evo skills log coding-standards
 
 # 只看最近 5 条
-sea skills log coding-standards --limit 5
+evo skills log coding-standards --limit 5
 
 # 只看"添加 fallback"类型的修改
-sea skills log coding-standards --type add_fallback
+evo skills log coding-standards --type add_fallback
 ```
 
 输出示例：
@@ -111,10 +111,10 @@ Evolution log for "coding-standards":
 
 ```bash
 # 与原始 origin skill 对比
-sea skills diff coding-standards --origin
+evo skills diff coding-standards --origin
 
 # 与某个历史版本对比
-sea skills diff coding-standards --revision 1
+evo skills diff coding-standards --revision 1
 ```
 
 输出示例：
@@ -142,16 +142,16 @@ Diff between origin and shadow for "coding-standards":
 
 ```bash
 # 先看看有哪些可用的版本
-sea skills rollback coding-standards
+evo skills rollback coding-standards
 
 # 回滚到第 2 个版本
-sea skills rollback coding-standards --to 2
+evo skills rollback coding-standards --to 2
 
 # 回滚到最新的快照
-sea skills rollback coding-standards --snapshot
+evo skills rollback coding-standards --snapshot
 
 # 回滚到最初的版本（从 origin 复制过来的样子）
-sea skills rollback coding-standards --initial
+evo skills rollback coding-standards --initial
 ```
 
 输出示例：
@@ -175,14 +175,14 @@ Usage:
 
 ```bash
 # 冻结（暂停自动优化）
-sea skills freeze coding-standards
+evo skills freeze coding-standards
 
 # 解冻（恢复自动优化）
-sea skills unfreeze coding-standards
+evo skills unfreeze coding-standards
 ```
 
 冻结后：
-- SEA Skills 不会再自动修改这个 skill
+- EVO Skills 不会再自动修改这个 skill
 - 但你仍然可以在 AI Agent 中使用它
 - 状态会显示为 `frozen`
 
@@ -192,22 +192,22 @@ sea skills unfreeze coding-standards
 
 ### Shadow Skill 是什么？
 
-当你在一个项目中首次使用某个全局 skill 时，SEA Skills 会自动在这个项目里创建一个"影子副本"（shadow skill）。
+当你在一个项目中首次使用某个全局 skill 时，EVO Skills 会自动在这个项目里创建一个"影子副本"（shadow skill）。
 
 ```
 全局 skill: ~/.skills/coding-standards.md
     ↓ 首次使用
-项目 shadow: your-project/.sea/skills/coding-standards/current.md
+项目 shadow: your-project/.evo/skills/coding-standards/current.md
 ```
 
-之后，SEA Skills 会：
+之后，EVO Skills 会：
 - 观察你在这个项目中如何使用这个 skill
 - 基于观察到的模式自动优化 shadow skill
 - 原始的全局 skill 不会被修改
 
 ### 自动优化的类型
 
-SEA Skills 支持以下几种自动优化：
+EVO Skills 支持以下几种自动优化：
 
 1. **add_fallback** - 添加 fallback 说明
    - 当你经常在 AI 输出后手动补充某个步骤时
@@ -243,7 +243,7 @@ SEA Skills 支持以下几种自动优化：
 
 ```
 your-project/
-├── .sea/
+├── .evo/
 │   ├── skills/
 │   │   └── coding-standards/
 │   │       ├── current.md      # 当前生效的 shadow skill
@@ -266,7 +266,7 @@ your-project/
 
 ### 全局配置
 
-配置文件位置：`~/.sea/settings.toml`
+配置文件位置：`~/.evo/settings.toml`
 
 ```toml
 [origin_paths]
@@ -285,7 +285,7 @@ max_patches_per_day = 3     # 每天最多优化 3 次
 
 ### 项目配置
 
-在项目的 `.sea/config/settings.toml` 中可以覆盖全局配置：
+在项目的 `.evo/config/settings.toml` 中可以覆盖全局配置：
 
 ```toml
 [project]
@@ -309,10 +309,10 @@ A: 使用回滚命令：
 
 ```bash
 # 先看看有哪些版本
-sea skills rollback <skill-id>
+evo skills rollback <skill-id>
 
 # 回滚到之前的好版本
-sea skills rollback <skill-id> --to <revision>
+evo skills rollback <skill-id> --to <revision>
 ```
 
 ### Q: 我不想让某个 skill 被自动修改
@@ -320,7 +320,7 @@ sea skills rollback <skill-id> --to <revision>
 A: 冻结它：
 
 ```bash
-sea skills freeze <skill-id>
+evo skills freeze <skill-id>
 ```
 
 ### Q: 怎么看 SEA Skills 对我的 skill 做了什么？
@@ -328,12 +328,12 @@ sea skills freeze <skill-id>
 A: 查看演化日志：
 
 ```bash
-sea skills log <skill-id>
+evo skills log <skill-id>
 ```
 
 ### Q: 自动优化太频繁了怎么办？
 
-A: 修改配置文件 `~/.sea/settings.toml`：
+A: 修改配置文件 `~/.evo/settings.toml`：
 
 ```toml
 [patch]
@@ -343,7 +343,7 @@ max_patches_per_day = 1     # 每天最多优化 1 次
 
 ### Q: 我可以手动触发优化吗？
 
-A: 目前只能通过 CLI 查看状态和回滚，自动优化是在后台进行的。如果需要手动优化，可以直接编辑 `.sea/skills/<skill-id>/current.md` 文件。
+A: 目前只能通过 CLI 查看状态和回滚，自动优化是在后台进行的。如果需要手动优化，可以直接编辑 `.evo/skills/<skill-id>/current.md` 文件。
 
 ### Q: Shadow skill 和原始 skill 有什么关系？
 
@@ -359,12 +359,12 @@ A: Shadow skill 是从原始 skill 复制过来的，然后被自动优化。原
    - 如果觉得不合理，就回滚并冻结
 
 2. **定期检查演化日志**
-   - 每隔几天看看 `sea skills log`
+   - 每隔几天看看 `evo skills log`
    - 了解 SEA Skills 在做什么
 
 3. **重要的 skill 考虑冻结**
    - 如果某个 skill 很重要，不希望被自动修改
-   - 使用 `sea skills freeze` 冻结它
+   - 使用 `evo skills freeze` 冻结它
 
 4. **利用项目配置**
    - 不同项目可能需要不同的优化策略

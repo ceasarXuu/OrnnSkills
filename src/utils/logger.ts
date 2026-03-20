@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { existsSync, mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 
-const LOG_DIR = join(homedir(), '.sea', 'logs');
+const LOG_DIR = join(homedir(), '.evo', 'logs');
 
 /**
  * 创建日志目录

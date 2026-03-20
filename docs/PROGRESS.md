@@ -1,4 +1,4 @@
-# SEA Skills 项目进度
+# EVO Skills 项目进度
 
 ## Phase 1: 基础框架 ✅ 已完成
 
@@ -336,22 +336,22 @@ $ npm test -- --run
 
 ```bash
 # 查看所有 shadow skills 状态
-sea skills status
+evo skills status
 
 # 查看特定 skill 详细状态
-sea skills status --skill my-skill
+evo skills status --skill my-skill
 
 # 回滚到指定 revision
-sea skills rollback my-skill --to 5
+evo skills rollback my-skill --to 5
 
 # 回滚到最新 snapshot
-sea skills rollback my-skill --snapshot
+evo skills rollback my-skill --snapshot
 
 # 回滚到初始版本
-sea skills rollback my-skill --initial
+evo skills rollback my-skill --initial
 
 # 查看可用的 snapshots
-sea skills rollback my-skill
+evo skills rollback my-skill
 ```
 
 ---
@@ -401,29 +401,29 @@ $ npm test -- --run
 
 ```bash
 # 查看所有 shadow skills 状态
-sea skills status
+evo skills status
 
 # 查看特定 skill 详细状态
-sea skills status --skill <skill-id>
+evo skills status --skill <skill-id>
 
 # 查看演化日志
-sea skills log <skill-id>
-sea skills log <skill-id> --limit 10
-sea skills log <skill-id> --type add_fallback
+evo skills log <skill-id>
+evo skills log <skill-id> --limit 10
+evo skills log <skill-id> --type add_fallback
 
 # 查看 diff
-sea skills diff <skill-id>
-sea skills diff <skill-id> --origin
-sea skills diff <skill-id> --revision 5
+evo skills diff <skill-id>
+evo skills diff <skill-id> --origin
+evo skills diff <skill-id> --revision 5
 
 # 回滚
-sea skills rollback <skill-id> --to 5
-sea skills rollback <skill-id> --snapshot
-sea skills rollback <skill-id> --initial
+evo skills rollback <skill-id> --to 5
+evo skills rollback <skill-id> --snapshot
+evo skills rollback <skill-id> --initial
 
 # 冻结/解冻
-sea skills freeze <skill-id>
-sea skills unfreeze <skill-id>
+evo skills freeze <skill-id>
+evo skills unfreeze <skill-id>
 ```
 
 ---
@@ -505,12 +505,12 @@ Duration  332ms
 ### 🚀 可用的 CLI 命令
 
 ```bash
-sea skills status              # 查看状态
-sea skills log <skill>         # 查看日志
-sea skills diff <skill>        # 查看差异
-sea skills rollback <skill>    # 回滚版本
-sea skills freeze <skill>      # 冻结优化
-sea skills unfreeze <skill>    # 解冻优化
+evo skills status              # 查看状态
+evo skills log <skill>         # 查看日志
+evo skills diff <skill>        # 查看差异
+evo skills rollback <skill>    # 回滚版本
+evo skills freeze <skill>      # 冻结优化
+evo skills unfreeze <skill>    # 解冻优化
 ```
 
 ---

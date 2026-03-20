@@ -2,18 +2,18 @@ import { cosmiconfig } from 'cosmiconfig';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
-import type { SeaConfig, ProjectConfig } from '../types/index.js';
+import type { EVOConfig, ProjectConfig } from '../types/index.js';
 import { DEFAULT_CONFIG } from './defaults.js';
 
-const MODULE_NAME = 'sea';
-const GLOBAL_CONFIG_DIR = join(homedir(), '.sea');
+const MODULE_NAME = 'evo';
+const GLOBAL_CONFIG_DIR = join(homedir(), '.evo');
 const GLOBAL_CONFIG_FILE = join(GLOBAL_CONFIG_DIR, 'settings.toml');
 
 /**
  * 配置管理器
  */
 export class ConfigManager {
-  private globalConfig: SeaConfig;
+  private globalConfig: EVOConfig;
   private projectConfig: ProjectConfig | null = null;
   private projectRoot: string | null = null;
 
@@ -42,10 +42,10 @@ export class ConfigManager {
     const explorer = cosmiconfig(MODULE_NAME, {
       searchPlaces: [
         'settings.toml',
-        '.searc',
-        '.searc.json',
-        '.searc.yaml',
-        '.searc.yml',
+        '.eorc',
+        '.eorc.json',
+        '.eorc.yaml',
+        '.eorc.yml',
         'package.json',
       ],
     });
@@ -53,7 +53,7 @@ export class ConfigManager {
     try {
       const result = await explorer.search(GLOBAL_CONFIG_DIR);
       if (result && !result.isEmpty) {
-        this.globalConfig = this.mergeConfig(DEFAULT_CONFIG, result.config as SeaConfig);
+        this.globalConfig = this.mergeConfig(DEFAULT_CONFIG, result.config as EVOConfig);
       }
     } catch {
       // 配置文件不存在或格式错误，使用默认配置
@@ -66,7 +66,7 @@ export class ConfigManager {
   private async loadProjectConfig(): Promise<void> {
     if (!this.projectRoot) return;
 
-    const projectConfigPath = join(this.projectRoot, '.sea', 'config', 'settings.toml');
+    const projectConfigPath = join(this.projectRoot, '.evo', 'config', 'settings.toml');
     const explorer = cosmiconfig(MODULE_NAME, {
       searchPlaces: [projectConfigPath],
     });
@@ -116,7 +116,7 @@ export class ConfigManager {
   /**
    * 获取全局配置
    */
-  getGlobalConfig(): SeaConfig {
+  getGlobalConfig(): EVOConfig {
     return { ...this.globalConfig };
   }
 
@@ -139,21 +139,21 @@ export class ConfigManager {
   /**
    * 获取评估器配置
    */
-  getEvaluatorConfig(): SeaConfig['evaluator'] {
+  getEvaluatorConfig(): EVOConfig['evaluator'] {
     return { ...this.globalConfig.evaluator };
   }
 
   /**
    * 获取 patch 配置
    */
-  getPatchConfig(): SeaConfig['patch'] {
+  getPatchConfig(): EVOConfig['patch'] {
     return { ...this.globalConfig.patch };
   }
 
   /**
    * 获取 journal 配置
    */
-  getJournalConfig(): SeaConfig['journal'] {
+  getJournalConfig(): EVOConfig['journal'] {
     return { ...this.globalConfig.journal };
   }
 

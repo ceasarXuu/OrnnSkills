@@ -10,8 +10,8 @@ import { createFreezeCommand, createUnfreezeCommand } from './commands/freeze.js
 const program = new Command();
 
 program
-  .name('sea')
-  .description('SEA Skills - Skill Evolution Agent')
+  .name('evo')
+  .description('EVO Skills - Skill Evolution Agent')
   .version('0.1.0');
 
 // Skills 子命令

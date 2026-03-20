@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   expandHome,
-  getSeaDir,
+  getEvoDir,
   getSkillsDir,
   getStateDir,
   getConfigDir,
@@ -31,59 +31,59 @@ describe('Path Utils', () => {
     });
   });
 
-  describe('getSeaDir', () => {
-    it('should return .sea directory path', () => {
-      const result = getSeaDir('/project');
-      expect(result).toBe('/project/.sea');
+  describe('getEvoDir', () => {
+    it('should return .evo directory path', () => {
+      const result = getEvoDir('/project');
+      expect(result).toBe('/project/.evo');
     });
   });
 
   describe('getSkillsDir', () => {
-    it('should return .sea/skills directory path', () => {
+    it('should return .evo/skills directory path', () => {
       const result = getSkillsDir('/project');
-      expect(result).toBe('/project/.sea/skills');
+      expect(result).toBe('/project/.evo/skills');
     });
   });
 
   describe('getStateDir', () => {
-    it('should return .sea/state directory path', () => {
+    it('should return .evo/state directory path', () => {
       const result = getStateDir('/project');
-      expect(result).toBe('/project/.sea/state');
+      expect(result).toBe('/project/.evo/state');
     });
   });
 
   describe('getConfigDir', () => {
-    it('should return .sea/config directory path', () => {
+    it('should return .evo/config directory path', () => {
       const result = getConfigDir('/project');
-      expect(result).toBe('/project/.sea/config');
+      expect(result).toBe('/project/.evo/config');
     });
   });
 
   describe('getShadowSkillPath', () => {
     it('should return shadow skill path', () => {
       const result = getShadowSkillPath('/project', 'my-skill');
-      expect(result).toBe('/project/.sea/skills/my-skill/current.md');
+      expect(result).toBe('/project/.evo/skills/my-skill/current.md');
     });
   });
 
   describe('getShadowMetaPath', () => {
     it('should return shadow meta path', () => {
       const result = getShadowMetaPath('/project', 'my-skill');
-      expect(result).toBe('/project/.sea/skills/my-skill/meta.json');
+      expect(result).toBe('/project/.evo/skills/my-skill/meta.json');
     });
   });
 
   describe('getShadowJournalPath', () => {
     it('should return shadow journal path', () => {
       const result = getShadowJournalPath('/project', 'my-skill');
-      expect(result).toBe('/project/.sea/skills/my-skill/journal.ndjson');
+      expect(result).toBe('/project/.evo/skills/my-skill/journal.ndjson');
     });
   });
 
   describe('getSnapshotsDir', () => {
     it('should return snapshots directory path', () => {
       const result = getSnapshotsDir('/project', 'my-skill');
-      expect(result).toBe('/project/.sea/skills/my-skill/snapshots');
+      expect(result).toBe('/project/.evo/skills/my-skill/snapshots');
     });
   });
 });

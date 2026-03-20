@@ -1,7 +1,7 @@
-Skill Evolution Agent 设计文档 v2
+EVO Skills 设计文档 v2
 0. 一句话定义
 
-Skill Evolution Agent 是一个后台常驻的元 Agent。它不会替代主 Agent 执行任务，而是持续观察主 Agent 的真实执行，并为每个项目维护一份来自全局 Skill 的影子副本（Shadow Skill），再基于 trace 对这份影子副本做小步、自动、可回滚的持续优化。
+EVO Skills 是一个后台常驻的元 Agent。它不会替代主 Agent 执行任务，而是持续观察主 Agent 的真实执行，并为每个项目维护一份来自全局 Skill 的影子副本（Shadow Skill），再基于 trace 对这份影子副本做小步、自动、可回滚的持续优化。
 
 1. 设计目标
 1.1 产品目标
@@ -84,9 +84,9 @@ Origin Skill 是用户本机已有的、全局安装的 skill。
   C/
 2.2 Project Shadow Skill
 
-当某个项目第一次实际使用到全局 skill A 时，Skill Evolution Agent 会自动在该项目下创建一个影子副本：
+当某个项目第一次实际使用到全局 skill A 时，EVO Skills 会自动在该项目下创建一个影子副本：
 
-repo-x/.sea/skills/A/
+repo-x/.evo/skills/A/
 
 这个项目内副本就是 A'。
 
@@ -128,7 +128,7 @@ A (origin)
 3. 用户体验设计
 3.1 默认行为
 
-用户启动主 Agent 后，Skill Evolution Agent 在后台运行。
+用户启动主 Agent 后，EVO Skills 在后台运行。
 默认情况下用户不需要主动操作。
 
 它会自动完成：
@@ -155,15 +155,15 @@ V1 不需要复杂 UI。
 只需要最小的几个交互：
 
 查看当前项目有哪些 shadow skills
-sea skills status
+evo skills status
 查看某个 shadow skill 的最近优化记录
-sea skills log A
+evo skills log A
 回滚某个 shadow skill 到某个 revision / checkpoint
-sea skills rollback A --to rev_12
+evo skills rollback A --to rev_12
 暂停某个 skill 的自动优化
-sea skills freeze A
+evo skills freeze A
 恢复自动优化
-sea skills unfreeze A
+evo skills unfreeze A
 4. 系统职责划分
 4.1 主 Agent 负责什么
 
@@ -179,9 +179,9 @@ sea skills unfreeze A
 
 完成业务工作
 
-4.2 Skill Evolution Agent 负责什么
+4.2 EVO Skills 负责什么
 
-Skill Evolution Agent 只负责 skill 本身：
+EVO Skills 只负责 skill 本身：
 
 观察 trace
 
@@ -308,7 +308,7 @@ origin 默认只读，不自动修改
   "shadow_id": "A@repo-x",
   "origin_skill_id": "A",
   "origin_version_at_fork": "hash_001",
-  "shadow_path": "repo-x/.sea/skills/A/current.md",
+  "shadow_path": "repo-x/.evo/skills/A/current.md",
   "current_revision": 12,
   "status": "active|frozen",
   "created_at": "",
@@ -368,10 +368,10 @@ health_score 不是绝对准确值，只是一个粗健康度指标
 
 7. 项目目录结构
 
-建议每个项目内维护一个 .sea/ 目录：
+建议每个项目内维护一个 .evo/ 目录：
 
 repo-x/
-  .sea/
+  .evo/
     skills/
       A/
         current.md
@@ -429,7 +429,7 @@ Shadow Skill Manager
   ├─ Patch Generator
   └─ Journal Manager
         ↓
-Project Shadow Skills (.sea/skills/*)
+Project Shadow Skills (.evo/skills/*)
 9. 模块设计
 9.1 Origin Registry
 
@@ -871,20 +871,20 @@ transcript 作为补充
 V1 的 CLI 不要太多，保留最必要的命令：
 
 查看当前项目影子 skill 状态
-sea skills status
+evo skills status
 查看某个 skill 的演化日志
-sea skills log A
+evo skills log A
 查看当前内容与 origin 的 diff
-sea skills diff A
+evo skills diff A
 回滚
-sea skills rollback A --to rev_8
+evo skills rollback A --to rev_8
 冻结 / 解冻自动优化
-sea skills freeze A
-sea skills unfreeze A
+evo skills freeze A
+evo skills unfreeze A
 手动触发一次优化评估
-sea optimize A
+evo optimize A
 重新同步 origin
-sea skills rebase A
+evo skills rebase A
 16. MVP 范围
 MVP 必须具备
 1. 能识别 origin skill 并创建项目 shadow
@@ -999,6 +999,6 @@ patch 需要重复证据
 
 这版产品最准确的定义应该是：
 
-Skill Evolution Agent 是一个后台常驻的本地元 Agent。它不管理复杂的 skill 分支树，而是为每个项目维护全局 skills 的影子副本，并基于真实 trace 对影子副本做持续的小步自动优化，同时用演化日志和 checkpoint 保证整个过程可追踪、可回滚。
+EVO Skills 是一个后台常驻的本地元 Agent。它不管理复杂的 skill 分支树，而是为每个项目维护全局 skills 的影子副本，并基于真实 trace 对影子副本做持续的小步自动优化，同时用演化日志和 checkpoint 保证整个过程可追踪、可回滚。
 
 

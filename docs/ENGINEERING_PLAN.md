@@ -1,4 +1,4 @@
-# Skill Evolution Agent 工程计划 v1.0
+# EVO Skills 工程计划 v1.0
 
 ## 1. 技术栈选型
 
@@ -208,7 +208,7 @@ interface OriginSkill {
 
 **配置**：
 ```toml
-# ~/.sea/settings.toml
+# ~/.evo/settings.toml
 [origin_paths]
 paths = [
   "~/.skills",
@@ -268,7 +268,7 @@ interface ProjectSkillShadow {
 **项目目录结构初始化**：
 ```
 project/
-└── .sea/
+└── .evo/
     ├── skills/
     │   └── {skill_id}/
     │       ├── current.md      # 当前内容
@@ -876,7 +876,7 @@ CREATE INDEX idx_traces_timestamp ON traces_index(timestamp);
 
 ## 7. 配置系统设计
 
-### 7.1 全局配置（~/.sea/settings.toml）
+### 7.1 全局配置（~/.evo/settings.toml）
 
 ```toml
 [origin_paths]
@@ -905,7 +905,7 @@ auto_start = true
 log_level = "info"
 ```
 
-### 7.2 项目配置（.sea/config/settings.toml）
+### 7.2 项目配置（.evo/config/settings.toml）
 
 ```toml
 [project]

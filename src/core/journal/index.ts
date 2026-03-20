@@ -18,7 +18,7 @@ export class JournalManager {
 
   constructor(projectRoot: string) {
     this.projectRoot = projectRoot;
-    const dbPath = join(projectRoot, '.sea', 'state', 'sessions.db');
+    const dbPath = join(projectRoot, '.evo', 'state', 'sessions.db');
     this.db = createSQLiteStorage(dbPath);
   }
 
@@ -81,7 +81,7 @@ export class JournalManager {
     const skillId = this.extractSkillId(shadowId);
     const journalPath = join(
       this.projectRoot,
-      '.sea',
+      '.evo',
       'skills',
       skillId,
       'journal.ndjson'
@@ -152,7 +152,7 @@ export class JournalManager {
     // 读取当前 shadow 内容
     const shadowPath = join(
       this.projectRoot,
-      '.sea',
+      '.evo',
       'skills',
       skillId,
       'current.md'
@@ -165,7 +165,7 @@ export class JournalManager {
     // 创建 snapshot 文件
     const snapshotsDir = join(
       this.projectRoot,
-      '.sea',
+      '.evo',
       'skills',
       skillId,
       'snapshots'
@@ -218,7 +218,7 @@ export class JournalManager {
     // 复制 snapshot 到当前
     const shadowPath = join(
       this.projectRoot,
-      '.sea',
+      '.evo',
       'skills',
       skillId,
       'current.md'

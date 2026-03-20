@@ -1,9 +1,9 @@
-import type { SeaConfig } from '../types/index.js';
+import type { EVOConfig } from '../types/index.js';
 
 /**
  * 默认配置
  */
-export const DEFAULT_CONFIG: SeaConfig = {
+export const DEFAULT_CONFIG: EVOConfig = {
   origin_paths: {
     paths: ['~/.skills', '~/.claude/skills'],
   },

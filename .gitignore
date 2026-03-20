@@ -42,7 +42,7 @@ coverage/
 *.tsbuildinfo
 
 # Test fixtures (临时测试数据)
-tests/fixtures/projects/*/.sea/
+tests/fixtures/projects/*/.evo/
 
 # Local development
 *.local

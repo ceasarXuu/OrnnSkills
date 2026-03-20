@@ -168,7 +168,7 @@ export interface CliOutput {
 }
 
 // 配置类型
-export interface SeaConfig {
+export interface EVOConfig {
   origin_paths: {
     paths: string[];
   };
