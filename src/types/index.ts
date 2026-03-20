@@ -106,6 +106,23 @@ export interface Trace {
   metadata?: Record<string, unknown>;
 }
 
+// Trace-Skill 映射结果
+export interface TraceSkillMapping {
+  trace_id: string;
+  skill_id: string | null;
+  shadow_id: string | null;
+  confidence: number;
+  reason: string;
+}
+
+// Skill 分组的 Traces
+export interface SkillTracesGroup {
+  skill_id: string;
+  shadow_id: string;
+  traces: Trace[];
+  confidence: number;
+}
+
 // Evaluation Result 评估结果
 export interface EvaluationResult {
   should_patch: boolean;

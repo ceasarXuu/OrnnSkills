@@ -1,0 +1,261 @@
+import { createChildLogger } from '../../utils/logger.js';
+import { createTraceManager } from '../observer/trace-manager.js';
+import { createTraceSkillMapper } from '../trace-skill-mapper/index.js';
+import { evaluator } from '../evaluator/index.js';
+import { createShadowRegistry } from '../shadow-registry/index.js';
+import type { Trace, EvaluationResult, SkillTracesGroup } from '../../types/index.js';
+
+// Timer 类型
+type Timer = number;
+
+// 声明全局 setInterval
+declare function setInterval(callback: (...args: unknown[]) => void, ms?: number): Timer;
+
+const logger = createChildLogger('pipeline');
+
+/**
+ * Pipeline 配置
+ */
+export interface PipelineConfig {
+  projectRoot: string;
+  autoOptimize: boolean;
+  minConfidence: number;
+}
+
+/**
+ * 优化任务
+ */
+export interface OptimizationTask {
+  skill_id: string;
+  shadow_id: string;
+  traces: Trace[];
+  evaluation: EvaluationResult;
+}
+
+/**
+ * Pipeline 状态
+ */
+export interface PipelineState {
+  isRunning: boolean;
+  lastRunAt: string | null;
+  processedTraces: number;
+  generatedTasks: number;
+  errors: string[];
+}
+
+/**
+ * OptimizationPipeline
+ * 自动优化闭环的核心编排模块
+ * 
+ * 流程: Trace采集 -> Trace-Skill映射 -> 评估 -> 生成优化任务
+ */
+export class OptimizationPipeline {
+  private config: PipelineConfig;
+  private traceManager;
+  private traceSkillMapper;
+  private shadowRegistry;
+  private state: PipelineState;
+
+  constructor(config: PipelineConfig) {
+    this.config = config;
+    this.traceManager = createTraceManager(config.projectRoot);
+    this.traceSkillMapper = createTraceSkillMapper(config.projectRoot);
+    this.shadowRegistry = createShadowRegistry(config.projectRoot);
+    this.state = {
+      isRunning: false,
+      lastRunAt: null,
+      processedTraces: 0,
+      generatedTasks: 0,
+      errors: [],
+    };
+  }
+
+  /**
+   * 初始化 pipeline
+   */
+  async init(): Promise<void> {
+    await this.traceManager.init();
+    await this.traceSkillMapper.init();
+    await this.shadowRegistry.init();
+    logger.info('OptimizationPipeline initialized', { projectRoot: this.config.projectRoot });
+  }
+
+  /**
+   * 执行一次完整的 pipeline 循环
+   * 
+   * @returns 生成的优化任务列表
+   */
+  async runOnce(): Promise<OptimizationTask[]> {
+    if (this.state.isRunning) {
+      logger.warn('Pipeline is already running');
+      return [];
+    }
+
+    this.state.isRunning = true;
+    const tasks: OptimizationTask[] = [];
+
+    try {
+      logger.info('Starting pipeline run');
+
+      // Step 1: 获取最近的 traces
+      const recentTraces = await this.traceManager.getRecentTraces(100);
+      if (recentTraces.length === 0) {
+        logger.info('No recent traces found, skipping pipeline run');
+        return [];
+      }
+
+      // Step 2: 将 traces 映射到 skills 并分组
+      const skillGroups = this.traceSkillMapper.mapAndGroupTraces(recentTraces);
+      logger.info('Traces mapped to skills', { groups: skillGroups.length });
+
+      // Step 3: 对每个 skill 分组进行评估
+      for (const group of skillGroups) {
+        try {
+          const task = await this.evaluateSkillGroup(group);
+          if (task) {
+            tasks.push(task);
+          }
+        } catch (error) {
+          const errorMsg = `Failed to evaluate skill ${group.skill_id}: ${error}`;
+          logger.error(errorMsg);
+          this.state.errors.push(errorMsg);
+        }
+      }
+
+      // 更新状态
+      this.state.processedTraces += recentTraces.length;
+      this.state.generatedTasks += tasks.length;
+      this.state.lastRunAt = new Date().toISOString();
+
+      logger.info('Pipeline run completed', {
+        processedTraces: recentTraces.length,
+        generatedTasks: tasks.length,
+      });
+
+      return tasks;
+    } catch (error) {
+      const errorMsg = `Pipeline run failed: ${error}`;
+      logger.error(errorMsg);
+      this.state.errors.push(errorMsg);
+      throw error;
+    } finally {
+      this.state.isRunning = false;
+    }
+  }
+
+  /**
+   * 评估单个 skill 分组
+   */
+  private async evaluateSkillGroup(group: SkillTracesGroup): Promise<OptimizationTask | null> {
+    const { skill_id, shadow_id, traces } = group;
+
+    // 检查 shadow skill 是否存在
+    const shadow = await this.shadowRegistry.get(skill_id);
+    if (!shadow) {
+      logger.debug('Shadow skill not found, skipping', { skill_id });
+      return null;
+    }
+
+    // 检查是否被冻结
+    if (shadow.status === 'frozen') {
+      logger.debug('Shadow skill is frozen, skipping', { skill_id });
+      return null;
+    }
+
+    // 使用 evaluator 评估 traces
+    const evaluation = evaluator.evaluate(traces);
+    if (!evaluation || !evaluation.should_patch) {
+      logger.debug('No optimization needed for skill', { skill_id });
+      return null;
+    }
+
+    // 检查置信度
+    if (evaluation.confidence < this.config.minConfidence) {
+      logger.debug('Confidence too low, skipping', {
+        skill_id,
+        confidence: evaluation.confidence,
+        minConfidence: this.config.minConfidence,
+      });
+      return null;
+    }
+
+    logger.info('Optimization task generated', {
+      skill_id,
+      change_type: evaluation.change_type,
+      confidence: evaluation.confidence,
+    });
+
+    return {
+      skill_id,
+      shadow_id,
+      traces,
+      evaluation,
+    };
+  }
+
+  /**
+   * 启动后台循环
+   */
+  startBackgroundLoop(intervalMs: number = 60000): Timer {
+    logger.info('Starting background pipeline loop', { intervalMs });
+
+    const timer = setInterval(async () => {
+      try {
+        if (this.config.autoOptimize) {
+          await this.runOnce();
+        }
+      } catch (error) {
+        logger.error('Background pipeline run failed', { error });
+      }
+    }, intervalMs);
+
+    return timer;
+  }
+
+  /**
+   * 获取 pipeline 状态
+   */
+  getState(): PipelineState {
+    return { ...this.state };
+  }
+
+  /**
+   * 获取映射统计
+   */
+  async getMappingStats() {
+    return this.traceSkillMapper.getMappingStats();
+  }
+
+  /**
+   * 注册 skill（用于映射）
+   */
+  registerSkill(skillId: string, originPath: string): void {
+    // 这里需要从 origin registry 获取完整的 skill 信息
+    // 暂时使用简化的实现
+    logger.debug('Registering skill for mapping', { skillId, originPath });
+  }
+
+  /**
+   * 清理旧数据
+   */
+  async cleanup(retentionDays: number = 30): Promise<void> {
+    await this.traceManager.cleanupOldTraces(retentionDays);
+    await this.traceSkillMapper.cleanupOldMappings(retentionDays);
+    logger.info('Cleanup completed', { retentionDays });
+  }
+
+  /**
+   * 关闭 pipeline
+   */
+  close(): void {
+    this.traceManager.close();
+    this.traceSkillMapper.close();
+    this.shadowRegistry.close();
+    logger.info('Pipeline closed');
+  }
+}
+
+// 导出工厂函数
+export function createOptimizationPipeline(config: PipelineConfig): OptimizationPipeline {
+  return new OptimizationPipeline(config);
+}

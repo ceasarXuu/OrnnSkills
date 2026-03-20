@@ -2,7 +2,7 @@ import initSqlJs, { type Database } from 'sql.js';
 import { join } from 'node:path';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createChildLogger } from '../utils/logger.js';
-import type { ProjectSkillShadow, ShadowStatus, Session, RuntimeType } from '../types/index.js';
+import type { ProjectSkillShadow, ShadowStatus, Session, RuntimeType, OriginSkill } from '../types/index.js';
 
 const logger = createChildLogger('sqlite');
 
@@ -128,11 +128,38 @@ export class SQLiteStorage {
       );
     `);
 
+    this.db.run(`
+      -- Trace-Skill 映射表
+      CREATE TABLE IF NOT EXISTS trace_skill_mappings (
+        trace_id TEXT NOT NULL,
+        skill_id TEXT NOT NULL,
+        shadow_id TEXT,
+        confidence REAL NOT NULL,
+        reason TEXT,
+        mapped_at TEXT NOT NULL,
+        PRIMARY KEY (trace_id, skill_id)
+      );
+    `);
+
+    this.db.run(`
+      -- Origin Skills 表
+      CREATE TABLE IF NOT EXISTS origin_skills (
+        skill_id TEXT PRIMARY KEY,
+        origin_path TEXT NOT NULL,
+        origin_version TEXT NOT NULL,
+        source TEXT NOT NULL,
+        installed_at TEXT NOT NULL,
+        last_seen_at TEXT NOT NULL
+      );
+    `);
+
     // 创建索引
     this.db.run('CREATE INDEX IF NOT EXISTS idx_shadow_project ON shadow_skills(project_id);');
     this.db.run('CREATE INDEX IF NOT EXISTS idx_evolution_shadow ON evolution_records_index(shadow_id);');
     this.db.run('CREATE INDEX IF NOT EXISTS idx_traces_session ON traces_index(session_id);');
     this.db.run('CREATE INDEX IF NOT EXISTS idx_traces_timestamp ON traces_index(timestamp);');
+    this.db.run('CREATE INDEX IF NOT EXISTS idx_trace_skill_skill ON trace_skill_mappings(skill_id);');
+    this.db.run('CREATE INDEX IF NOT EXISTS idx_trace_skill_shadow ON trace_skill_mappings(shadow_id);');
   }
 
   /**
@@ -546,6 +573,262 @@ export class SQLiteStorage {
       file_path: row.file_path as string,
       content_hash: row.content_hash as string,
     };
+  }
+
+  // ==================== Origin Skills ====================
+
+  /**
+   * 插入或更新 origin skill
+   */
+  upsertOriginSkill(origin: OriginSkill): void {
+    if (!this.db) throw new Error('Database not initialized');
+
+    this.db.run(
+      `INSERT OR REPLACE INTO origin_skills (
+        skill_id, origin_path, origin_version, source, installed_at, last_seen_at
+      ) VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        origin.skill_id,
+        origin.origin_path,
+        origin.origin_version,
+        origin.source,
+        origin.installed_at,
+        origin.last_seen_at,
+      ]
+    );
+    this.save();
+  }
+
+  /**
+   * 获取 origin skill
+   */
+  getOriginSkill(skillId: string): OriginSkill | null {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare('SELECT * FROM origin_skills WHERE skill_id = ?');
+    stmt.bind([skillId]);
+
+    if (!stmt.step()) {
+      stmt.free();
+      return null;
+    }
+
+    const row = stmt.getAsObject();
+    stmt.free();
+
+    return {
+      skill_id: row.skill_id as string,
+      origin_path: row.origin_path as string,
+      origin_version: row.origin_version as string,
+      source: row.source as 'local' | 'marketplace' | 'git',
+      installed_at: row.installed_at as string,
+      last_seen_at: row.last_seen_at as string,
+    };
+  }
+
+  /**
+   * 列出所有 origin skills
+   */
+  listOriginSkills(): OriginSkill[] {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare('SELECT * FROM origin_skills ORDER BY skill_id');
+    const results: OriginSkill[] = [];
+
+    while (stmt.step()) {
+      const row = stmt.getAsObject();
+      results.push({
+        skill_id: row.skill_id as string,
+        origin_path: row.origin_path as string,
+        origin_version: row.origin_version as string,
+        source: row.source as 'local' | 'marketplace' | 'git',
+        installed_at: row.installed_at as string,
+        last_seen_at: row.last_seen_at as string,
+      });
+    }
+    stmt.free();
+
+    return results;
+  }
+
+  // ==================== Trace-Skill Mappings ====================
+
+  /**
+   * 插入或更新 trace-skill 映射
+   */
+  upsertTraceSkillMapping(mapping: {
+    trace_id: string;
+    skill_id: string;
+    shadow_id: string | null;
+    confidence: number;
+    reason: string;
+    mapped_at: string;
+  }): void {
+    if (!this.db) throw new Error('Database not initialized');
+
+    this.db.run(
+      `INSERT OR REPLACE INTO trace_skill_mappings (
+        trace_id, skill_id, shadow_id, confidence, reason, mapped_at
+      ) VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        mapping.trace_id,
+        mapping.skill_id,
+        mapping.shadow_id,
+        mapping.confidence,
+        mapping.reason,
+        mapping.mapped_at,
+      ]
+    );
+    this.save();
+  }
+
+  /**
+   * 获取 skill 的 trace 映射
+   */
+  getTraceSkillMappings(skillId: string): Array<{
+    trace_id: string;
+    skill_id: string;
+    shadow_id: string | null;
+    confidence: number;
+    reason: string;
+    mapped_at: string;
+  }> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare(
+      'SELECT * FROM trace_skill_mappings WHERE skill_id = ? ORDER BY mapped_at DESC'
+    );
+    stmt.bind([skillId]);
+
+    const results: Array<{
+      trace_id: string;
+      skill_id: string;
+      shadow_id: string | null;
+      confidence: number;
+      reason: string;
+      mapped_at: string;
+    }> = [];
+
+    while (stmt.step()) {
+      const row = stmt.getAsObject();
+      results.push({
+        trace_id: row.trace_id as string,
+        skill_id: row.skill_id as string,
+        shadow_id: row.shadow_id as string | null,
+        confidence: row.confidence as number,
+        reason: row.reason as string,
+        mapped_at: row.mapped_at as string,
+      });
+    }
+    stmt.free();
+
+    return results;
+  }
+
+  /**
+   * 获取 trace 的 skill 映射
+   */
+  getTraceSkillMappingByTraceId(traceId: string): Array<{
+    trace_id: string;
+    skill_id: string;
+    shadow_id: string | null;
+    confidence: number;
+    reason: string;
+    mapped_at: string;
+  }> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare(
+      'SELECT * FROM trace_skill_mappings WHERE trace_id = ?'
+    );
+    stmt.bind([traceId]);
+
+    const results: Array<{
+      trace_id: string;
+      skill_id: string;
+      shadow_id: string | null;
+      confidence: number;
+      reason: string;
+      mapped_at: string;
+    }> = [];
+
+    while (stmt.step()) {
+      const row = stmt.getAsObject();
+      results.push({
+        trace_id: row.trace_id as string,
+        skill_id: row.skill_id as string,
+        shadow_id: row.shadow_id as string | null,
+        confidence: row.confidence as number,
+        reason: row.reason as string,
+        mapped_at: row.mapped_at as string,
+      });
+    }
+    stmt.free();
+
+    return results;
+  }
+
+  /**
+   * 获取映射统计
+   */
+  getTraceSkillMappingStats(): {
+    total_mappings: number;
+    by_skill: Record<string, number>;
+    avg_confidence: number;
+  } {
+    if (!this.db) throw new Error('Database not initialized');
+
+    // 总映射数
+    const totalStmt = this.db.prepare('SELECT COUNT(*) as total FROM trace_skill_mappings');
+    totalStmt.step();
+    const totalRow = totalStmt.getAsObject();
+    totalStmt.free();
+    const total_mappings = totalRow.total as number;
+
+    // 按 skill 分组统计
+    const bySkillStmt = this.db.prepare(
+      'SELECT skill_id, COUNT(*) as count FROM trace_skill_mappings GROUP BY skill_id'
+    );
+    const by_skill: Record<string, number> = {};
+    while (bySkillStmt.step()) {
+      const row = bySkillStmt.getAsObject();
+      by_skill[row.skill_id as string] = row.count as number;
+    }
+    bySkillStmt.free();
+
+    // 平均置信度
+    const avgStmt = this.db.prepare('SELECT AVG(confidence) as avg_conf FROM trace_skill_mappings');
+    avgStmt.step();
+    const avgRow = avgStmt.getAsObject();
+    avgStmt.free();
+    const avg_confidence = (avgRow.avg_conf as number) || 0;
+
+    return {
+      total_mappings,
+      by_skill,
+      avg_confidence,
+    };
+  }
+
+  /**
+   * 清理旧的映射
+   */
+  cleanupTraceSkillMappings(retentionDays: number): number {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - retentionDays);
+    const cutoff = cutoffDate.toISOString();
+
+    const stmt = this.db.prepare('DELETE FROM trace_skill_mappings WHERE mapped_at < ?');
+    stmt.bind([cutoff]);
+    stmt.step();
+    const changes = this.db.getRowsModified();
+    stmt.free();
+    this.save();
+
+    logger.info('Cleaned up old trace-skill mappings', { deleted: changes, retentionDays });
+    return changes;
   }
 }
 
