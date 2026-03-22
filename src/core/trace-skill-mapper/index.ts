@@ -47,14 +47,14 @@ export class TraceSkillMapper {
    */
   async init(): Promise<void> {
     await this.db.init();
-    await this.loadKnownSkills();
+    this.loadKnownSkills();
     logger.info('TraceSkillMapper initialized');
   }
 
   /**
    * 加载已知的 skills
    */
-  private async loadKnownSkills(): Promise<void> {
+  private loadKnownSkills(): void {
     // 从数据库加载 origin skills
     const origins = this.db.listOriginSkills();
     for (const origin of origins) {
@@ -71,16 +71,6 @@ export class TraceSkillMapper {
       origins: this.knownSkills.size,
       shadows: this.shadowSkills.size,
     });
-  }
-
-  /**
-   * 注册 skill（用于映射参考）
-   */
-  registerSkill(origin: OriginSkill, shadow?: ProjectSkillShadow): void {
-    this.knownSkills.set(origin.skill_id, origin);
-    if (shadow) {
-      this.shadowSkills.set(shadow.skill_id, shadow);
-    }
   }
 
   /**
@@ -240,7 +230,7 @@ export class TraceSkillMapper {
   /**
    * 获取某个 skill 相关的 traces
    */
-  async getSkillTraces(skillId: string, _limit?: number): Promise<Trace[]> {
+  getSkillTraces(skillId: string, _limit?: number): Trace[] {
     // 从数据库查询映射关系
     const mappings = this.db.getTraceSkillMappings(skillId);
     const traceIds = mappings.map((m) => m.trace_id);
@@ -316,20 +306,37 @@ export class TraceSkillMapper {
   }
 
   /**
-   * 从 assistant output 推断 skill 引用
+   * 从 assistant output 推断 skill 引用（优化性能）
    */
   private inferSkillFromOutput(output: string): string | null {
+    // 限制输入长度，防止 ReDoS 攻击
+    const MAX_OUTPUT_LENGTH = 5000;
+    if (output.length > MAX_OUTPUT_LENGTH) {
+      return null;
+    }
+
+    // 预处理：转换为小写
+    const lowerOutput = output.toLowerCase();
+
     // 检测 output 中是否引用了已知 skill
     for (const [skillId] of this.knownSkills) {
-      // 简单的关键词匹配
-      const patterns = [
-        new RegExp(`\\b${skillId}\\b`, 'i'),
-        new RegExp(`skill[:\\s]+${skillId}`, 'i'),
-        new RegExp(`according to ${skillId}`, 'i'),
+      const lowerSkillId = skillId.toLowerCase();
+      
+      // 使用 indexOf 替代 includes，性能更好
+      if (lowerOutput.indexOf(lowerSkillId) !== -1) {
+        return skillId;
+      }
+      
+      // 检查常见的 skill 引用模式（使用 indexOf）
+      const skillPatterns = [
+        `skill: ${lowerSkillId}`,
+        `skill:${lowerSkillId}`,
+        `according to ${lowerSkillId}`,
+        `using ${lowerSkillId}`,
       ];
-
-      for (const pattern of patterns) {
-        if (pattern.test(output)) {
+      
+      for (const pattern of skillPatterns) {
+        if (lowerOutput.indexOf(pattern) !== -1) {
           return skillId;
         }
       }
@@ -338,20 +345,34 @@ export class TraceSkillMapper {
   }
 
   /**
-   * 从 user input 推断 skill 请求
+   * 从 user input 推断 skill 请求（优化性能）
    */
   private inferSkillFromInput(input: string): string | null {
+    // 限制输入长度，防止 ReDoS 攻击
+    const MAX_INPUT_LENGTH = 5000;
+    if (input.length > MAX_INPUT_LENGTH) {
+      return null;
+    }
+
+    // 预处理：转换为小写
+    const lowerInput = input.toLowerCase();
+
     // 检测用户是否明确请求某个 skill
     for (const [skillId] of this.knownSkills) {
-      const patterns = [
-        new RegExp(`use ${skillId}`, 'i'),
-        new RegExp(`run ${skillId}`, 'i'),
-        new RegExp(`apply ${skillId}`, 'i'),
-        new RegExp(`execute ${skillId}`, 'i'),
+      const lowerSkillId = skillId.toLowerCase();
+      
+      // 检查常见的 skill 请求模式（使用 indexOf）
+      const requestPatterns = [
+        `use ${lowerSkillId}`,
+        `run ${lowerSkillId}`,
+        `apply ${lowerSkillId}`,
+        `execute ${lowerSkillId}`,
+        `with ${lowerSkillId}`,
+        `using ${lowerSkillId}`,
       ];
-
-      for (const pattern of patterns) {
-        if (pattern.test(input)) {
+      
+      for (const pattern of requestPatterns) {
+        if (lowerInput.indexOf(pattern) !== -1) {
           return skillId;
         }
       }
@@ -378,18 +399,28 @@ export class TraceSkillMapper {
   /**
    * 获取映射统计
    */
-  async getMappingStats(): Promise<{
+  getMappingStats(): {
     total_mappings: number;
     by_skill: Record<string, number>;
     avg_confidence: number;
-  }> {
+  } {
     return this.db.getTraceSkillMappingStats();
+  }
+
+  /**
+   * 注册 skill（用于映射参考）
+   */
+  registerSkill(origin: OriginSkill, shadow?: ProjectSkillShadow): void {
+    this.knownSkills.set(origin.skill_id, origin);
+    if (shadow) {
+      this.shadowSkills.set(shadow.skill_id, shadow);
+    }
   }
 
   /**
    * 清理旧的映射
    */
-  async cleanupOldMappings(retentionDays: number): Promise<number> {
+  cleanupOldMappings(retentionDays: number): number {
     return this.db.cleanupTraceSkillMappings(retentionDays);
   }
 

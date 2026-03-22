@@ -3,9 +3,33 @@ import { configManager } from '../../config/index.js';
 import { BaseStrategy } from './base-strategy.js';
 import { AddFallbackStrategy } from './strategies/add-fallback.js';
 import { PruneNoiseStrategy } from './strategies/prune-noise.js';
+import { AppendContextStrategy } from './strategies/append-context.js';
+import { TightenTriggerStrategy } from './strategies/tighten-trigger.js';
+import { RewriteSectionStrategy } from './strategies/rewrite-section.js';
 import type { PatchResult, ChangeType } from '../../types/index.js';
 
 const logger = createChildLogger('patch-generator');
+
+/**
+ * 策略配置接口
+ */
+interface StrategyConfig {
+  name: string;
+  priority: number;
+  timeout: number; // 超时时间（毫秒）
+  enabled: boolean;
+}
+
+/**
+ * 默认策略配置
+ */
+const DEFAULT_STRATEGY_CONFIGS: Record<string, StrategyConfig> = {
+  'add-fallback': { name: 'add-fallback', priority: 1, timeout: 5000, enabled: true },
+  'prune-noise': { name: 'prune-noise', priority: 2, timeout: 3000, enabled: true },
+  'append-context': { name: 'append-context', priority: 3, timeout: 5000, enabled: true },
+  'tighten-trigger': { name: 'tighten-trigger', priority: 4, timeout: 5000, enabled: true },
+  'rewrite-section': { name: 'rewrite-section', priority: 5, timeout: 10000, enabled: true },
+};
 
 /**
  * Patch Generator
@@ -13,9 +37,11 @@ const logger = createChildLogger('patch-generator');
  */
 export class PatchGenerator {
   private strategies: Map<ChangeType, BaseStrategy> = new Map();
+  private strategyConfigs: Map<string, StrategyConfig> = new Map();
 
   constructor() {
     this.registerDefaultStrategies();
+    this.loadStrategyConfigs();
   }
 
   /**
@@ -24,7 +50,21 @@ export class PatchGenerator {
   private registerDefaultStrategies(): void {
     this.registerStrategy(new AddFallbackStrategy());
     this.registerStrategy(new PruneNoiseStrategy());
+    this.registerStrategy(new AppendContextStrategy());
+    this.registerStrategy(new TightenTriggerStrategy());
+    this.registerStrategy(new RewriteSectionStrategy());
     logger.info('Default patch strategies registered');
+  }
+
+  /**
+   * 加载策略配置
+   */
+  private loadStrategyConfigs(): void {
+    // 从默认配置加载
+    for (const [name, config] of Object.entries(DEFAULT_STRATEGY_CONFIGS)) {
+      this.strategyConfigs.set(name, config);
+    }
+    logger.info('Strategy configurations loaded');
   }
 
   /**
@@ -36,13 +76,33 @@ export class PatchGenerator {
   }
 
   /**
+   * 更新策略配置
+   */
+  updateStrategyConfig(name: string, config: Partial<StrategyConfig>): void {
+    const existing = this.strategyConfigs.get(name);
+    if (existing) {
+      this.strategyConfigs.set(name, { ...existing, ...config });
+      logger.info(`Strategy config updated: ${name}`, config);
+    } else {
+      logger.warn(`Strategy config not found: ${name}`);
+    }
+  }
+
+  /**
+   * 获取策略配置
+   */
+  getStrategyConfig(name: string): StrategyConfig | undefined {
+    return this.strategyConfigs.get(name);
+  }
+
+  /**
    * 生成 patch
    */
-  generate(
+  async generate(
     changeType: ChangeType,
     currentContent: string,
     context: Record<string, unknown>
-  ): PatchResult {
+  ): Promise<PatchResult> {
     const strategy = this.strategies.get(changeType);
 
     if (!strategy) {
@@ -53,6 +113,19 @@ export class PatchGenerator {
         newContent: '',
         changeType,
         error: `No strategy found for change type: ${changeType}`,
+      };
+    }
+
+    // 检查策略是否启用
+    const strategyConfig = this.strategyConfigs.get(strategy.getName());
+    if (strategyConfig && !strategyConfig.enabled) {
+      logger.warn(`Strategy ${strategy.getName()} is disabled`);
+      return {
+        success: false,
+        patch: '',
+        newContent: '',
+        changeType,
+        error: `Strategy ${strategy.getName()} is disabled`,
       };
     }
 
@@ -72,7 +145,11 @@ export class PatchGenerator {
     logger.debug(`Generating patch with strategy: ${strategy.getName()}`);
 
     try {
-      const result = strategy.generate(currentContent, context);
+      // 使用超时控制执行策略
+      const result = await this.executeWithTimeout(
+        () => strategy.generate(currentContent, context),
+        strategyConfig?.timeout ?? 5000
+      );
 
       if (result.success) {
         logger.info(`Patch generated successfully`, {
@@ -100,10 +177,37 @@ export class PatchGenerator {
   }
 
   /**
+   * 带超时控制的执行
+   */
+  private async executeWithTimeout<T>(fn: () => T, timeoutMs: number): Promise<T> {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(new Error(`Strategy execution timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
+
+      try {
+        const result = fn();
+        clearTimeout(timer);
+        resolve(result);
+      } catch (error) {
+        clearTimeout(timer);
+        reject(error);
+      }
+    });
+  }
+
+  /**
    * 获取所有策略
    */
   getStrategies(): BaseStrategy[] {
     return Array.from(this.strategies.values());
+  }
+
+  /**
+   * 获取所有策略配置
+   */
+  getAllStrategyConfigs(): Map<string, StrategyConfig> {
+    return new Map(this.strategyConfigs);
   }
 
   /**

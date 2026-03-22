@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { existsSync } from 'node:fs';
 import { createShadowRegistry } from '../../core/shadow-registry/index.js';
 import { createJournalManager } from '../../core/journal/index.js';
+import { validateSkillId, validateProjectPath } from '../../utils/path.js';
 import type { ChangeType } from '../../types/index.js';
 
 interface LogOptions {
@@ -28,7 +29,20 @@ export function createLogCommand(): Command {
     .option('-p, --project <path>', 'Project root path', process.cwd())
     .action(async (skillId: string, options: LogOptions) => {
       try {
-        const projectRoot: string = options.project;
+        // 验证 skill ID 格式
+        if (!validateSkillId(skillId)) {
+          console.error(`Error: Invalid skill ID "${skillId}". Skill IDs can only contain letters, numbers, hyphens, underscores, and dots.`);
+          process.exit(1);
+        }
+
+        // 验证项目路径安全性
+        let projectRoot: string;
+        try {
+          projectRoot = validateProjectPath(options.project);
+        } catch (error) {
+          console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
+          process.exit(1);
+        }
 
         // 检查 .sea 目录是否存在
         const seaDir = join(projectRoot, '.sea');
@@ -52,10 +66,21 @@ export function createLogCommand(): Command {
         }
 
         const shadowId = `${skillId}@${projectRoot}`;
+        
+        // 验证 limit 参数
         const limit = parseInt(options.limit, 10);
+        if (isNaN(limit) || limit < 1 || limit > 1000) {
+          console.error('Error: Invalid limit value. Must be between 1 and 1000.');
+          process.exit(1);
+        }
 
-        // 获取 journal 记录
+        // 验证 changeType 参数
+        const validChangeTypes: ChangeType[] = ['append_context', 'tighten_trigger', 'add_fallback', 'prune_noise', 'rewrite_section'];
         const changeType = options.type as ChangeType | undefined;
+        if (changeType && !validChangeTypes.includes(changeType)) {
+          console.error(`Error: Invalid change type "${options.type}". Valid types are: ${validChangeTypes.join(', ')}`);
+          process.exit(1);
+        }
         const records = await journalManager.getJournalRecords(shadowId, {
           limit,
           changeType,

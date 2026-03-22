@@ -8,6 +8,37 @@ import { createChildLogger } from '../../utils/logger.js';
 const logger = createChildLogger('codex-observer');
 
 /**
+ * 简单的互斥锁实现
+ */
+class SimpleMutex {
+  private locked = false;
+  private queue: Array<() => void> = [];
+
+  async acquire(): Promise<() => void> {
+    return new Promise((resolve) => {
+      if (!this.locked) {
+        this.locked = true;
+        resolve(() => this.release());
+      } else {
+        this.queue.push(() => {
+          this.locked = true;
+          resolve(() => this.release());
+        });
+      }
+    });
+  }
+
+  private release(): void {
+    if (this.queue.length > 0) {
+      const next = this.queue.shift();
+      if (next) next();
+    } else {
+      this.locked = false;
+    }
+  }
+}
+
+/**
  * Codex Observer
  * 监听 Codex 的 JSONL 事件流和 session 日志
  */
@@ -17,6 +48,8 @@ export class CodexObserver extends BaseObserver {
   private currentSessionId: string | null = null;
   private turnCounter: number = 0;
   private lastFileSize: Map<string, number> = new Map();
+  private fileSizeMutex = new SimpleMutex();
+  private turnCounterMutex = new SimpleMutex();
 
   constructor(sessionDir?: string) {
     super('codex');
@@ -103,18 +136,26 @@ export class CodexObserver extends BaseObserver {
   /**
    * 处理文件变化
    */
-  private handleFileChange(path: string): void {
+  private async handleFileChange(path: string): Promise<void> {
     if (!path.endsWith('.jsonl')) {
       return;
     }
 
-    const lastSize = this.lastFileSize.get(path) ?? 0;
-    const currentSize = this.getFileSize(path);
+    const release = await this.fileSizeMutex.acquire();
+    try {
+      const currentSize = this.getFileSize(path);
+      const lastSize = this.lastFileSize.get(path) ?? 0;
 
-    if (currentSize > lastSize) {
-      // 只读取新增的部分
-      this.processJsonlFileIncremental(path, lastSize);
+      if (currentSize <= lastSize) {
+        return;
+      }
+
       this.lastFileSize.set(path, currentSize);
+      
+      // 增量处理新内容
+      await this.processJsonlFileIncremental(path, lastSize);
+    } finally {
+      release();
     }
   }
 
@@ -138,46 +179,81 @@ export class CodexObserver extends BaseObserver {
       }
     } catch (error) {
       logger.warn(`Failed to read JSONL file: ${path}`, { error });
+    } finally {
+      // 确保任何资源被正确释放（如果有的话）
     }
   }
 
   /**
    * 处理 JSONL 文件（增量）
    */
-  private processJsonlFileIncremental(path: string, startOffset: number): void {
+  private async processJsonlFileIncremental(path: string, startOffset: number): Promise<void> {
     const sessionId = this.extractSessionId(path);
+    let stream: ReturnType<typeof createReadStream> | null = null;
+    let rl: ReturnType<typeof createInterface> | null = null;
 
     try {
-      const stream = createReadStream(path, {
+      stream = createReadStream(path, {
         start: startOffset,
         encoding: 'utf-8',
       });
 
-      const rl = createInterface({
+      rl = createInterface({
         input: stream,
         crlfDelay: Infinity,
       });
 
+      const lines: string[] = [];
       rl.on('line', (line) => {
         if (line.trim()) {
-          try {
-            const event = JSON.parse(line) as Record<string, unknown>;
-            this.processEvent(sessionId, event);
-          } catch {
-            // 忽略解析错误
-          }
+          lines.push(line);
         }
       });
+
+      await new Promise<void>((resolve, reject) => {
+        rl!.on('close', resolve);
+        rl!.on('error', reject);
+      });
+
+      for (const line of lines) {
+        try {
+          const event = JSON.parse(line) as Record<string, unknown>;
+          await this.processEvent(sessionId, event);
+        } catch {
+          // 忽略解析错误
+        }
+      }
     } catch (error) {
       logger.warn(`Failed to read JSONL file incrementally: ${path}`, { error });
+    } finally {
+      // 确保资源被正确释放
+      if (rl) {
+        rl.close();
+      }
+      if (stream) {
+        stream.destroy();
+      }
+    }
+  }
+
+  /**
+   * 获取下一个 turn ID（原子操作）
+   */
+  private async getNextTurnId(): Promise<string> {
+    const release = await this.turnCounterMutex.acquire();
+    try {
+      this.turnCounter++;
+      return `turn_${this.turnCounter}`;
+    } finally {
+      release();
     }
   }
 
   /**
    * 处理单个事件
    */
-  private processEvent(sessionId: string, event: Record<string, unknown>): void {
-    const turnId = `turn_${++this.turnCounter}`;
+  private async processEvent(sessionId: string, event: Record<string, unknown>): Promise<void> {
+    const turnId = await this.getNextTurnId();
 
     // 根据事件类型创建相应的 trace
     switch (event.type) {

@@ -2,6 +2,11 @@ import { Command } from 'commander';
 import { join } from 'node:path';
 import { existsSync } from 'node:fs';
 import { createShadowRegistry } from '../../core/shadow-registry/index.js';
+import { validateSkillId, validateProjectPath } from '../../utils/path.js';
+
+interface FreezeOptions {
+  project: string;
+}
 
 /**
  * Freeze 命令
@@ -14,9 +19,22 @@ export function createFreezeCommand(): Command {
     .description('Pause automatic optimization for a shadow skill')
     .argument('<skill>', 'Skill ID to freeze')
     .option('-p, --project <path>', 'Project root path', process.cwd())
-    .action(async (skillId: string, options) => {
+    .action(async (skillId: string, options: FreezeOptions) => {
       try {
-        const projectRoot = options.project;
+        // 验证 skill ID 格式
+        if (!validateSkillId(skillId)) {
+          console.error(`Error: Invalid skill ID "${skillId}". Skill IDs can only contain letters, numbers, hyphens, underscores, and dots.`);
+          process.exit(1);
+        }
+
+        // 验证项目路径安全性
+        let projectRoot: string;
+        try {
+          projectRoot = validateProjectPath(options.project);
+        } catch (error) {
+          console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
+          process.exit(1);
+        }
 
         // 检查 .sea 目录是否存在
         const seaDir = join(projectRoot, '.sea');
@@ -30,7 +48,7 @@ export function createFreezeCommand(): Command {
         await shadowRegistry.init();
 
         // 检查 shadow 是否存在
-        const shadow = await shadowRegistry.get(skillId);
+        const shadow = shadowRegistry.get(skillId);
         if (!shadow) {
           console.error(`Error: Shadow skill "${skillId}" not found`);
           process.exit(1);
@@ -38,7 +56,7 @@ export function createFreezeCommand(): Command {
 
         // 更新状态为 frozen
         const shadowId = `${skillId}@${projectRoot}`;
-        await shadowRegistry.updateStatus(shadowId, 'frozen');
+        shadowRegistry.updateStatus(shadowId, 'frozen');
 
         console.log(`✅ Shadow skill "${skillId}" has been frozen`);
         console.log('Automatic optimization is now paused for this skill');
@@ -67,9 +85,22 @@ export function createUnfreezeCommand(): Command {
     .description('Resume automatic optimization for a shadow skill')
     .argument('<skill>', 'Skill ID to unfreeze')
     .option('-p, --project <path>', 'Project root path', process.cwd())
-    .action(async (skillId: string, options) => {
+    .action(async (skillId: string, options: FreezeOptions) => {
       try {
-        const projectRoot = options.project;
+        // 验证 skill ID 格式
+        if (!validateSkillId(skillId)) {
+          console.error(`Error: Invalid skill ID "${skillId}". Skill IDs can only contain letters, numbers, hyphens, underscores, and dots.`);
+          process.exit(1);
+        }
+
+        // 验证项目路径安全性
+        let projectRoot: string;
+        try {
+          projectRoot = validateProjectPath(options.project);
+        } catch (error) {
+          console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
+          process.exit(1);
+        }
 
         // 检查 .sea 目录是否存在
         const seaDir = join(projectRoot, '.sea');
@@ -83,7 +114,7 @@ export function createUnfreezeCommand(): Command {
         await shadowRegistry.init();
 
         // 检查 shadow 是否存在
-        const shadow = await shadowRegistry.get(skillId);
+        const shadow = shadowRegistry.get(skillId);
         if (!shadow) {
           console.error(`Error: Shadow skill "${skillId}" not found`);
           process.exit(1);
@@ -91,7 +122,7 @@ export function createUnfreezeCommand(): Command {
 
         // 更新状态为 active
         const shadowId = `${skillId}@${projectRoot}`;
-        await shadowRegistry.updateStatus(shadowId, 'active');
+        shadowRegistry.updateStatus(shadowId, 'active');
 
         console.log(`✅ Shadow skill "${skillId}" has been unfrozen`);
         console.log('Automatic optimization is now resumed for this skill');

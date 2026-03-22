@@ -6,11 +6,14 @@ import type { Trace, EvaluationResult } from '../../../types/index.js';
  * 检测 skill 被命中但执行反复绕过某一段
  */
 export class RepeatedDriftRule extends BaseRule {
-  constructor() {
+  private toolTimeoutMs: number;
+
+  constructor(toolTimeoutMs: number = 5000) {
     super(
       'repeated-drift',
       'Detects when skill is hit but execution repeatedly bypasses certain sections'
     );
+    this.toolTimeoutMs = toolTimeoutMs;
   }
 
   evaluate(traces: Trace[]): EvaluationResult | null {
@@ -66,7 +69,7 @@ export class RepeatedDriftRule extends BaseRule {
             t.event_type === 'tool_result' &&
             t.tool_name === trace.tool_name &&
             new Date(t.timestamp) > new Date(trace.timestamp) &&
-            new Date(t.timestamp).getTime() - new Date(trace.timestamp).getTime() < 5000
+            new Date(t.timestamp).getTime() - new Date(trace.timestamp).getTime() < this.toolTimeoutMs
         );
 
         if (subsequentResults.length === 0) {
@@ -95,7 +98,7 @@ export class RepeatedDriftRule extends BaseRule {
             t.event_type === 'tool_result' &&
             t.tool_name === trace.tool_name &&
             new Date(t.timestamp) > new Date(trace.timestamp) &&
-            new Date(t.timestamp).getTime() - new Date(trace.timestamp).getTime() < 5000
+            new Date(t.timestamp).getTime() - new Date(trace.timestamp).getTime() < this.toolTimeoutMs
         );
 
         if (!hasResult) {

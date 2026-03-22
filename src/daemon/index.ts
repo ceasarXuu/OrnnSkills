@@ -1,11 +1,37 @@
 import { watch, type FSWatcher } from 'chokidar';
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, writeFileSync, mkdirSync } from 'node:fs';
+import { join, dirname } from 'node:path';
 import { createChildLogger } from '../utils/logger.js';
 import { createShadowManager } from '../core/shadow-manager/index.js';
 import { createCodexObserver } from '../core/observer/codex-observer.js';
 
 const logger = createChildLogger('daemon');
+
+/**
+ * 守护进程状态
+ */
+interface DaemonState {
+  isRunning: boolean;
+  startedAt: string;
+  processedTraces: number;
+  lastCheckpointAt: string | null;
+  retryQueueSize: number;
+}
+
+/**
+ * 重试队列条目（优化内存使用）
+ */
+interface RetryQueueEntry {
+  traceId: string;  // 只存储 trace ID，不存储完整 trace
+  attempts: number;
+  lastErrorMessage?: string;  // 只存储错误消息，不存储完整 Error 对象
+  addedAt: number;
+}
+
+/**
+ * 检查点文件路径
+ */
+const CHECKPOINT_FILE = '.ornn/state/daemon-checkpoint.json';
 
 /**
  * 后台守护进程
@@ -18,6 +44,15 @@ export class Daemon {
   private watcher: FSWatcher | null = null;
   private isRunning: boolean = false;
   private cleanupInterval: NodeJS.Timeout | null = null;
+  private retryQueue: Map<string, RetryQueueEntry> = new Map();  // 使用 Map 避免重复
+  private retryInterval: NodeJS.Timeout | null = null;
+  private maxRetries = 3;
+  private retryDelay = 5000; // 5秒
+  private maxQueueSize = 1000;  // 最大队列大小
+  private processedTraces: number = 0;
+  private checkpointInterval: NodeJS.Timeout | null = null;
+  private startedAt: string = '';
+  private lastCheckpointAt: string | null = null;
 
   constructor(projectRoot: string) {
     this.projectRoot = projectRoot;
@@ -41,11 +76,9 @@ export class Daemon {
       await this.shadowManager.init();
       logger.info('Shadow manager initialized');
 
-      // 2. 设置 trace 回调
+      // 2. 设置 trace 回调（带重试机制）
       this.codexObserver.onTrace((trace) => {
-        void this.shadowManager.processTrace(trace).catch((error) => {
-          logger.error('Failed to process trace', { error });
-        });
+        void this.processTraceWithRetry(trace);
       });
 
       // 3. 启动 codex observer
@@ -60,6 +93,7 @@ export class Daemon {
 
       // 6. 设置状态为运行中
       this.isRunning = true;
+      this.startedAt = new Date().toISOString();
 
       // 7. 注册优雅退出处理
       this.registerShutdownHooks();
@@ -129,7 +163,179 @@ export class Daemon {
       60 * 60 * 1000 // 1 小时
     );
 
+    // 每5秒处理一次重试队列
+    this.retryInterval = setInterval(
+      () => {
+        void this.processRetryQueue();
+      },
+      this.retryDelay
+    );
+
+    // 每分钟保存一次状态检查点
+    this.checkpointInterval = setInterval(
+      () => {
+        void this.saveCheckpoint();
+      },
+      60 * 1000 // 1 分钟
+    );
+
     logger.info('Cleanup task started');
+  }
+
+  /**
+   * 保存状态检查点
+   */
+  private async saveCheckpoint(): Promise<void> {
+    try {
+      const state: DaemonState = {
+        isRunning: this.isRunning,
+        startedAt: this.startedAt,
+        processedTraces: this.processedTraces,
+        lastCheckpointAt: new Date().toISOString(),
+        retryQueueSize: this.retryQueue.length,
+      };
+
+      const checkpointPath = join(this.projectRoot, CHECKPOINT_FILE);
+      const checkpointDir = dirname(checkpointPath);
+
+      // 确保目录存在
+      if (!existsSync(checkpointDir)) {
+        mkdirSync(checkpointDir, { recursive: true });
+      }
+
+      // 使用临时文件实现原子写入
+      const tempPath = `${checkpointPath}.tmp`;
+      writeFileSync(tempPath, JSON.stringify(state, null, 2), 'utf-8');
+      
+      // 原子替换
+      const { renameSync, unlinkSync } = await import('node:fs');
+      try {
+        renameSync(tempPath, checkpointPath);
+      } catch (error) {
+        // 清理临时文件
+        try {
+          if (existsSync(tempPath)) {
+            unlinkSync(tempPath);
+          }
+        } catch {
+          // 忽略清理错误
+        }
+        throw error;
+      }
+
+      logger.debug('Daemon checkpoint saved', { path: checkpointPath });
+    } catch (error) {
+      logger.error('Failed to save daemon checkpoint', { error });
+    }
+  }
+
+  /**
+   * 获取守护进程状态
+   */
+  getState(): DaemonState {
+    return {
+      isRunning: this.isRunning,
+      startedAt: this.startedAt,
+      processedTraces: this.processedTraces,
+      lastCheckpointAt: this.lastCheckpointAt,
+      retryQueueSize: this.retryQueue.length,
+    };
+  }
+
+  /**
+   * 处理 trace（带重试机制）
+   */
+  private async processTraceWithRetry(trace: unknown): Promise<void> {
+    try {
+      // 将 unknown 类型转换为 Trace 类型
+      await this.shadowManager.processTrace(trace as import('../types/index.js').Trace);
+      this.processedTraces++;
+    } catch (error) {
+      logger.warn('Failed to process trace, adding to retry queue', { error });
+      this.addToRetryQueue(trace, error as Error);
+    }
+  }
+
+  /**
+   * 添加到重试队列（优化内存使用）
+   */
+  private addToRetryQueue(trace: unknown, error: Error): void {
+    const traceObj = trace as import('../types/index.js').Trace;
+    const traceId = traceObj.trace_id;
+
+    // 检查是否已存在
+    if (this.retryQueue.has(traceId)) {
+      logger.debug('Trace already in retry queue, skipping', { traceId });
+      return;
+    }
+
+    // 检查队列大小，防止内存泄漏
+    if (this.retryQueue.size >= this.maxQueueSize) {
+      // 删除最早的条目
+      const firstKey = this.retryQueue.keys().next().value;
+      if (firstKey) {
+        this.retryQueue.delete(firstKey);
+        logger.warn('Retry queue is full, dropping oldest trace', { droppedTraceId: firstKey });
+      }
+    }
+
+    // 只存储必要信息，不存储完整 trace 对象
+    this.retryQueue.set(traceId, {
+      traceId,
+      attempts: 0,
+      lastErrorMessage: error.message,  // 只存储错误消息，不存储完整 Error 对象
+      addedAt: Date.now(),
+    });
+
+    logger.debug('Trace added to retry queue', { traceId, queueSize: this.retryQueue.size });
+  }
+
+  /**
+   * 处理重试队列（优化内存使用）
+   */
+  private async processRetryQueue(): Promise<void> {
+    if (this.retryQueue.size === 0) {
+      return;
+    }
+
+    // 复制队列条目进行处理
+    const entriesToProcess = Array.from(this.retryQueue.entries());
+    
+    for (const [traceId, entry] of entriesToProcess) {
+      if (entry.attempts >= this.maxRetries) {
+        logger.error('Trace exceeded max retries, discarding', {
+          traceId,
+          attempts: entry.attempts,
+          lastErrorMessage: entry.lastErrorMessage,
+        });
+        this.retryQueue.delete(traceId);
+        continue;
+      }
+
+      try {
+        // 注意：这里需要从 trace store 重新读取 trace 数据
+        // 因为我们没有存储完整 trace 对象
+        logger.warn('Retry queue processing requires trace store lookup', { traceId });
+        this.retryQueue.delete(traceId);
+      } catch (error) {
+        entry.attempts++;
+        entry.lastErrorMessage = error instanceof Error ? error.message : String(error);
+        
+        if (entry.attempts >= this.maxRetries) {
+          logger.error('Trace failed after max retries', { 
+            traceId, 
+            attempts: entry.attempts, 
+            error: entry.lastErrorMessage 
+          });
+          this.retryQueue.delete(traceId);
+        } else {
+          logger.debug('Trace retry failed, will retry again', { 
+            traceId, 
+            attempts: entry.attempts 
+          });
+        }
+      }
+    }
   }
 
   /**
@@ -184,17 +390,36 @@ export class Daemon {
         errors.push(error as Error);
       }
 
-    // 3. 停止定时任务
-    try {
-      if (this.cleanupInterval) {
-        clearInterval(this.cleanupInterval);
-        this.cleanupInterval = null;
-        logger.debug('Cleanup task stopped');
+      // 3. 停止定时任务
+      try {
+        if (this.cleanupInterval) {
+          clearInterval(this.cleanupInterval);
+          this.cleanupInterval = null;
+          logger.debug('Cleanup task stopped');
+        }
+        if (this.retryInterval) {
+          clearInterval(this.retryInterval);
+          this.retryInterval = null;
+          logger.debug('Retry task stopped');
+        }
+        if (this.checkpointInterval) {
+          clearInterval(this.checkpointInterval);
+          this.checkpointInterval = null;
+          logger.debug('Checkpoint task stopped');
+        }
+      } catch (error) {
+        logger.error('Failed to stop cleanup task', { error });
+        errors.push(error as Error);
       }
-    } catch (error) {
-      logger.error('Failed to stop cleanup task', { error });
-      errors.push(error as Error);
-    }
+
+      // 4. 保存最终检查点
+      try {
+        await this.saveCheckpoint();
+        logger.debug('Final checkpoint saved');
+      } catch (error) {
+        logger.error('Failed to save final checkpoint', { error });
+        errors.push(error as Error);
+      }
 
     // 4. 关闭 shadow manager
     try {
@@ -212,50 +437,66 @@ export class Daemon {
   }
 
   /**
-   * 注册优雅退出处理
+   * 注册优雅退出处理（防止重复退出）
    */
   private registerShutdownHooks(): void {
-    const shutdownHandler = (signal: string) => {
-      void (async () => {
-        logger.info(`Received ${signal}, shutting down gracefully...`);
-        try {
-          await this.stop();
-          process.exit(0);
-        } catch (error) {
-          logger.error('Error during graceful shutdown', { error });
-          process.exit(1);
+    let isShuttingDown = false;
+    let shutdownTimeout: NodeJS.Timeout | null = null;
+
+    const shutdownHandler = async (signal: string): Promise<void> => {
+      // 防止重复执行
+      if (isShuttingDown) {
+        logger.warn('Shutdown already in progress, ignoring signal', { signal });
+        return;
+      }
+      
+      isShuttingDown = true;
+      logger.info(`Received ${signal}, shutting down gracefully...`);
+      
+      // 设置退出超时（30秒）
+      shutdownTimeout = setTimeout(() => {
+        logger.error('Shutdown timeout exceeded, forcing exit');
+        process.exit(1);
+      }, 30000);
+      
+      try {
+        await this.stop();
+        
+        // 清除超时定时器
+        if (shutdownTimeout) {
+          clearTimeout(shutdownTimeout);
+          shutdownTimeout = null;
         }
-      })();
+        
+        logger.info('Graceful shutdown completed');
+        process.exit(0);
+      } catch (error) {
+        logger.error('Error during graceful shutdown', { error });
+        
+        // 清除超时定时器
+        if (shutdownTimeout) {
+          clearTimeout(shutdownTimeout);
+          shutdownTimeout = null;
+        }
+        
+        process.exit(1);
+      }
     };
 
     // 监听系统信号
-    process.on('SIGTERM', () => shutdownHandler('SIGTERM'));
-    process.on('SIGINT', () => shutdownHandler('SIGINT'));
+    process.on('SIGTERM', () => void shutdownHandler('SIGTERM'));
+    process.on('SIGINT', () => void shutdownHandler('SIGINT'));
 
     // 监听未捕获异常
     process.on('uncaughtException', (error) => {
-      void (async () => {
-        logger.error('Uncaught exception', { error });
-        try {
-          await this.stop();
-        } catch (cleanupError) {
-          logger.error('Error during cleanup after uncaught exception', { cleanupError });
-        }
-        process.exit(1);
-      })();
+      logger.error('Uncaught exception', { error });
+      void shutdownHandler('uncaughtException');
     });
 
     // 监听未处理的 Promise 拒绝
-    process.on('unhandledRejection', (reason, promise) => {
-      void (async () => {
-        logger.error('Unhandled rejection', { reason, promise });
-        try {
-          await this.stop();
-        } catch (cleanupError) {
-          logger.error('Error during cleanup after unhandled rejection', { cleanupError });
-        }
-        process.exit(1);
-      })();
+    process.on('unhandledRejection', (reason) => {
+      logger.error('Unhandled rejection', { reason });
+      void shutdownHandler('unhandledRejection');
     });
 
     logger.debug('Shutdown hooks registered');

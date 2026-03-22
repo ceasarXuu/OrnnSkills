@@ -4,57 +4,59 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-18+-green.svg)](https://nodejs.org/)
 
-OrnnSkills 是一个后台常驻的元 Agent，它不会替代主 Agent 执行任务，而是持续观察主 Agent 的真实执行，并为每个项目维护一份来自全局 Skill 的影子副本（Shadow Skill），再基于 trace 对这份影子副本做小步、自动、可回滚的持续优化。
+[English](README.md) | [中文](README.zh-CN.md)
 
-## 核心特性
+OrnnSkills is a background meta-agent that does not replace the main agent to execute tasks. Instead, it continuously observes the real execution of the main agent and maintains a shadow copy of skills from the global Skill registry for each project. It then performs small-step, automatic, and rollback-able continuous optimization on this shadow copy based on execution traces.
 
-- 🔍 **智能观察**: 从 Codex/OpenCode/Claude 等 Agent 采集执行 trace
-- 🎯 **精准映射**: 智能将 trace 映射到对应的 skill，支持 6 种映射策略
-- 🔄 **自动优化**: 基于真实执行数据自动优化 skill
-- 📦 **影子副本**: 每个项目维护独立的 skill 副本，不污染全局
-- 🔙 **可回滚**: 所有修改都有演化日志和 checkpoint，支持一键回滚
-- 🚀 **无感运行**: 后台自动运行，无需手动干预
+## Core Features
 
-## 安装
+- 🔍 **Smart Observation**: Collect execution traces from Agents like Codex/OpenCode/Claude
+- 🎯 **Precise Mapping**: Intelligently map traces to corresponding skills with 6 mapping strategies
+- 🔄 **Automatic Optimization**: Automatically optimize skills based on real execution data
+- 📦 **Shadow Copy**: Maintain independent skill copies for each project without polluting the global registry
+- 🔙 **Rollback Support**: All modifications have evolution logs and checkpoints, supporting one-click rollback
+- 🚀 **Seamless Operation**: Runs automatically in the background without manual intervention
+
+## Installation
 
 ```bash
 npm install -g ornn-skills
 ```
 
-## 快速开始
+## Quick Start
 
-### 1. 初始化配置
+### 1. Initialize Configuration
 
 ```bash
 ornn init
 ```
 
-### 2. 查看项目 shadow skills 状态
+### 2. Check Project Shadow Skills Status
 
 ```bash
 ornn skills status
 ```
 
-### 3. 查看某个 skill 的演化日志
+### 3. View Evolution Log for a Skill
 
 ```bash
 ornn skills log <skill-id>
 ```
 
-### 4. 回滚到指定版本
+### 4. Rollback to a Specific Version
 
 ```bash
 ornn skills rollback <skill-id> --to rev_8
 ```
 
-### 5. 冻结/解冻自动优化
+### 5. Freeze/Unfreeze Automatic Optimization
 
 ```bash
 ornn skills freeze <skill-id>
 ornn skills unfreeze <skill-id>
 ```
 
-## 架构概览
+## Architecture Overview
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -65,140 +67,140 @@ ornn skills unfreeze <skill-id>
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                    TraceSkillObserver                        │
-│  - 监听 trace 事件                                            │
-│  - 实时映射 trace 到 skill                                    │
-│  - 按 skill 聚合 traces                                      │
-│  - 触发评估回调                                               │
+│  - Listen to trace events                                     │
+│  - Real-time mapping of traces to skills                      │
+│  - Aggregate traces by skill                                  │
+│  - Trigger evaluation callbacks                               │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                    TraceSkillMapper                          │
-│  - 6 种映射策略                                               │
-│  - 路径提取                                                   │
-│  - 语义推断                                                   │
-│  - 置信度计算                                                 │
+│  - 6 mapping strategies                                       │
+│  - Path extraction                                            │
+│  - Semantic inference                                         │
+│  - Confidence calculation                                     │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                  OptimizationPipeline                        │
-│  - 获取按 skill 分组的 traces                                 │
-│  - 调用 Evaluator 评估                                        │
-│  - 生成优化任务                                               │
-│  - 触发 Patch Generator                                      │
+│  - Get traces grouped by skill                                │
+│  - Call Evaluator for assessment                              │
+│  - Generate optimization tasks                                │
+│  - Trigger Patch Generator                                    │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                Shadow Skill Manager                          │
-│  ├─ Origin Registry (全局 skill 扫描)                         │
-│  ├─ Shadow Registry (项目 skill 管理)                        │
-│  ├─ Evolution Evaluator (优化评估)                            │
-│  ├─ Patch Generator (补丁生成)                                │
-│  └─ Journal Manager (演化日志)                                │
+│  ├─ Origin Registry (Global skill scanning)                   │
+│  ├─ Shadow Registry (Project skill management)                │
+│  ├─ Evolution Evaluator (Optimization assessment)             │
+│  ├─ Patch Generator (Patch generation)                        │
+│  └─ Journal Manager (Evolution logs)                          │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
                     Project Shadow Skills (.ornn/skills/*)
 ```
 
-### Trace-Skill 映射
+### Trace-Skill Mapping
 
-系统使用 6 种策略将 trace 映射到对应的 skill：
+The system uses 6 strategies to map traces to corresponding skills:
 
-| 策略 | 触发条件 | 置信度 | 说明 |
-|------|----------|--------|------|
-| 策略1 | `tool_call` 读取 skill 文件 | 0.95 | 最可靠的映射方式 |
-| 策略2 | `tool_call` 执行 skill 相关操作 | 0.85 | 从工具参数推断 |
-| 策略3 | `file_change` 修改 skill 文件 | 0.9 | 文件变化明确指向 skill |
-| 策略4 | `metadata` 包含 skill_id | 0.98 | 显式的 skill 标识 |
-| 策略5 | `assistant_output` 引用 skill | 0.6 | 从输出内容推断 |
-| 策略6 | `user_input` 请求 skill | 0.5 | 从用户输入推断 |
+| Strategy | Trigger Condition | Confidence | Description |
+|----------|-------------------|------------|-------------|
+| Strategy 1 | `tool_call` reads skill file | 0.95 | Most reliable mapping method |
+| Strategy 2 | `tool_call` executes skill-related operations | 0.85 | Inferred from tool parameters |
+| Strategy 3 | `file_change` modifies skill file | 0.9 | File changes clearly point to skill |
+| Strategy 4 | `metadata` contains skill_id | 0.98 | Explicit skill identifier |
+| Strategy 5 | `assistant_output` references skill | 0.6 | Inferred from output content |
+| Strategy 6 | `user_input` requests skill | 0.5 | Inferred from user input |
 
-### 自动优化闭环
+### Automatic Optimization Loop
 
-系统实现了完整的自动优化闭环：
+The system implements a complete automatic optimization loop:
 
-1. **Trace 采集**: 从 Agent 运行时采集执行 trace
-2. **Trace-Skill 映射**: 将 trace 智能映射到对应的 skill
-3. **评估**: 分析 trace 模式，识别优化机会
-4. **生成任务**: 创建优化任务
-5. **执行优化**: 应用补丁到 shadow skill
-6. **记录日志**: 保存演化历史和快照
+1. **Trace Collection**: Collect execution traces from Agent runtime
+2. **Trace-Skill Mapping**: Intelligently map traces to corresponding skills
+3. **Evaluation**: Analyze trace patterns and identify optimization opportunities
+4. **Task Generation**: Create optimization tasks
+5. **Optimization Execution**: Apply patches to shadow skills
+6. **Log Recording**: Save evolution history and snapshots
 
-### 配置
+### Configuration
 
-#### Trace-Skill 映射配置
+#### Trace-Skill Mapping Configuration
 
 ```toml
 [mapper]
-min_confidence = 0.5  # 最低置信度阈值
-persist_mappings = true  # 是否保存映射关系到数据库
+min_confidence = 0.5  # Minimum confidence threshold
+persist_mappings = true  # Whether to save mapping relationships to database
 
 [observer]
-buffer_size = 10  # 缓冲区大小
-flush_interval = 5000  # 定时刷新间隔（毫秒）
+buffer_size = 10  # Buffer size
+flush_interval = 5000  # Periodic flush interval (milliseconds)
 
 [pipeline]
-auto_optimize = true  # 是否启用自动优化
-min_confidence = 0.7  # 优化任务的最低置信度
+auto_optimize = true  # Whether to enable automatic optimization
+min_confidence = 0.7  # Minimum confidence for optimization tasks
 ```
 
-## 项目结构
+## Project Structure
 
 ```
 your-project/
 └── .ornn/
     ├── skills/
     │   └── <skill-id>/
-    │       ├── current.md      # 当前 shadow skill 内容
-    │       ├── meta.json       # 元数据
-    │       ├── journal.ndjson  # 演化日志
-    │       └── snapshots/      # 快照
+    │       ├── current.md      # Current shadow skill content
+    │       ├── meta.json       # Metadata
+    │       ├── journal.ndjson  # Evolution logs
+    │       └── snapshots/      # Snapshots
     │           ├── rev_0005.md
     │           └── rev_0010.md
     ├── state/
-    │   ├── sessions.db         # SQLite 数据库
-    │   ├── traces.ndjson       # 原始 trace
-    │   └── runtime_state.json  # 运行时状态
+    │   ├── sessions.db         # SQLite database
+    │   ├── traces.ndjson       # Raw traces
+    │   └── runtime_state.json  # Runtime state
     └── config/
-        └── settings.toml       # 项目配置
+        └── settings.toml       # Project configuration
 ```
 
-## CLI 命令
+## CLI Commands
 
-| 命令 | 描述 |
-|------|------|
-| `ornn init` | 初始化配置 |
-| `ornn skills status` | 查看当前项目 shadow skills 状态 |
-| `ornn skills log <skill>` | 查看某个 skill 的演化日志 |
-| `ornn skills diff <skill>` | 查看当前内容与 origin 的 diff |
-| `ornn skills rollback <skill> --to <rev>` | 回滚到指定 revision |
-| `ornn skills freeze <skill>` | 暂停某个 skill 的自动优化 |
-| `ornn skills unfreeze <skill>` | 恢复自动优化 |
-| `ornn optimize <skill>` | 手动触发一次优化评估 |
-| `ornn skills rebase <skill>` | 重新同步 origin |
+| Command | Description |
+|---------|-------------|
+| `ornn init` | Initialize configuration |
+| `ornn skills status` | View current project shadow skills status |
+| `ornn skills log <skill>` | View evolution log for a skill |
+| `ornn skills diff <skill>` | View diff between current content and origin |
+| `ornn skills rollback <skill> --to <rev>` | Rollback to specified revision |
+| `ornn skills freeze <skill>` | Pause automatic optimization for a skill |
+| `ornn skills unfreeze <skill>` | Resume automatic optimization |
+| `ornn optimize <skill>` | Manually trigger an optimization evaluation |
+| `ornn skills rebase <skill>` | Resync with origin |
 
-## 自动优化策略
+## Automatic Optimization Strategies
 
-系统会自动执行以下类型的优化：
+The system automatically performs the following types of optimizations:
 
-- ✅ **append_context**: 补充项目特定上下文
-- ✅ **tighten_trigger**: 收紧适用条件
-- ✅ **add_fallback**: 补写高频 fallback
-- ✅ **prune_noise**: 删除低价值噪音描述
+- ✅ **append_context**: Supplement project-specific context
+- ✅ **tighten_trigger**: Tighten applicability conditions
+- ✅ **add_fallback**: Add high-frequency fallback handling
+- ✅ **prune_noise**: Remove low-value noise descriptions
 
-以下操作默认不自动执行：
+The following operations are not automatically performed by default:
 
-- ❌ 大段重写整个 skill
-- ❌ 删除大量核心步骤
-- ❌ 改变 skill 的总体目标
-- ❌ 回写到全局 origin
+- ❌ Large-scale rewriting of entire skills
+- ❌ Deleting large amounts of core steps
+- ❌ Changing the overall goal of a skill
+- ❌ Writing back to global origin
 
-## 配置
+## Configuration
 
-### 全局配置 (~/.ornn/settings.toml)
+### Global Configuration (~/.ornn/settings.toml)
 
 ```toml
 [origin_paths]
@@ -227,7 +229,7 @@ auto_start = true
 log_level = "info"
 ```
 
-### 项目配置 (.ornn/config/settings.toml)
+### Project Configuration (.ornn/config/settings.toml)
 
 ```toml
 [project]
@@ -235,68 +237,64 @@ name = "my-project"
 auto_optimize = true
 
 [skills]
-# 特定 skill 的配置覆盖
+# Specific skill configuration overrides
 [skills.my-skill]
-auto_optimize = false  # 冻结此 skill
+auto_optimize = false  # Freeze this skill
 ```
 
-## 开发
+## Development
 
-### 安装依赖
+### Install Dependencies
 
 ```bash
 npm install
 ```
 
-### 开发模式
+### Development Mode
 
 ```bash
 npm run dev
 ```
 
-### 构建
+### Build
 
 ```bash
 npm run build
 ```
 
-### 测试
+### Testing
 
 ```bash
 npm test
 ```
 
-### 代码检查
+### Linting
 
 ```bash
 npm run lint
 npm run format
 ```
 
-## 技术栈
+## Tech Stack
 
-- **TypeScript**: 类型安全的 JavaScript
-- **Node.js**: 运行时环境
-- **Commander.js**: CLI 框架
-- **SQLite**: 本地数据库
-- **Winston**: 日志系统
-- **Vitest**: 测试框架
+- **TypeScript**: Type-safe JavaScript
+- **Node.js**: Runtime environment
+- **Commander.js**: CLI framework
+- **SQLite**: Local database
+- **Winston**: Logging system
+- **Vitest**: Testing framework
 
-## 文档
+## Documentation
 
-- [PRD - 产品需求文档](docs/PRD.md)
-- [工程计划](docs/ENGINEERING_PLAN.md)
-- [Trace-Skill 映射功能文档](docs/TRACE-SKILL-MAPPING.md)
-- [用户使用指南](USER-GUIDE.md)
+- [PRD - Product Requirements Document](docs/PRD.md)
+- [Engineering Plan](docs/ENGINEERING_PLAN.md)
+- [Trace-Skill Mapping Documentation](docs/TRACE-SKILL-MAPPING.md)
+- [User Guide](USER-GUIDE.md)
 
-## 许可证
+## License
 
-MIT License - 详见 [LICENSE](LICENSE) 文件
+MIT License - See [LICENSE](LICENSE) file for details.
 
-## 贡献
+## Contributing
 
-欢迎贡献！请阅读 [贡献指南](CONTRIBUTING.md) 了解详情。
-
-## 支持
-
-如有问题或建议，请提交 [Issue](https://github.com/ceasarXuu/OrnnSkills/issues)
+Contributions are welcome! Please read the [Contributing Guide](CONTRIBUTING.md) for details.

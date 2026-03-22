@@ -182,7 +182,7 @@ export class JournalManager {
     copyFileSync(shadowPath, snapshotPath);
 
     // 计算内容哈希
-    const { readFileSync } = require('node:fs');
+    const { readFileSync } = await import('node:fs');
     const content = readFileSync(shadowPath, 'utf-8');
     const contentHash = hashString(content);
 
@@ -204,7 +204,7 @@ export class JournalManager {
   /**
    * 回滚到指定 revision
    */
-  async rollback(shadowId: string, targetRevision: number): Promise<void> {
+  rollback(shadowId: string, targetRevision: number): void {
     const skillId = this.extractSkillId(shadowId);
 
     // 查找 snapshot
@@ -238,7 +238,7 @@ export class JournalManager {
   /**
    * 回滚到上一个 snapshot
    */
-  async rollbackToSnapshot(shadowId: string): Promise<void> {
+  rollbackToSnapshot(shadowId: string): void {
     const snapshots = this.db.getSnapshots(shadowId);
     if (snapshots.length === 0) {
       throw new Error('No snapshots available');
@@ -246,7 +246,7 @@ export class JournalManager {
 
     // 获取最新的 snapshot
     const latestSnapshot = snapshots[0];
-    await this.rollback(shadowId, latestSnapshot.revision);
+    this.rollback(shadowId, latestSnapshot.revision);
   }
 
   /**

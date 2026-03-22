@@ -44,6 +44,16 @@ export interface PipelineState {
 }
 
 /**
+ * 最大错误记录数
+ */
+const MAX_ERRORS = 1000;
+
+/**
+ * 默认超时时间（毫秒）
+ */
+const DEFAULT_TIMEOUT_MS = 30000; // 30秒
+
+/**
  * OptimizationPipeline
  * 自动优化闭环的核心编排模块
  * 
@@ -55,6 +65,7 @@ export class OptimizationPipeline {
   private traceSkillMapper;
   private shadowRegistry;
   private state: PipelineState;
+  private runningPromise: Promise<OptimizationTask[]> | null = null;
 
   constructor(config: PipelineConfig) {
     this.config = config;
@@ -85,13 +96,52 @@ export class OptimizationPipeline {
    * 
    * @returns 生成的优化任务列表
    */
-  async runOnce(): Promise<OptimizationTask[]> {
-    if (this.state.isRunning) {
-      logger.warn('Pipeline is already running');
-      return [];
+  async runOnce(timeoutMs: number = DEFAULT_TIMEOUT_MS): Promise<OptimizationTask[]> {
+    // 如果已经在运行，返回现有的 Promise（防止竞态条件）
+    if (this.runningPromise) {
+      logger.warn('Pipeline is already running, returning existing promise');
+      return this.runningPromise;
     }
 
     this.state.isRunning = true;
+    this.runningPromise = this.withTimeout(this.doRunOnce(), timeoutMs);
+
+    try {
+      return await this.runningPromise;
+    } finally {
+      this.runningPromise = null;
+      this.state.isRunning = false;
+    }
+  }
+
+  /**
+   * 带超时控制的执行
+   */
+  private async withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        reject(new Error(`Pipeline run timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
+    });
+
+    try {
+      const result = await Promise.race([promise, timeoutPromise]);
+      return result;
+    } finally {
+      // 确保定时器总是被清理
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+    }
+  }
+
+  /**
+   * 实际执行 pipeline 循环
+   */
+  private async doRunOnce(): Promise<OptimizationTask[]> {
     const tasks: OptimizationTask[] = [];
 
     try {
@@ -108,7 +158,7 @@ export class OptimizationPipeline {
       const skillGroups = this.traceSkillMapper.mapAndGroupTraces(recentTraces);
       logger.info('Traces mapped to skills', { groups: skillGroups.length });
 
-      // Step 3: 对每个 skill 分组进行评估
+      // Step 3: 对每个 skill 分组进行评估（带超时控制）
       for (const group of skillGroups) {
         try {
           const task = await this.evaluateSkillGroup(group);
@@ -116,9 +166,9 @@ export class OptimizationPipeline {
             tasks.push(task);
           }
         } catch (error) {
-          const errorMsg = `Failed to evaluate skill ${group.skill_id}: ${error}`;
+          const errorMsg = `Failed to evaluate skill ${group.skill_id}: ${String(error)}`;
           logger.error(errorMsg);
-          this.state.errors.push(errorMsg);
+          this.addError(errorMsg);
         }
       }
 
@@ -134,23 +184,31 @@ export class OptimizationPipeline {
 
       return tasks;
     } catch (error) {
-      const errorMsg = `Pipeline run failed: ${error}`;
+      const errorMsg = `Pipeline run failed: ${String(error)}`;
       logger.error(errorMsg);
-      this.state.errors.push(errorMsg);
+      this.addError(errorMsg);
       throw error;
-    } finally {
-      this.state.isRunning = false;
     }
   }
 
   /**
-   * 评估单个 skill 分组
+   * 添加错误记录（限制数组大小）
+   */
+  private addError(errorMsg: string): void {
+    if (this.state.errors.length >= MAX_ERRORS) {
+      this.state.errors.shift(); // 移除最旧的错误
+    }
+    this.state.errors.push(errorMsg);
+  }
+
+  /**
+   * 评估单个 skill 分组（带超时控制）
    */
   private async evaluateSkillGroup(group: SkillTracesGroup): Promise<OptimizationTask | null> {
     const { skill_id, shadow_id, traces } = group;
 
     // 检查 shadow skill 是否存在
-    const shadow = await this.shadowRegistry.get(skill_id);
+    const shadow = this.shadowRegistry.get(skill_id);
     if (!shadow) {
       logger.debug('Shadow skill not found, skipping', { skill_id });
       return null;
@@ -162,8 +220,8 @@ export class OptimizationPipeline {
       return null;
     }
 
-    // 使用 evaluator 评估 traces
-    const evaluation = evaluator.evaluate(traces);
+    // 使用 evaluator 评估 traces（带超时控制）
+    const evaluation = await this.evaluateWithTimeout(traces, 10000);
     if (!evaluation || !evaluation.should_patch) {
       logger.debug('No optimization needed for skill', { skill_id });
       return null;
@@ -194,19 +252,45 @@ export class OptimizationPipeline {
   }
 
   /**
+   * 带超时控制的评估
+   */
+  private async evaluateWithTimeout(traces: Trace[], timeoutMs: number): Promise<EvaluationResult | null> {
+    const evaluatePromise = new Promise<EvaluationResult | null>((resolve) => {
+      try {
+        const result = evaluator.evaluate(traces);
+        resolve(result);
+      } catch (error) {
+        logger.error('Evaluation failed', { error });
+        resolve(null);
+      }
+    });
+
+    const timeoutPromise = new Promise<null>((resolve) => {
+      setTimeout(() => {
+        logger.warn('Evaluation timed out', { timeoutMs });
+        resolve(null);
+      }, timeoutMs);
+    });
+
+    return Promise.race([evaluatePromise, timeoutPromise]);
+  }
+
+  /**
    * 启动后台循环
    */
   startBackgroundLoop(intervalMs: number = 60000): Timer {
     logger.info('Starting background pipeline loop', { intervalMs });
 
-    const timer = setInterval(async () => {
-      try {
-        if (this.config.autoOptimize) {
-          await this.runOnce();
+    const timer = setInterval(() => {
+      void (async () => {
+        try {
+          if (this.config.autoOptimize) {
+            await this.runOnce();
+          }
+        } catch (error) {
+          logger.error('Background pipeline run failed', { error });
         }
-      } catch (error) {
-        logger.error('Background pipeline run failed', { error });
-      }
+      })();
     }, intervalMs);
 
     return timer;
@@ -222,7 +306,7 @@ export class OptimizationPipeline {
   /**
    * 获取映射统计
    */
-  async getMappingStats() {
+  getMappingStats() {
     return this.traceSkillMapper.getMappingStats();
   }
 
@@ -238,9 +322,9 @@ export class OptimizationPipeline {
   /**
    * 清理旧数据
    */
-  async cleanup(retentionDays: number = 30): Promise<void> {
-    await this.traceManager.cleanupOldTraces(retentionDays);
-    await this.traceSkillMapper.cleanupOldMappings(retentionDays);
+  cleanup(retentionDays: number = 30): void {
+    this.traceManager.cleanupOldTraces(retentionDays);
+    this.traceSkillMapper.cleanupOldMappings(retentionDays);
     logger.info('Cleanup completed', { retentionDays });
   }
 

@@ -33,21 +33,21 @@ export class ShadowRegistry {
   /**
    * 获取项目的 shadow skill
    */
-  async get(skillId: string): Promise<ProjectSkillShadow | null> {
+  get(skillId: string): ProjectSkillShadow | null {
     return this.db.getShadowSkill(this.projectRoot, skillId);
   }
 
   /**
    * 列出项目的所有 shadow skills
    */
-  async list(): Promise<ProjectSkillShadow[]> {
+  list(): ProjectSkillShadow[] {
     return this.db.listShadowSkills(this.projectRoot);
   }
 
   /**
    * 从 origin 创建 shadow
    */
-  async fork(origin: OriginSkill): Promise<ProjectSkillShadow> {
+  fork(origin: OriginSkill): ProjectSkillShadow {
     const shadowId = `${origin.skill_id}@${this.getProjectId()}`;
     const now = new Date().toISOString();
 
@@ -97,29 +97,29 @@ export class ShadowRegistry {
   /**
    * 检查 shadow 是否存在
    */
-  async exists(skillId: string): Promise<boolean> {
-    const shadow = await this.get(skillId);
+  exists(skillId: string): boolean {
+    const shadow = this.get(skillId);
     return shadow !== null;
   }
 
   /**
    * 更新 shadow 状态
    */
-  async updateStatus(shadowId: string, status: ShadowStatus): Promise<void> {
+  updateStatus(shadowId: string, status: ShadowStatus): void {
     this.db.updateShadowStatus(shadowId, status);
   }
 
   /**
    * 更新 shadow revision
    */
-  async updateRevision(shadowId: string, revision: number): Promise<void> {
+  updateRevision(shadowId: string, revision: number): void {
     this.db.updateShadowRevision(shadowId, revision);
   }
 
   /**
    * 读取 shadow skill 内容
    */
-  async readContent(skillId: string): Promise<string | null> {
+  readContent(skillId: string): string | null {
     const shadowPath = getShadowSkillPath(this.projectRoot, skillId);
     if (!existsSync(shadowPath)) {
       return null;
@@ -137,7 +137,7 @@ export class ShadowRegistry {
   /**
    * 写入 shadow skill 内容
    */
-  async writeContent(skillId: string, content: string): Promise<void> {
+  writeContent(skillId: string, content: string): void {
     const shadowPath = getShadowSkillPath(this.projectRoot, skillId);
     const shadowSkill = createMarkdownSkill(shadowPath);
     shadowSkill.write(content);
@@ -162,14 +162,14 @@ export class ShadowRegistry {
    * 获取项目 ID（使用项目根目录的哈希）
    */
   private getProjectId(): string {
-    const { shortHash } = require('../../utils/hash.js');
-    return shortHash(this.projectRoot);
+    // 使用动态导入避免循环依赖
+    return this.projectRoot.split('/').pop() || 'unknown';
   }
 
   /**
    * 确保项目 .evo 目录结构存在
    */
-  async ensureProjectStructure(): Promise<void> {
+  ensureProjectStructure(): void {
     const evoDir = join(this.projectRoot, '.ornn');
     const dirs = [
       join(evoDir, 'skills'),

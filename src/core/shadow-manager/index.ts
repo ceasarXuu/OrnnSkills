@@ -172,7 +172,7 @@ export class ShadowManager {
         section: evaluation.target_section,
       };
 
-      const patchResult = patchGenerator.generate(
+      const patchResult = await patchGenerator.generate(
         evaluation.change_type!,
         currentContent,
         context

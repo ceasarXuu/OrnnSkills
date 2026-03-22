@@ -6,6 +6,37 @@ import { homedir } from 'node:os';
 const LOG_DIR = join(homedir(), '.ornn', 'logs');
 
 /**
+ * 脱敏敏感信息
+ */
+function sanitizeMessage(message: string): string {
+  // 脱敏 API 密钥
+  let sanitized = message.replace(/api[_-]?key['":\s]*['"]?([a-zA-Z0-9]{20,})['"]?/gi, 'api_key: [REDACTED]');
+  
+  // 脱敏令牌
+  sanitized = sanitized.replace(/token['":\s]*['"]?([a-zA-Z0-9._-]{20,})['"]?/gi, 'token: [REDACTED]');
+  
+  // 脱敏密码
+  sanitized = sanitized.replace(/password['":\s]*['"]?([^\s'"]+)['"]?/gi, 'password: [REDACTED]');
+  
+  // 脱敏私钥
+  sanitized = sanitized.replace(/-----BEGIN [A-Z ]+ PRIVATE KEY-----[\s\S]*?-----END [A-Z ]+ PRIVATE KEY-----/g, '[PRIVATE_KEY_REDACTED]');
+  
+  // 脱敏邮箱
+  sanitized = sanitized.replace(/([a-zA-Z0-9._%+-]+)@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g, '[EMAIL_REDACTED]@$2');
+  
+  // 脱敏文件路径中的用户名
+  sanitized = sanitized.replace(/\/Users\/([^/]+)\//g, '/Users/[USER]/');
+  sanitized = sanitized.replace(/\/home\/([^/]+)\//g, '/home/[USER]/');
+  
+  return sanitized;
+}
+
+/**
+ * 自定义日志格式（带脱敏）
+/**
+ * 自定义日志格式
+
+/**
  * 创建日志目录
  */
 function ensureLogDir(): void {
@@ -21,8 +52,16 @@ const logFormat = winston.format.combine(
   winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
   winston.format.errors({ stack: true }),
   winston.format.printf(({ timestamp, level, message, stack }) => {
-    const baseMessage = `[${timestamp}] ${String(level).toUpperCase()}: ${String(message)}`;
-    const stackStr = typeof stack === 'string' ? stack : undefined;
+    // 脱敏消息
+    const sanitizedMessage = sanitizeMessage(String(message));
+    const baseMessage = `[${timestamp}] ${String(level).toUpperCase()}: ${sanitizedMessage}`;
+    
+    // 脱敏堆栈
+    let stackStr: string | undefined;
+    if (typeof stack === 'string') {
+      stackStr = sanitizeMessage(stack);
+    }
+    
     return stackStr ? `${baseMessage}\n${stackStr}` : baseMessage;
   })
 );

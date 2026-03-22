@@ -1,6 +1,7 @@
 import initSqlJs, { type Database } from 'sql.js';
-import { join } from 'node:path';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, unlinkSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
 import { createChildLogger } from '../utils/logger.js';
 import type { ProjectSkillShadow, ShadowStatus, Session, RuntimeType, OriginSkill } from '../types/index.js';
 
@@ -12,9 +13,56 @@ const logger = createChildLogger('sqlite');
 export class SQLiteStorage {
   private db: Database | null = null;
   private dbPath: string;
+  
+  // 单例管理：防止多个实例指向同一文件
+  private static instances: Map<string, SQLiteStorage> = new Map();
+  private static locks: Map<string, Promise<SQLiteStorage>> = new Map();
 
-  constructor(dbPath: string) {
+  private constructor(dbPath: string) {
     this.dbPath = dbPath;
+  }
+
+  /**
+   * 获取 SQLiteStorage 实例（单例模式）
+   * 使用异步锁防止并发创建多个实例
+   */
+  static async getInstance(dbPath: string): Promise<SQLiteStorage> {
+    const normalizedPath = resolve(dbPath);
+    
+    // 如果已有实例，直接返回
+    if (SQLiteStorage.instances.has(normalizedPath)) {
+      return SQLiteStorage.instances.get(normalizedPath)!;
+    }
+    
+    // 如果正在创建实例，等待完成
+    if (SQLiteStorage.locks.has(normalizedPath)) {
+      return SQLiteStorage.locks.get(normalizedPath)!;
+    }
+    
+    // 创建新实例的 Promise
+    const createPromise = (async () => {
+      try {
+        const instance = new SQLiteStorage(normalizedPath);
+        SQLiteStorage.instances.set(normalizedPath, instance);
+        return instance;
+      } finally {
+        SQLiteStorage.locks.delete(normalizedPath);
+      }
+    })();
+    
+    SQLiteStorage.locks.set(normalizedPath, createPromise);
+    return createPromise;
+  }
+
+  /**
+   * 关闭并移除实例
+   */
+  static removeInstance(dbPath: string): void {
+    const instance = SQLiteStorage.instances.get(dbPath);
+    if (instance) {
+      instance.close();
+      SQLiteStorage.instances.delete(dbPath);
+    }
   }
 
   /**
@@ -44,13 +92,93 @@ export class SQLiteStorage {
   }
 
   /**
-   * 保存数据库到文件
+   * 保存数据库到文件（原子写入）
    */
   private save(): void {
     if (!this.db) throw new Error('Database not initialized');
     const data = this.db.export();
     const buffer = Buffer.from(data);
-    writeFileSync(this.dbPath, buffer);
+    
+    // 使用唯一临时文件实现原子写入（防止多进程并发冲突）
+    const uniqueId = randomBytes(8).toString('hex');
+    const tempPath = `${this.dbPath}.${process.pid}.${uniqueId}.tmp`;
+    try {
+      writeFileSync(tempPath, buffer);
+      renameSync(tempPath, this.dbPath); // 原子替换
+    } catch (error) {
+      // 清理临时文件
+      try {
+        if (existsSync(tempPath)) {
+          unlinkSync(tempPath);
+        }
+      } catch {
+        // 忽略清理错误
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * 开始事务
+   */
+  beginTrans(): void {
+    if (!this.db) throw new Error('Database not initialized');
+    this.db.run('BEGIN TRANSACTION');
+  }
+
+  /**
+   * 提交事务
+   */
+  commit(): void {
+    if (!this.db) throw new Error('Database not initialized');
+    this.db.run('COMMIT');
+    this.save();
+  }
+
+  /**
+   * 回滚事务
+   */
+  rollback(): void {
+    if (!this.db) throw new Error('Database not initialized');
+    this.db.run('ROLLBACK');
+  }
+
+  /**
+   * 创建数据库备份
+   */
+  createBackup(backupPath?: string): string {
+    if (!this.db) throw new Error('Database not initialized');
+    
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const backupFilePath = backupPath ?? `${this.dbPath}.backup.${timestamp}`;
+    
+    const data = this.db.export();
+    const buffer = Buffer.from(data);
+    writeFileSync(backupFilePath, buffer);
+    
+    logger.info('Database backup created', { path: backupFilePath });
+    return backupFilePath;
+  }
+
+  /**
+   * 从备份恢复数据库
+   */
+  async restoreFromBackup(backupPath: string): Promise<void> {
+    if (!existsSync(backupPath)) {
+      throw new Error(`Backup file not found: ${backupPath}`);
+    }
+
+    const buffer = readFileSync(backupPath);
+    const SQL = await initSqlJs();
+    
+    if (this.db) {
+      this.db.close();
+    }
+    
+    this.db = new SQL.Database(buffer);
+    this.save();
+    
+    logger.info('Database restored from backup', { path: backupPath });
   }
 
   /**
@@ -206,6 +334,55 @@ export class SQLiteStorage {
       ]
     );
     this.save();
+  }
+
+  /**
+   * 在事务中插入或更新 shadow skill
+   */
+  upsertShadowSkillInTransaction(shadow: ProjectSkillShadow): void {
+    if (!this.db) throw new Error('Database not initialized');
+
+    this.db.run(
+      `INSERT OR REPLACE INTO shadow_skills (
+        shadow_id, project_id, skill_id, origin_skill_id, origin_version_at_fork,
+        shadow_path, current_revision, status, created_at, last_optimized_at,
+        hit_count, success_count, manual_override_count, health_score
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        shadow.shadow_id,
+        shadow.project_id,
+        shadow.skill_id,
+        shadow.origin_skill_id,
+        shadow.origin_version_at_fork,
+        shadow.shadow_path,
+        shadow.current_revision,
+        shadow.status,
+        shadow.created_at,
+        shadow.last_optimized_at,
+        0,
+        0,
+        0,
+        100.0,
+      ]
+    );
+    // 注意：不在这里调用save()，由调用者决定何时提交事务
+  }
+
+  /**
+   * 批量操作（使用事务保护）
+   */
+  batchOperation<T>(operations: () => T): T {
+    if (!this.db) throw new Error('Database not initialized');
+    
+    this.beginTrans();
+    try {
+      const result = operations();
+      this.commit();
+      return result;
+    } catch (error) {
+      this.rollback();
+      throw error;
+    }
   }
 
   /**
@@ -832,7 +1009,7 @@ export class SQLiteStorage {
   }
 }
 
-// 导出工厂函数
+// 导出工厂函数（使用单例模式）
 export function createSQLiteStorage(dbPath: string): SQLiteStorage {
-  return new SQLiteStorage(dbPath);
+  return SQLiteStorage.getInstance(dbPath);
 }

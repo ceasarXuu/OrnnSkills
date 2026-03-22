@@ -3,6 +3,12 @@ import { join } from 'node:path';
 import { existsSync } from 'node:fs';
 import { createShadowRegistry } from '../../core/shadow-registry/index.js';
 import { createJournalManager } from '../../core/journal/index.js';
+import { validateSkillId, validateProjectPath } from '../../utils/path.js';
+
+interface StatusOptions {
+  project: string;
+  skill?: string;
+}
 
 /**
  * Status 命令
@@ -15,9 +21,16 @@ export function createStatusCommand(): Command {
     .description('Show status of shadow skills in current project')
     .option('-p, --project <path>', 'Project root path', process.cwd())
     .option('-s, --skill <id>', 'Show detailed status for specific skill')
-    .action(async (options) => {
+    .action(async (options: StatusOptions) => {
       try {
-        const projectRoot = options.project;
+        // 验证项目路径安全性
+        let projectRoot: string;
+        try {
+          projectRoot = validateProjectPath(options.project);
+        } catch (error) {
+          console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
+          process.exit(1);
+        }
 
         // 检查 .sea 目录是否存在
         const seaDir = join(projectRoot, '.sea');
@@ -34,14 +47,20 @@ export function createStatusCommand(): Command {
         await journalManager.init();
 
         if (options.skill) {
+          // 验证 skill ID 格式
+          if (!validateSkillId(options.skill)) {
+            console.error(`Error: Invalid skill ID "${options.skill}". Skill IDs can only contain letters, numbers, hyphens, underscores, and dots.`);
+            process.exit(1);
+          }
+
           // 显示特定 skill 的详细状态
-          const shadow = await shadowRegistry.get(options.skill);
+          const shadow = shadowRegistry.get(options.skill);
           if (!shadow) {
             console.error(`Error: Shadow skill "${options.skill}" not found`);
             process.exit(1);
           }
 
-          const shadowId = `${options.skill}@${projectRoot}`;
+          const shadowId: string = `${options.skill}@${projectRoot}`;
           const latestRevision = await journalManager.getLatestRevision(shadowId);
           const snapshots = journalManager.getSnapshots(shadowId);
 
@@ -60,7 +79,7 @@ export function createStatusCommand(): Command {
           }
         } else {
           // 列出所有 shadow skills
-          const shadows = await shadowRegistry.list();
+          const shadows = shadowRegistry.list();
 
           if (shadows.length === 0) {
             console.log('No shadow skills found in this project');

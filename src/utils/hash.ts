@@ -9,6 +9,13 @@ export function hashString(content: string): string {
 }
 
 /**
+ * 生成短哈希（16 位，降低碰撞概率）
+ */
+export function shortHash(content: string): string {
+  return hashString(content).substring(0, 16);
+}
+
+/**
  * 计算文件的 SHA256 哈希
  */
 export function hashFile(filePath: string): string {
@@ -23,9 +30,3 @@ export function hashBuffer(buffer: Buffer): string {
   return createHash('sha256').update(buffer).digest('hex');
 }
 
-/**
- * 生成短哈希（前 8 位）
- */
-export function shortHash(content: string): string {
-  return hashString(content).substring(0, 8);
-}

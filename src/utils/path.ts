@@ -3,13 +3,90 @@ import { existsSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 
 /**
- * 展开路径中的 ~ 为用户主目录
+ * 验证 skill ID 是否安全（防止路径遍历攻击）
+ */
+export function validateSkillId(skillId: string): boolean {
+  // 只允许字母、数字、连字符、下划线、点号
+  // 不能包含 .. 或 / 或 \
+  if (!skillId || skillId.length > 100) {
+    return false;
+  }
+  if (skillId.includes('..') || skillId.includes('/') || skillId.includes('\\')) {
+    return false;
+  }
+  return /^[a-zA-Z0-9_.-]+$/.test(skillId);
+}
+
+/**
+ * 清理 skill ID，移除危险字符
+ */
+export function sanitizeSkillId(skillId: string): string {
+  // 移除所有非安全字符
+  const sanitized = skillId.replace(/[^a-zA-Z0-9_.-]/g, '');
+  // 防止空字符串
+  return sanitized || 'default';
+}
+
+/**
+ * 验证并清理 skill ID，如果无效则抛出错误
+ */
+export function assertValidSkillId(skillId: string): void {
+  if (!validateSkillId(skillId)) {
+    throw new Error(`Invalid skill ID: "${skillId}". Skill IDs can only contain letters, numbers, hyphens, underscores, and dots.`);
+  }
+}
+
+import { lstatSync, realpathSync } from 'node:fs';
+import { sep } from 'node:path';
+
+/**
+ * 展开路径中的 ~ 为用户主目录（带安全验证）
  */
 export function expandHome(path: string): string {
+  let expanded = path;
   if (path.startsWith('~/') || path === '~') {
-    return path.replace('~', homedir());
+    expanded = path.replace('~', homedir());
   }
-  return path;
+  
+  // 规范化路径
+  const normalized = resolve(expanded);
+  
+  // 验证路径安全性（防止路径遍历）
+  if (normalized.includes('..')) {
+    throw new Error('Path traversal detected: path contains ".."');
+  }
+  
+  return normalized;
+}
+
+/**
+ * 验证项目路径是否安全（防止路径遍历攻击）
+ */
+export function validateProjectPath(projectPath: string): string {
+  // 先检查输入是否包含 ..
+  if (projectPath.includes('..')) {
+    throw new Error('Path traversal detected: path contains ".."');
+  }
+  
+  // 解析为绝对路径
+  const resolved = resolve(projectPath);
+  
+  // 解析符号链接获取真实路径
+  let realPath: string;
+  try {
+    realPath = realpathSync(resolved);
+  } catch (error) {
+    throw new Error(`Invalid path: ${projectPath}`);
+  }
+  
+  const cwd = realpathSync(process.cwd());
+  
+  // 检查真实路径是否在 cwd 下
+  if (!realPath.startsWith(cwd + sep) && realPath !== cwd) {
+    throw new Error('Project path must be within current directory');
+  }
+  
+  return realPath;
 }
 
 /**

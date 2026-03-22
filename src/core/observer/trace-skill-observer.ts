@@ -3,6 +3,9 @@ import { createTraceSkillMapper } from '../trace-skill-mapper/index.js';
 import { createTraceManager } from './trace-manager.js';
 import type { Trace, SkillTracesGroup } from '../../types/index.js';
 
+// Timer 类型
+type Timer = ReturnType<typeof setInterval>;
+
 const logger = createChildLogger('trace-skill-observer');
 
 /**
@@ -37,7 +40,7 @@ export class TraceSkillObserver {
 
     // 启动定时刷新
     this.flushInterval = setInterval(() => {
-      this.flushBuffers();
+      void this.flushBuffers();
     }, 5000); // 每 5 秒刷新一次
 
     logger.info('TraceSkillObserver initialized');
@@ -51,94 +54,121 @@ export class TraceSkillObserver {
   }
 
   /**
-   * 处理新的 trace
+   * 处理新的 trace（带错误处理）
    */
-  async processTrace(trace: Trace): Promise<void> {
-    // 1. 存储 trace
-    this.traceManager.recordTrace(trace);
+  processTrace(trace: Trace): void {
+    try {
+      // 1. 存储 trace
+      this.traceManager.recordTrace(trace);
 
-    // 2. 映射 trace 到 skill
-    const mapping = this.mapper.mapTrace(trace);
+      // 2. 映射 trace 到 skill
+      const mapping = this.mapper.mapTrace(trace);
 
-    if (mapping.skill_id && mapping.confidence >= 0.5) {
-      // 3. 添加到 buffer
-      const skillId = mapping.skill_id;
-      if (!this.buffer.has(skillId)) {
-        this.buffer.set(skillId, []);
+      if (mapping.skill_id && mapping.confidence >= 0.5) {
+        // 3. 添加到 buffer
+        const skillId = mapping.skill_id;
+        if (!this.buffer.has(skillId)) {
+          this.buffer.set(skillId, []);
+        }
+        const traces = this.buffer.get(skillId);
+        if (traces) {
+          traces.push(trace);
+        }
+
+        logger.debug('Trace buffered for skill', {
+          trace_id: trace.trace_id,
+          skill_id: skillId,
+          confidence: mapping.confidence,
+        });
+
+        // 4. 检查是否需要刷新
+        const buffer = this.buffer.get(skillId);
+        if (buffer && buffer.length >= this.bufferSize) {
+          this.flushSkillBuffer(skillId);
+        }
       }
-      this.buffer.get(skillId)!.push(trace);
-
-      logger.debug('Trace buffered for skill', {
-        trace_id: trace.trace_id,
-        skill_id: skillId,
-        confidence: mapping.confidence,
+    } catch (error) {
+      logger.error('Failed to process trace', { 
+        trace_id: trace.trace_id, 
+        error: error instanceof Error ? error.message : String(error) 
       });
-
-      // 4. 检查是否需要刷新
-      if (this.buffer.get(skillId)!.length >= this.bufferSize) {
-        await this.flushSkillBuffer(skillId);
-      }
+      // 不抛出异常，避免影响其他 trace 的处理
     }
   }
 
   /**
    * 批量处理 traces
    */
-  async processTraces(traces: Trace[]): Promise<void> {
+  processTraces(traces: Trace[]): void {
     for (const trace of traces) {
-      await this.processTrace(trace);
+      this.processTrace(trace);
     }
   }
 
   /**
-   * 刷新单个 skill 的 buffer
+   * 刷新单个 skill 的 buffer（带错误处理）
    */
-  private async flushSkillBuffer(skillId: string): Promise<void> {
+  private flushSkillBuffer(skillId: string): void {
     const traces = this.buffer.get(skillId);
     if (!traces || traces.length === 0) {
       return;
     }
 
-    // 获取 shadow 信息
-    const shadow = this.mapper['shadowSkills'].get(skillId);
-    if (!shadow) {
-      logger.warn('Shadow skill not found, skipping flush', { skill_id: skillId });
+    try {
+      // 获取 shadow 信息
+      const shadow = this.mapper['shadowSkills'].get(skillId);
+      if (!shadow) {
+        logger.warn('Shadow skill not found, skipping flush', { skill_id: skillId });
+        this.buffer.delete(skillId);
+        return;
+      }
+
+      // 计算最大置信度
+      let maxConfidence = 0;
+      for (const trace of traces) {
+        const mapping = this.mapper.mapTrace(trace);
+        if (mapping.confidence > maxConfidence) {
+          maxConfidence = mapping.confidence;
+        }
+      }
+
+      // 创建 group
+      const group: SkillTracesGroup = {
+        skill_id: skillId,
+        shadow_id: shadow.shadow_id,
+        traces: [...traces],
+        confidence: maxConfidence,
+      };
+
+      logger.info('Skill traces ready for evaluation', {
+        skill_id: skillId,
+        trace_count: traces.length,
+        confidence: group.confidence,
+      });
+
+      // 触发回调
+      if (this.onSkillTracesReady) {
+        this.onSkillTracesReady(group);
+      }
+
+      // 清空 buffer
       this.buffer.delete(skillId);
-      return;
+    } catch (error) {
+      logger.error('Failed to flush skill buffer', { 
+        skill_id: skillId, 
+        trace_count: traces.length,
+        error: error instanceof Error ? error.message : String(error) 
+      });
+      // 保留 buffer，稍后重试
     }
-
-    // 创建 group
-    const group: SkillTracesGroup = {
-      skill_id: skillId,
-      shadow_id: shadow.shadow_id,
-      traces: [...traces],
-      confidence: Math.max(...traces.map(t => {
-        const mapping = this.mapper.mapTrace(t);
-        return mapping.confidence;
-      })),
-    };
-
-    logger.info('Skill traces ready for evaluation', {
-      skill_id: skillId,
-      trace_count: traces.length,
-      confidence: group.confidence,
-    });
-
-    // 触发回调
-    if (this.onSkillTracesReady) {
-      this.onSkillTracesReady(group);
-    }
-
-    // 清空 buffer
-    this.buffer.delete(skillId);
   }
 
   /**
    * 刷新所有 buffers
    */
-  private async flushBuffers(): Promise<void> {
+  private flushBuffers(): void {
     for (const skillId of this.buffer.keys()) {
-      await this.flushSkillBuffer(skillId);
+      this.flushSkillBuffer(skillId);
     }
   }
 
@@ -159,7 +189,7 @@ export class TraceSkillObserver {
   /**
    * 获取映射统计
    */
-  async getMappingStats() {
+  getMappingStats() {
     return this.mapper.getMappingStats();
   }
 
@@ -186,12 +216,6 @@ export class TraceSkillObserver {
   }
 }
 
-// Timer 类型
-type Timer = number;
-
-// 声明全局函数
-declare function setInterval(callback: (...args: unknown[]) => void, ms?: number): Timer;
-declare function clearInterval(id: Timer): void;
 
 // 导出工厂函数
 export function createTraceSkillObserver(projectRoot: string): TraceSkillObserver {

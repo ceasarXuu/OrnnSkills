@@ -1,5 +1,5 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, unlinkSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { createChildLogger } from '../utils/logger.js';
 import { hashString } from '../utils/hash.js';
 import { createUnifiedDiff } from '../utils/diff.js';
@@ -29,16 +29,33 @@ export class MarkdownSkill {
   }
 
   /**
-   * 写入文件内容
+   * 写入文件内容（原子写入）
    */
   write(content: string): void {
     const dir = dirname(this.filePath);
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true });
     }
-    writeFileSync(this.filePath, content, 'utf-8');
-    this.content = content;
-    logger.debug('Skill file written', { path: this.filePath });
+
+    // 使用临时文件实现原子写入
+    const tempPath = join(dir, `.tmp_${Date.now()}_${Math.random().toString(36).slice(2)}.md`);
+    
+    try {
+      writeFileSync(tempPath, content, 'utf-8');
+      renameSync(tempPath, this.filePath); // 原子替换
+      this.content = content;
+      logger.debug('Skill file written', { path: this.filePath });
+    } catch (error) {
+      // 清理临时文件
+      try {
+        if (existsSync(tempPath)) {
+          unlinkSync(tempPath);
+        }
+      } catch {
+        // 忽略清理错误
+      }
+      throw error;
+    }
   }
 
   /**
@@ -156,11 +173,20 @@ export class MarkdownSkill {
   }
 
   /**
+   * 转义正则表达式特殊字符（防止 ReDoS 攻击）
+   */
+  private escapeRegExp(str: string): string {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  /**
    * 查找 section
    */
   findSection(heading: string): { start: number; end: number; content: string } | null {
     const lines = this.content.split('\n');
-    const headingPattern = new RegExp(`^#{1,6}\\s+${heading}`, 'i');
+    // 转义 heading 中的正则特殊字符，防止 ReDoS 攻击
+    const escapedHeading = this.escapeRegExp(heading);
+    const headingPattern = new RegExp(`^#{1,6}\\s+${escapedHeading}`, 'i');
 
     let start = -1;
     let headingLevel = 0;

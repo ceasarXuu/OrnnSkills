@@ -10,6 +10,167 @@ const GLOBAL_CONFIG_DIR = join(homedir(), '.ornn');
 const GLOBAL_CONFIG_FILE = join(GLOBAL_CONFIG_DIR, 'settings.toml');
 
 /**
+ * 类型守卫：检查值是否为普通对象
+ */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * 类型守卫：验证 EVOConfig 结构（更严格的验证）
+ */
+function isValidEVOConfig(config: unknown): config is EVOConfig {
+  if (!isPlainObject(config)) return false;
+  
+  // 检查必要的顶层属性
+  const requiredKeys = ['origin_paths', 'observer', 'evaluator', 'patch', 'journal', 'daemon'];
+  for (const key of requiredKeys) {
+    if (!(key in config)) {
+      logger.warn(`Missing required config key: ${key}`);
+      return false;
+    }
+  }
+  
+  // 检查 origin_paths
+  if (!isPlainObject(config.origin_paths)) {
+    logger.warn('origin_paths must be an object');
+    return false;
+  }
+  if (!Array.isArray(config.origin_paths.paths)) {
+    logger.warn('origin_paths.paths must be an array');
+    return false;
+  }
+  if (!config.origin_paths.paths.every(p => typeof p === 'string' && p.length > 0)) {
+    logger.warn('origin_paths.paths must contain non-empty strings');
+    return false;
+  }
+  
+  // 检查 observer
+  if (!isPlainObject(config.observer)) {
+    logger.warn('observer must be an object');
+    return false;
+  }
+  if (!Array.isArray(config.observer.enabled_runtimes)) {
+    logger.warn('observer.enabled_runtimes must be an array');
+    return false;
+  }
+  const validRuntimes = ['codex', 'opencode', 'claude'];
+  if (!config.observer.enabled_runtimes.every(r => validRuntimes.includes(r as string))) {
+    logger.warn('observer.enabled_runtimes contains invalid runtime');
+    return false;
+  }
+  if (typeof config.observer.trace_retention_days !== 'number' || 
+      !Number.isInteger(config.observer.trace_retention_days) ||
+      config.observer.trace_retention_days < 1 || 
+      config.observer.trace_retention_days > 365) {
+    logger.warn('observer.trace_retention_days must be an integer between 1 and 365');
+    return false;
+  }
+  
+  // 检查 evaluator
+  if (!isPlainObject(config.evaluator)) {
+    logger.warn('evaluator must be an object');
+    return false;
+  }
+  if (typeof config.evaluator.min_signal_count !== 'number' || 
+      !Number.isInteger(config.evaluator.min_signal_count) ||
+      config.evaluator.min_signal_count < 1) {
+    logger.warn('evaluator.min_signal_count must be an integer >= 1');
+    return false;
+  }
+  if (typeof config.evaluator.min_source_sessions !== 'number' || 
+      !Number.isInteger(config.evaluator.min_source_sessions) ||
+      config.evaluator.min_source_sessions < 1) {
+    logger.warn('evaluator.min_source_sessions must be an integer >= 1');
+    return false;
+  }
+  if (typeof config.evaluator.min_confidence !== 'number' || 
+      config.evaluator.min_confidence < 0 || 
+      config.evaluator.min_confidence > 1) {
+    logger.warn('evaluator.min_confidence must be a number between 0 and 1');
+    return false;
+  }
+  
+  // 检查 patch
+  if (!isPlainObject(config.patch)) {
+    logger.warn('patch must be an object');
+    return false;
+  }
+  const validChangeTypes = ['append_context', 'tighten_trigger', 'add_fallback', 'prune_noise', 'rewrite_section'];
+  if (!Array.isArray(config.patch.allowed_types)) {
+    logger.warn('patch.allowed_types must be an array');
+    return false;
+  }
+  if (!config.patch.allowed_types.every(t => validChangeTypes.includes(t as string))) {
+    logger.warn('patch.allowed_types contains invalid change type');
+    return false;
+  }
+  if (typeof config.patch.cooldown_hours !== 'number' || 
+      config.patch.cooldown_hours < 0) {
+    logger.warn('patch.cooldown_hours must be a non-negative number');
+    return false;
+  }
+  if (typeof config.patch.max_patches_per_day !== 'number' || 
+      !Number.isInteger(config.patch.max_patches_per_day) ||
+      config.patch.max_patches_per_day < 1) {
+    logger.warn('patch.max_patches_per_day must be an integer >= 1');
+    return false;
+  }
+  
+  // 检查 journal
+  if (!isPlainObject(config.journal)) {
+    logger.warn('journal must be an object');
+    return false;
+  }
+  if (typeof config.journal.snapshot_interval !== 'number' || 
+      !Number.isInteger(config.journal.snapshot_interval) ||
+      config.journal.snapshot_interval < 1) {
+    logger.warn('journal.snapshot_interval must be an integer >= 1');
+    return false;
+  }
+  if (typeof config.journal.max_snapshots !== 'number' || 
+      !Number.isInteger(config.journal.max_snapshots) ||
+      config.journal.max_snapshots < 1) {
+    logger.warn('journal.max_snapshots must be an integer >= 1');
+    return false;
+  }
+  
+  // 检查 daemon
+  if (!isPlainObject(config.daemon)) {
+    logger.warn('daemon must be an object');
+    return false;
+  }
+  if (typeof config.daemon.auto_start !== 'boolean') {
+    logger.warn('daemon.auto_start must be a boolean');
+    return false;
+  }
+  const validLogLevels = ['debug', 'info', 'warn', 'error'];
+  if (!validLogLevels.includes(config.daemon.log_level as string)) {
+    logger.warn('daemon.log_level must be one of: debug, info, warn, error');
+    return false;
+  }
+  
+  return true;
+}
+
+/**
+ * 类型守卫：验证 ProjectConfig 结构
+ */
+function isValidProjectConfig(config: unknown): config is ProjectConfig {
+  if (!isPlainObject(config)) return false;
+  
+  // 检查 project 属性
+  if (!isPlainObject(config.project)) return false;
+  if (typeof config.project.name !== 'string') return false;
+  if (typeof config.project.auto_optimize !== 'boolean') return false;
+  
+  // 检查 skills 属性
+  if (!isPlainObject(config.skills)) return false;
+  
+  return true;
+}
+
+/**
  * 配置管理器
  */
 export class ConfigManager {
@@ -53,7 +214,11 @@ export class ConfigManager {
     try {
       const result = await explorer.search(GLOBAL_CONFIG_DIR);
       if (result && !result.isEmpty) {
-        this.globalConfig = this.mergeConfig(DEFAULT_CONFIG, result.config as EVOConfig);
+        if (isValidEVOConfig(result.config)) {
+          this.globalConfig = this.mergeConfig(DEFAULT_CONFIG, result.config);
+        } else {
+          console.warn('Invalid EVOConfig structure, using default config');
+        }
       }
     } catch {
       // 配置文件不存在或格式错误，使用默认配置
@@ -74,7 +239,11 @@ export class ConfigManager {
     try {
       const result = await explorer.search(this.projectRoot);
       if (result && !result.isEmpty) {
-        this.projectConfig = result.config as ProjectConfig;
+        if (isValidProjectConfig(result.config)) {
+          this.projectConfig = result.config;
+        } else {
+          console.warn('Invalid ProjectConfig structure, ignoring project config');
+        }
       }
     } catch {
       // 项目配置不存在

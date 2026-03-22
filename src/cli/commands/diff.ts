@@ -5,6 +5,7 @@ import { createShadowRegistry } from '../../core/shadow-registry/index.js';
 import { createJournalManager } from '../../core/journal/index.js';
 import { originRegistry } from '../../core/origin-registry/index.js';
 import { createUnifiedDiff } from '../../utils/diff.js';
+import { validateSkillId, validateProjectPath } from '../../utils/path.js';
 
 interface DiffOptions {
   project: string;
@@ -27,7 +28,20 @@ export function createDiffCommand(): Command {
     .option('-p, --project <path>', 'Project root path', process.cwd())
     .action(async (skillId: string, options: DiffOptions) => {
       try {
-        const projectRoot: string = options.project;
+        // 验证 skill ID 格式
+        if (!validateSkillId(skillId)) {
+          console.error(`Error: Invalid skill ID "${skillId}". Skill IDs can only contain letters, numbers, hyphens, underscores, and dots.`);
+          process.exit(1);
+        }
+
+        // 验证项目路径安全性
+        let projectRoot: string;
+        try {
+          projectRoot = validateProjectPath(options.project);
+        } catch (error) {
+          console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
+          process.exit(1);
+        }
 
         // 检查 .sea 目录是否存在
         const seaDir = join(projectRoot, '.sea');

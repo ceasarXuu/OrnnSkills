@@ -19,7 +19,7 @@ describe('Hash Utils', () => {
   it('should generate short hash', () => {
     const content = 'test content';
     const short = shortHash(content);
-    expect(short.length).toBe(8);
+    expect(short.length).toBe(16);
   });
 });
 

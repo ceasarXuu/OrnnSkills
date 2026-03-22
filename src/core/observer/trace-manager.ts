@@ -40,49 +40,110 @@ export class TraceManager {
    * 设置当前 session
    */
   setSession(sessionId: string, runtime: RuntimeType, projectId?: string): void {
-    this.currentSessionId = sessionId;
+    try {
+      this.currentSessionId = sessionId;
 
-    // 创建 session 记录
-    this.db.createSession({
-      session_id: sessionId,
-      runtime,
-      project_id: projectId ?? null,
-      started_at: new Date().toISOString(),
-      ended_at: null,
-      trace_count: 0,
-    });
+      // 创建 session 记录
+      this.db.createSession({
+        session_id: sessionId,
+        runtime,
+        project_id: projectId ?? null,
+        started_at: new Date().toISOString(),
+        ended_at: null,
+        trace_count: 0,
+      });
 
-    // 更新 trace store 的 session ID
-    const tracesDir = join(this.projectRoot, '.ornn', 'state');
-    this.traceStore = createTraceStore(tracesDir, sessionId);
+      // 更新 trace store 的 session ID
+      const tracesDir = join(this.projectRoot, '.ornn', 'state');
+      this.traceStore = createTraceStore(tracesDir, sessionId);
 
-    logger.info(`Session set: ${sessionId}`, { runtime, projectId });
+      logger.info(`Session set: ${sessionId}`, { runtime, projectId });
+    } catch (error) {
+      // 回滚状态
+      this.currentSessionId = null;
+      
+      logger.error('Failed to set session', { 
+        sessionId, 
+        error: error instanceof Error ? error.message : String(error) 
+      });
+      throw error;
+    }
   }
 
   /**
-   * 记录 trace
+   * 记录 trace（带事务保护和补偿机制）
    */
   recordTrace(trace: Trace): void {
-    // 保存到 NDJSON
-    this.traceStore.append(trace);
+    let ndjsonWritten = false;
+    
+    try {
+      // 先写入 NDJSON（可追加，原子性较好）
+      this.traceStore.append(trace);
+      ndjsonWritten = true;
+      
+      // 再写入数据库
+      this.db.beginTrans();
+      
+      // 添加索引到数据库
+      this.db.addTraceIndex({
+        trace_id: trace.trace_id,
+        session_id: trace.session_id,
+        runtime: trace.runtime,
+        event_type: trace.event_type,
+        timestamp: trace.timestamp,
+        status: trace.status,
+      });
 
-    // 添加索引到数据库
-    this.db.addTraceIndex({
-      trace_id: trace.trace_id,
-      session_id: trace.session_id,
-      runtime: trace.runtime,
-      event_type: trace.event_type,
-      timestamp: trace.timestamp,
-      status: trace.status,
-    });
+      // 更新 session trace 计数
+      this.db.incrementSessionTraceCount(trace.session_id);
+      
+      this.db.commit();
 
-    // 更新 session trace 计数
-    this.db.incrementSessionTraceCount(trace.session_id);
-
-    logger.debug('Trace recorded', {
-      trace_id: trace.trace_id,
-      event_type: trace.event_type,
-    });
+      logger.debug('Trace recorded', {
+        trace_id: trace.trace_id,
+        event_type: trace.event_type,
+      });
+    } catch (error) {
+      // 数据库操作失败，回滚事务
+      try {
+        this.db.rollback();
+      } catch (rollbackError) {
+        logger.error('Failed to rollback transaction', { 
+          trace_id: trace.trace_id, 
+          rollbackError 
+        });
+      }
+      
+      // 补偿机制：如果 NDJSON 已写入但数据库失败，标记 trace 为无效
+      if (ndjsonWritten) {
+        try {
+          const invalidatedTrace: Trace = {
+            ...trace,
+            status: 'failure',
+            metadata: { 
+              ...trace.metadata, 
+              invalidated: true,
+              invalidationReason: 'Database write failed'
+            }
+          };
+          this.traceStore.append(invalidatedTrace);
+          logger.info('Trace marked as invalidated due to database failure', {
+            trace_id: trace.trace_id
+          });
+        } catch (compensationError) {
+          logger.error('Failed to compensate for failed trace', {
+            trace_id: trace.trace_id,
+            compensationError
+          });
+        }
+      }
+      
+      logger.error('Failed to record trace', { 
+        trace_id: trace.trace_id, 
+        error: error instanceof Error ? error.message : String(error) 
+      });
+      throw error;
+    }
   }
 
   /**
@@ -210,7 +271,7 @@ export class TraceManager {
   /**
    * 清理旧的 traces
    */
-  async cleanupOldTraces(retentionDays: number): Promise<number> {
+  cleanupOldTraces(retentionDays: number): number {
     // 这里可以实现清理逻辑
     // 暂时返回 0
     logger.info(`Cleanup old traces older than ${retentionDays} days`);

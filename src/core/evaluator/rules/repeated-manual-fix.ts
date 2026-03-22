@@ -56,7 +56,7 @@ export class RepeatedManualFixRule extends BaseRule {
   }
 
   /**
-   * 提取用户输入的模式
+   * 提取用户输入的模式（正确处理 Unicode 字符）
    */
   private extractPatterns(userInputs: Trace[]): Map<string, number> {
     const patterns = new Map<string, number>();
@@ -64,8 +64,12 @@ export class RepeatedManualFixRule extends BaseRule {
     for (const input of userInputs) {
       if (!input.user_input) continue;
 
-      // 简单的模式提取：取前 50 个字符作为模式
-      const pattern = input.user_input.substring(0, 50).toLowerCase().trim();
+      // 使用 Array.from 正确处理 Unicode 字符（包括 emoji 和多字节字符）
+      const pattern = Array.from(input.user_input)
+        .slice(0, 50)
+        .join('')
+        .toLowerCase()
+        .trim();
       if (pattern.length > 10) {
         patterns.set(pattern, (patterns.get(pattern) ?? 0) + 1);
       }
