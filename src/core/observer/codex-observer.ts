@@ -1,67 +1,61 @@
 import { watch, type FSWatcher } from 'chokidar';
-import { createReadStream, existsSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join, basename } from 'node:path';
-import { createInterface } from 'node:readline';
 import { BaseObserver } from './base-observer.js';
 import { createChildLogger } from '../../utils/logger.js';
+import type { Trace, TraceStatus, PreprocessedTrace } from '../../types/index.js';
 
 const logger = createChildLogger('codex-observer');
 
 /**
- * 简单的互斥锁实现
+ * Codex 原始事件类型
  */
-class SimpleMutex {
-  private locked = false;
-  private queue: Array<() => void> = [];
-
-  async acquire(): Promise<() => void> {
-    return new Promise((resolve) => {
-      if (!this.locked) {
-        this.locked = true;
-        resolve(() => this.release());
-      } else {
-        this.queue.push(() => {
-          this.locked = true;
-          resolve(() => this.release());
-        });
-      }
-    });
-  }
-
-  private release(): void {
-    if (this.queue.length > 0) {
-      const next = this.queue.shift();
-      if (next) next();
-    } else {
-      this.locked = false;
-    }
-  }
+interface CodexRawEvent {
+  timestamp: string;
+  type: 'session_meta' | 'event_msg' | 'response_item' | 'turn_context';
+  payload: Record<string, unknown>;
 }
+
+
 
 /**
  * Codex Observer
- * 监听 Codex 的 JSONL 事件流和 session 日志
+ *
+ * 监听 Codex 的活跃会话日志文件（~/.codex/sessions/YYYY/MM/DD/*.jsonl）
+ * 基于真实 Codex trace 结构实现
+ *
+ * 主要改进：
+ * 1. 监听正确的目录：sessions/YYYY/MM/DD 而非 archived_sessions
+ * 2. 适配真实的事件类型结构
+ * 3. 实现预处理层，过滤无关信息
+ * 4. 提取 skill 引用
  */
 export class CodexObserver extends BaseObserver {
   private watcher: FSWatcher | null = null;
-  private sessionDir: string;
+  private sessionsDir: string;
+  private sessionIndexPath: string;
   private currentSessionId: string | null = null;
   private turnCounter: number = 0;
-  private lastFileSize: Map<string, number> = new Map();
-  private fileSizeMutex = new SimpleMutex();
-  private turnCounterMutex = new SimpleMutex();
+  private processedFiles: Set<string> = new Set();
 
-  constructor(sessionDir?: string) {
+  constructor(sessionsDir?: string) {
     super('codex');
-    this.sessionDir = sessionDir ?? this.getDefaultSessionDir();
+    this.sessionsDir = sessionsDir ?? this.getDefaultSessionsDir();
+    this.sessionIndexPath = join(this.getCodexHome(), 'session_index.jsonl');
   }
 
   /**
-   * 获取默认 session 目录
+   * 获取 Codex Home 目录
    */
-  private getDefaultSessionDir(): string {
-    const home = process.env.HOME ?? process.env.USERPROFILE ?? '';
-    return join(home, '.codex', 'sessions');
+  private getCodexHome(): string {
+    return join(process.env.HOME ?? process.env.USERPROFILE ?? '', '.codex');
+  }
+
+  /**
+   * 获取默认 sessions 目录
+   */
+  private getDefaultSessionsDir(): string {
+    return join(this.getCodexHome(), 'sessions');
   }
 
   /**
@@ -73,28 +67,29 @@ export class CodexObserver extends BaseObserver {
       return;
     }
 
-    if (!existsSync(this.sessionDir)) {
-      logger.warn(`Session directory not found: ${this.sessionDir}`);
+    if (!existsSync(this.sessionsDir)) {
+      logger.warn(`Sessions directory not found: ${this.sessionsDir}`);
       return;
     }
 
     this.isRunning = true;
-    logger.info('Starting Codex observer', { sessionDir: this.sessionDir });
+    logger.info('Starting Codex observer', { sessionsDir: this.sessionsDir });
 
-    // 监听 session 目录的变化
-    this.watcher = watch(this.sessionDir, {
+    // 监听 sessions 目录下的所有 JSONL 文件（递归监听 YYYY/MM/DD 子目录）
+    const watchPattern = join(this.sessionsDir, '**', '*.jsonl');
+    this.watcher = watch(watchPattern, {
       persistent: true,
       ignoreInitial: false,
       awaitWriteFinish: {
-        stabilityThreshold: 100,
-        pollInterval: 50,
+        stabilityThreshold: 500,  // 文件写入完成需要一定时间
+        pollInterval: 100,
       },
     });
 
     this.watcher.on('add', (path) => this.handleFileAdd(path));
     this.watcher.on('change', (path) => this.handleFileChange(path));
 
-    logger.info('Codex observer started');
+    logger.info('Codex observer started', { watchPattern });
   }
 
   /**
@@ -123,47 +118,44 @@ export class CodexObserver extends BaseObserver {
       return;
     }
 
+    // 避免重复处理
+    if (this.processedFiles.has(path)) {
+      return;
+    }
+    this.processedFiles.add(path);
+
     const sessionId = this.extractSessionId(path);
     this.currentSessionId = sessionId;
-    this.lastFileSize.set(path, 0);
 
     logger.info(`New session detected: ${sessionId}`, { path });
 
     // 读取整个文件
-    this.processJsonlFile(path);
+    this.processSessionFileInternal(path);
   }
 
   /**
-   * 处理文件变化
+   * 处理文件变化（增量读取）
    */
-  private async handleFileChange(path: string): Promise<void> {
+  private handleFileChange(path: string): void {
     if (!path.endsWith('.jsonl')) {
       return;
     }
 
-    const release = await this.fileSizeMutex.acquire();
-    try {
-      const currentSize = this.getFileSize(path);
-      const lastSize = this.lastFileSize.get(path) ?? 0;
+    const sessionId = this.extractSessionId(path);
+    logger.debug(`Session file changed: ${sessionId}`, { path });
 
-      if (currentSize <= lastSize) {
-        return;
-      }
-
-      this.lastFileSize.set(path, currentSize);
-      
-      // 增量处理新内容
-      await this.processJsonlFileIncremental(path, lastSize);
-    } finally {
-      release();
-    }
+    // 对于活跃会话，文件会持续追加
+    // 这里可以实现增量读取逻辑
+    // 简化处理：重新读取整个文件
+    this.processSessionFileInternal(path);
   }
 
   /**
-   * 处理 JSONL 文件（全量）
+   * 处理 session JSONL 文件（内部实现）
    */
-  private processJsonlFile(path: string): void {
+  private processSessionFileInternal(path: string): void {
     const sessionId = this.extractSessionId(path);
+    const traces: PreprocessedTrace[] = [];
 
     try {
       const content = readFileSync(path, 'utf-8');
@@ -171,159 +163,313 @@ export class CodexObserver extends BaseObserver {
 
       for (const line of lines) {
         try {
-          const event = JSON.parse(line) as Record<string, unknown>;
-          this.processEvent(sessionId, event);
+          const event = JSON.parse(line) as CodexRawEvent;
+          const preprocessed = this.preprocessEvent(sessionId, event);
+          if (preprocessed) {
+            traces.push(preprocessed);
+          }
         } catch {
           // 忽略解析错误
         }
       }
+
+      // 批量发射预处理后的 traces
+      if (traces.length > 0) {
+        this.emitPreprocessedTraces(sessionId, traces);
+      }
+
+      logger.debug(`Processed ${traces.length} traces from session ${sessionId}`);
     } catch (error) {
-      logger.warn(`Failed to read JSONL file: ${path}`, { error });
-    } finally {
-      // 确保任何资源被正确释放（如果有的话）
+      logger.warn(`Failed to read session file: ${path}`, { error });
     }
   }
 
   /**
-   * 处理 JSONL 文件（增量）
+   * 预处理单个事件
+   * 保留所有语义内容，只进行格式转换
+   * 不过滤任何可能包含语义信息的事件
    */
-  private async processJsonlFileIncremental(path: string, startOffset: number): Promise<void> {
-    const sessionId = this.extractSessionId(path);
-    let stream: ReturnType<typeof createReadStream> | null = null;
-    let rl: ReturnType<typeof createInterface> | null = null;
+  private preprocessEvent(sessionId: string, event: CodexRawEvent): PreprocessedTrace | null {
+    const turnId = this.getNextTurnIdSync();
 
-    try {
-      stream = createReadStream(path, {
-        start: startOffset,
-        encoding: 'utf-8',
-      });
-
-      rl = createInterface({
-        input: stream,
-        crlfDelay: Infinity,
-      });
-
-      const lines: string[] = [];
-      rl.on('line', (line) => {
-        if (line.trim()) {
-          lines.push(line);
-        }
-      });
-
-      await new Promise<void>((resolve, reject) => {
-        rl!.on('close', resolve);
-        rl!.on('error', reject);
-      });
-
-      for (const line of lines) {
-        try {
-          const event = JSON.parse(line) as Record<string, unknown>;
-          await this.processEvent(sessionId, event);
-        } catch {
-          // 忽略解析错误
-        }
-      }
-    } catch (error) {
-      logger.warn(`Failed to read JSONL file incrementally: ${path}`, { error });
-    } finally {
-      // 确保资源被正确释放
-      if (rl) {
-        rl.close();
-      }
-      if (stream) {
-        stream.destroy();
-      }
-    }
-  }
-
-  /**
-   * 获取下一个 turn ID（原子操作）
-   */
-  private async getNextTurnId(): Promise<string> {
-    const release = await this.turnCounterMutex.acquire();
-    try {
-      this.turnCounter++;
-      return `turn_${this.turnCounter}`;
-    } finally {
-      release();
-    }
-  }
-
-  /**
-   * 处理单个事件
-   */
-  private async processEvent(sessionId: string, event: Record<string, unknown>): Promise<void> {
-    const turnId = await this.getNextTurnId();
-
-    // 根据事件类型创建相应的 trace
     switch (event.type) {
-      case 'user_input':
-        this.emitTrace(
-          this.createUserInputTrace(sessionId, turnId, event.content as string)
-        );
-        break;
+      case 'session_meta': {
+        // 提取会话元数据（项目上下文）
+        // 从 base_instructions 中提取激活的 skills
+        // base_instructions 可能是字符串或 {text: string} 对象
+        const baseInstructionsRaw = event.payload.base_instructions;
+        const baseInstructions = typeof baseInstructionsRaw === 'string'
+          ? baseInstructionsRaw
+          : (baseInstructionsRaw as { text?: string })?.text || '';
+        const activatedSkills = this.extractSkillReferences(baseInstructions);
 
-      case 'assistant_output':
-      case 'assistant_message':
-        this.emitTrace(
-          this.createAssistantOutputTrace(sessionId, turnId, event.content as string)
-        );
-        break;
+        return {
+          sessionId,
+          turnId,
+          timestamp: event.timestamp,
+          eventType: 'status',
+          content: {
+            // 保留完整的 payload，不只是部分字段
+            ...event.payload,
+            activatedSkills,
+          },
+          skillRefs: activatedSkills,
+          metadata: {
+            originator: event.payload.originator,
+            source: event.payload.source,
+            // 保留完整的 baseInstructions，不截断
+            baseInstructions,
+          },
+        };
+      }
 
-      case 'tool_call':
-        this.emitTrace(
-          this.createToolCallTrace(sessionId, turnId, event.tool as string, (event.args as Record<string, unknown>) ?? {})
-        );
-        break;
+      case 'response_item':
+        return this.preprocessResponseItem(sessionId, turnId, event);
 
-      case 'tool_result':
-        this.emitTrace(
-          this.createToolResultTrace(
-            sessionId,
-            turnId,
-            event.tool as string,
-            (event.result as Record<string, unknown>) ?? {},
-            event.status === 'error' ? 'failure' : 'success'
-          )
-        );
-        break;
+      case 'event_msg':
+        // 保留 event_msg，可能包含语义信息
+        return {
+          sessionId,
+          turnId,
+          timestamp: event.timestamp,
+          eventType: 'status',
+          content: event.payload,
+          metadata: {
+            originalType: 'event_msg',
+          },
+        };
 
-      case 'file_change':
-      case 'file_write':
-      case 'file_edit':
-        if (event.files) {
-          this.emitTrace(
-            this.createFileChangeTrace(sessionId, turnId, event.files as string[])
-          );
-        }
-        break;
-
-      case 'retry':
-        this.emitTrace(
-          this.createRetryTrace(sessionId, turnId, event.reason as string)
-        );
-        break;
-
-      case 'error':
-        this.emitTrace(
-          this.createStatusTrace(sessionId, turnId, 'failure', {
-            error: event.error,
-          })
-        );
-        break;
-
-      case 'session_start':
-        logger.info(`Session started: ${sessionId}`);
-        break;
-
-      case 'session_end':
-        logger.info(`Session ended: ${sessionId}`);
-        break;
+      case 'turn_context':
+        // 回合上下文，保留完整信息
+        return {
+          sessionId,
+          turnId,
+          timestamp: event.timestamp,
+          eventType: 'status',
+          content: event.payload,
+          metadata: {
+            originalType: 'turn_context',
+          },
+        };
 
       default:
-        // 忽略未知事件类型
-        break;
+        // 保留未知类型的事件，可能包含语义信息
+        return {
+          sessionId,
+          turnId,
+          timestamp: event.timestamp,
+          eventType: 'status',
+          content: event.payload,
+          metadata: {
+            originalType: event.type,
+            rawEvent: event,
+          },
+        };
     }
+  }
+
+  /**
+   * 预处理 response_item 事件
+   */
+  private preprocessResponseItem(
+    sessionId: string,
+    turnId: string,
+    event: CodexRawEvent
+  ): PreprocessedTrace | null {
+    const payload = event.payload;
+    const itemType = payload?.type as string;
+
+    switch (itemType) {
+      case 'message': {
+        const role = payload.role as string;
+        const content = this.extractMessageContent(payload.content);
+        const skillRefs = this.extractSkillReferences(content);
+
+        if (role === 'user') {
+          return {
+            sessionId,
+            turnId,
+            timestamp: event.timestamp,
+            eventType: 'user_input',
+            content,
+            skillRefs,
+          };
+        } else if (role === 'assistant') {
+          return {
+            sessionId,
+            turnId,
+            timestamp: event.timestamp,
+            eventType: 'assistant_output',
+            content,
+            skillRefs,
+          };
+        }
+        return null;
+      }
+
+      case 'function_call': {
+        const toolName = (payload.name as string) || ((payload.function as Record<string, unknown>)?.name as string);
+        const args = payload.arguments as Record<string, unknown>;
+
+        return {
+          sessionId,
+          turnId,
+          timestamp: event.timestamp,
+          eventType: 'tool_call',
+          content: {
+            tool: toolName,
+            args,
+          },
+          metadata: {
+            callId: payload.call_id,
+          },
+        };
+      }
+
+      case 'function_call_output': {
+        return {
+          sessionId,
+          turnId,
+          timestamp: event.timestamp,
+          eventType: 'tool_result',
+          content: {
+            callId: payload.call_id,
+            output: payload.output,
+          },
+        };
+      }
+
+      default:
+        return null;
+    }
+  }
+
+  /**
+   * 提取消息内容
+   */
+  private extractMessageContent(content: unknown): string {
+    if (typeof content === 'string') {
+      return content;
+    }
+
+    if (Array.isArray(content)) {
+      // 处理多模态内容数组
+      const textParts: string[] = [];
+      for (const part of content) {
+        if (typeof part === 'string') {
+          textParts.push(part);
+        } else if (part?.type === 'input_text' || part?.type === 'output_text') {
+          textParts.push(part.text || '');
+        } else if (part?.type === 'text') {
+          textParts.push(part.text || '');
+        }
+      }
+      return textParts.join('\n');
+    }
+
+    return JSON.stringify(content);
+  }
+
+  /**
+   * 提取 skill 引用
+   * 格式: [$skillname]
+   */
+  private extractSkillReferences(text: string): string[] {
+    const matches = text.match(/\[\$([^\]]+)\]/g);
+    if (!matches) return [];
+
+    return matches.map(match => match.slice(2, -1));  // 去掉 [$ 和 ]
+  }
+
+  /**
+   * 发射预处理后的 traces
+   */
+  private emitPreprocessedTraces(sessionId: string, traces: PreprocessedTrace[]): void {
+    // 按类型分组统计
+    const typeCount = new Map<string, number>();
+    const skillRefs = new Set<string>();
+
+    for (const trace of traces) {
+      typeCount.set(trace.eventType, (typeCount.get(trace.eventType) || 0) + 1);
+      if (trace.skillRefs) {
+        trace.skillRefs.forEach(ref => skillRefs.add(ref));
+      }
+
+      // 转换为标准 Trace 格式并发射
+      const standardTrace = this.convertToStandardTrace(trace);
+      this.emitTrace(standardTrace);
+    }
+
+    logger.info(`Session ${sessionId} trace summary`, {
+      totalTraces: traces.length,
+      typeBreakdown: Object.fromEntries(typeCount),
+      detectedSkills: Array.from(skillRefs),
+    });
+  }
+
+  /**
+   * 转换为标准 Trace 格式
+   */
+  private convertToStandardTrace(preprocessed: PreprocessedTrace): Trace {
+    const base = {
+      trace_id: `${preprocessed.sessionId}_${preprocessed.turnId}`,
+      runtime: 'codex' as const,
+      session_id: preprocessed.sessionId,
+      turn_id: preprocessed.turnId,
+      event_type: preprocessed.eventType,
+      timestamp: preprocessed.timestamp,
+      skill_refs: preprocessed.skillRefs,  // 添加 skill_refs
+      status: 'success' as TraceStatus,
+    };
+
+    switch (preprocessed.eventType) {
+      case 'user_input':
+        return {
+          ...base,
+          user_input: preprocessed.content as string,
+        };
+
+      case 'assistant_output':
+        return {
+          ...base,
+          assistant_output: preprocessed.content as string,
+        };
+
+      case 'tool_call': {
+        const toolContent = preprocessed.content as { tool: string; args: Record<string, unknown> };
+        return {
+          ...base,
+          tool_name: toolContent.tool,
+          tool_args: toolContent.args,
+        };
+      }
+
+      case 'tool_result': {
+        const resultContent = preprocessed.content as { output: Record<string, unknown> };
+        return {
+          ...base,
+          tool_result: resultContent.output,
+        };
+      }
+
+      case 'file_change':
+        return {
+          ...base,
+          files_changed: preprocessed.content as string[],
+        };
+
+      case 'status':
+      default:
+        return base;
+    }
+  }
+
+  /**
+   * 获取下一个 turn ID（同步版本）
+   */
+  private getNextTurnIdSync(): string {
+    this.turnCounter++;
+    return `turn_${this.turnCounter}`;
   }
 
   /**
@@ -331,22 +477,14 @@ export class CodexObserver extends BaseObserver {
    */
   private extractSessionId(path: string): string {
     const filename = basename(path, '.jsonl');
-    return filename;
+    // 从 rollout-2026-03-18T01-30-56-019cfcd9-c52d-7270-a188-017d7172715e.jsonl
+    // 提取 UUID 部分
+    const match = filename.match(/[a-f0-9-]{36}$/);
+    return match ? match[0] : filename;
   }
 
   /**
-   * 获取文件大小
-   */
-  private getFileSize(path: string): number {
-    try {
-      return statSync(path).size;
-    } catch {
-      return 0;
-    }
-  }
-
-  /**
-   * 手动处理一个 session 文件
+   * 手动处理一个 session 文件（公共 API）
    */
   processSessionFile(filePath: string): void {
     if (!existsSync(filePath)) {
@@ -354,7 +492,7 @@ export class CodexObserver extends BaseObserver {
     }
 
     logger.info(`Processing session file: ${filePath}`);
-    this.processJsonlFile(filePath);
+    this.processSessionFileInternal(filePath);
   }
 
   /**
@@ -365,21 +503,46 @@ export class CodexObserver extends BaseObserver {
   }
 
   /**
-   * 设置 session 目录
+   * 设置 sessions 目录
    */
-  setSessionDir(dir: string): void {
-    this.sessionDir = dir;
+  setSessionsDir(dir: string): void {
+    this.sessionsDir = dir;
   }
 
   /**
-   * 获取 session 目录
+   * 获取 sessions 目录
    */
-  getSessionDir(): string {
-    return this.sessionDir;
+  getSessionsDir(): string {
+    return this.sessionsDir;
+  }
+
+  /**
+   * 读取 session 索引获取会话元数据
+   */
+  readSessionIndex(): Array<{ id: string; thread_name: string; updated_at: string }> {
+    if (!existsSync(this.sessionIndexPath)) {
+      return [];
+    }
+
+    try {
+      const content = readFileSync(this.sessionIndexPath, 'utf-8');
+      const lines = content.split('\n').filter((line) => line.trim());
+
+      return lines.map((line) => {
+        try {
+          return JSON.parse(line);
+        } catch {
+          return null;
+        }
+      }).filter(Boolean) as Array<{ id: string; thread_name: string; updated_at: string }>;
+    } catch (error) {
+      logger.warn('Failed to read session index', { error });
+      return [];
+    }
   }
 }
 
 // 导出工厂函数
-export function createCodexObserver(sessionDir?: string): CodexObserver {
-  return new CodexObserver(sessionDir);
+export function createCodexObserver(sessionsDir?: string): CodexObserver {
+  return new CodexObserver(sessionsDir);
 }

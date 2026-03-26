@@ -1,264 +1,358 @@
-import { readdirSync, existsSync } from 'node:fs';
-import { join, basename } from 'node:path';
+/**
+ * Origin Registry
+ *
+ * 管理技能的原始版本（Origin）备份。
+ * Origin 是技能首次被 Ornn 发现时的版本，用于回滚和对比。
+ */
+
+import { existsSync, mkdirSync, readFileSync, writeFileSync, copyFileSync } from 'fs';
+import { join } from 'path';
 import { createChildLogger } from '../../utils/logger.js';
-import { hashFile } from '../../utils/hash.js';
-import { expandHome, isDirectory, isFile } from '../../utils/path.js';
-import { configManager } from '../../config/index.js';
-import type { OriginSkill } from '../../types/index.js';
+import { hashContent } from '../../utils/hash.js';
 
 const logger = createChildLogger('origin-registry');
 
+export interface OriginEntry {
+  skillId: string;
+  skillPath: string;
+  content: string;
+  contentHash: string;
+  discoveredAt: string;
+  runtime: string;
+  // Backward compatibility aliases (snake_case)
+  origin_path?: string;
+}
+
+export interface OriginRegistryOptions {
+  projectPath: string;
+}
+
 /**
- * Origin Skill 注册表
- * 负责扫描和管理用户本机已安装的 skills
+ * Origin Registry
+ *
+ * Responsibilities:
+ * 1. Backup original skill content when first discovered
+ * 2. Store origin metadata (path, hash, timestamp)
+ * 3. Provide origin retrieval for rollback
+ * 4. Track which skills have been backed up
  */
 export class OriginRegistry {
-  private skills: Map<string, OriginSkill> = new Map();
-  private lastScanTime: number = 0;
+  private options: Required<OriginRegistryOptions>;
+  private originsDir: string;
+  private indexPath: string;
+  private index: Map<string, OriginEntry> = new Map();
+  private initialized = false;
 
-  /**
-   * 扫描所有配置的 skill 目录
-   */
-  scan(): OriginSkill[] {
-    const paths = configManager.getOriginPaths();
-    const allSkills: OriginSkill[] = [];
-
-    for (const skillPath of paths) {
-      const expandedPath = expandHome(skillPath);
-      if (!existsSync(expandedPath)) {
-        logger.debug(`Skill path not found: ${expandedPath}`);
-        continue;
-      }
-
-      try {
-        const skills = this.scanDirectory(expandedPath);
-        allSkills.push(...skills);
-      } catch (error) {
-        logger.warn(`Failed to scan directory: ${expandedPath}`, { error });
-      }
-    }
-
-    // 更新内部缓存
-    this.skills.clear();
-    for (const skill of allSkills) {
-      this.skills.set(skill.skill_id, skill);
-    }
-
-    this.lastScanTime = Date.now();
-    logger.info(`Scanned ${allSkills.length} origin skills`);
-
-    return allSkills;
+  constructor(options: OriginRegistryOptions) {
+    this.options = {
+      ...options,
+    };
+    this.originsDir = join(this.options.projectPath, '.ornn', 'origins');
+    this.indexPath = join(this.originsDir, 'index.json');
   }
 
   /**
-   * 扫描单个目录
+   * Initialize the registry
    */
-  private scanDirectory(dirPath: string): OriginSkill[] {
-    const skills: OriginSkill[] = [];
+  init(): void {
+    if (this.initialized) return;
 
-    if (!isDirectory(dirPath)) {
-      return skills;
+    // Ensure directory exists
+    if (!existsSync(this.originsDir)) {
+      mkdirSync(this.originsDir, { recursive: true });
     }
 
-    const entries = readdirSync(dirPath);
+    // Load index if exists
+    this.loadIndex();
 
-    for (const entry of entries) {
-      const fullPath = join(dirPath, entry);
-
-      // 检查是否是目录（skill 通常是目录形式）
-      if (isDirectory(fullPath)) {
-        const skill = this.readSkillFromDirectory(fullPath, entry);
-        if (skill) {
-          skills.push(skill);
-        }
-      }
-      // 或者是单个 .md 文件
-      else if (entry.endsWith('.md') && isFile(fullPath)) {
-        const skillId = basename(entry, '.md');
-        const skill = this.readSkillFromFile(fullPath, skillId);
-        if (skill) {
-          skills.push(skill);
-        }
-      }
-    }
-
-    return skills;
+    this.initialized = true;
+    logger.info('Origin Registry initialized');
   }
 
   /**
-   * 从目录读取 skill
+   * Load index from disk
    */
-  private readSkillFromDirectory(dirPath: string, skillId: string): OriginSkill | null {
+  private loadIndex(): void {
+    if (!existsSync(this.indexPath)) {
+      this.index = new Map();
+      return;
+    }
+
     try {
-      // 查找主要的 skill 文件（通常是 current.md 或 skill.md）
-      const possibleFiles = ['current.md', 'skill.md', `${skillId}.md`];
-      let mainFile: string | null = null;
-
-      for (const filename of possibleFiles) {
-        const filePath = join(dirPath, filename);
-        if (isFile(filePath)) {
-          mainFile = filePath;
-          break;
-        }
-      }
-
-      if (!mainFile) {
-        logger.debug(`No skill file found in directory: ${dirPath}`);
-        return null;
-      }
-
-      const version = hashFile(mainFile);
-      const now = new Date().toISOString();
-
-      return {
-        skill_id: skillId,
-        origin_path: dirPath,
-        origin_version: version,
-        source: this.detectSource(dirPath),
-        installed_at: now,
-        last_seen_at: now,
-      };
+      const data = readFileSync(this.indexPath, 'utf-8');
+      const entries: OriginEntry[] = JSON.parse(data);
+      this.index = new Map(entries.map((e) => [e.skillId, e]));
+      logger.debug(`Loaded ${entries.length} origin entries from index`);
     } catch (error) {
-      logger.warn(`Failed to read skill from directory: ${dirPath}`, { error });
-      return null;
+      logger.error('Failed to load origin index:', error);
+      this.index = new Map();
     }
   }
 
   /**
-   * 从文件读取 skill
+   * Save index to disk
    */
-  private readSkillFromFile(filePath: string, skillId: string): OriginSkill | null {
+  private saveIndex(): void {
     try {
-      const version = hashFile(filePath);
-      const now = new Date().toISOString();
-
-      return {
-        skill_id: skillId,
-        origin_path: filePath,
-        origin_version: version,
-        source: this.detectSource(filePath),
-        installed_at: now,
-        last_seen_at: now,
-      };
+      const entries = Array.from(this.index.values());
+      writeFileSync(this.indexPath, JSON.stringify(entries, null, 2), 'utf-8');
+      logger.debug(`Saved ${entries.length} origin entries to index`);
     } catch (error) {
-      logger.warn(`Failed to read skill from file: ${filePath}`, { error });
-      return null;
+      logger.error('Failed to save origin index:', error);
+      throw error;
     }
   }
 
   /**
-   * 检测 skill 来源
+   * Get origin file path for a skill
    */
-  private detectSource(path: string): 'local' | 'marketplace' | 'git' {
-    if (path.includes('.git') || path.includes('github')) {
-      return 'git';
+  private getOriginPath(skillId: string): string {
+    return join(this.originsDir, `${skillId}.md`);
+  }
+
+  /**
+   * Backup a skill's origin version
+   * Only backs up if not already backed up
+   */
+  backup(skillId: string, skillPath: string, runtime: string): OriginEntry {
+    this.ensureInitialized();
+
+    // Check if already backed up
+    if (this.index.has(skillId)) {
+      logger.debug(`Origin already exists for skill: ${skillId}`);
+      return this.index.get(skillId)!;
     }
-    if (path.includes('marketplace') || path.includes('registry')) {
-      return 'marketplace';
+
+    // Read skill content
+    if (!existsSync(skillPath)) {
+      throw new Error(`Skill file not found: ${skillPath}`);
     }
-    return 'local';
+
+    const content = readFileSync(skillPath, 'utf-8');
+    const contentHash = hashContent(content);
+
+    // Save origin copy
+    const originPath = this.getOriginPath(skillId);
+    writeFileSync(originPath, content, 'utf-8');
+
+    // Create entry
+    const entry: OriginEntry = {
+      skillId,
+      skillPath,
+      content,
+      contentHash,
+      discoveredAt: new Date().toISOString(),
+      runtime,
+    };
+
+    // Add backward compatibility properties
+    entry.origin_path = entry.skillPath;
+
+    // Update index
+    this.index.set(skillId, entry);
+    this.saveIndex();
+
+    logger.info(`Backed up origin for skill: ${skillId}`);
+    return entry;
   }
 
   /**
-   * 获取指定 skill
+   * Get origin entry for a skill
    */
-  get(skillId: string): OriginSkill | null {
-    return this.skills.get(skillId) ?? null;
+  get(skillId: string): OriginEntry | undefined {
+    this.ensureInitialized();
+
+    const entry = this.index.get(skillId);
+    if (!entry) return undefined;
+
+    // Load latest content from file
+    const originPath = this.getOriginPath(skillId);
+    if (existsSync(originPath)) {
+      entry.content = readFileSync(originPath, 'utf-8');
+    }
+
+    return entry;
   }
 
   /**
-   * 获取所有 skills
+   * Check if origin exists for a skill
    */
-  list(): OriginSkill[] {
-    return Array.from(this.skills.values());
+  has(skillId: string): boolean {
+    this.ensureInitialized();
+    return this.index.has(skillId);
   }
 
   /**
-   * 检查 skill 是否有更新
+   * Get origin content for a skill
    */
-  checkUpdate(skillId: string): boolean {
-    const skill = this.skills.get(skillId);
-    if (!skill) {
+  getContent(skillId: string): string | undefined {
+    const entry = this.get(skillId);
+    return entry?.content;
+  }
+
+  /**
+   * Get origin hash for a skill
+   */
+  getHash(skillId: string): string | undefined {
+    const entry = this.index.get(skillId);
+    return entry?.contentHash;
+  }
+
+  /**
+   * Get all origin entries
+   */
+  getAll(): OriginEntry[] {
+    this.ensureInitialized();
+    return Array.from(this.index.values());
+  }
+
+  /**
+   * Get origin count
+   */
+  count(): number {
+    this.ensureInitialized();
+    return this.index.size;
+  }
+
+  /**
+   * Restore origin to a target path
+   */
+  restore(skillId: string, targetPath?: string): boolean {
+    this.ensureInitialized();
+
+    const entry = this.index.get(skillId);
+    if (!entry) {
+      logger.warn(`No origin found for skill: ${skillId}`);
       return false;
     }
 
+    const originPath = this.getOriginPath(skillId);
+    if (!existsSync(originPath)) {
+      logger.error(`Origin file not found: ${originPath}`);
+      return false;
+    }
+
+    const restorePath = targetPath || entry.skillPath;
+
     try {
-      const currentVersion = hashFile(skill.origin_path);
-      return currentVersion !== skill.origin_version;
-    } catch {
+      copyFileSync(originPath, restorePath);
+      logger.info(`Restored origin for skill ${skillId} to: ${restorePath}`);
+      return true;
+    } catch (error) {
+      logger.error(`Failed to restore origin for skill ${skillId}:`, error);
       return false;
     }
   }
 
   /**
-   * 读取 origin skill 内容
+   * Compare current skill with origin
    */
-  async readContent(skillId: string): Promise<string | null> {
-    const skill = this.skills.get(skillId);
-    if (!skill) {
-      return null;
+  compare(skillId: string, currentContent: string): {
+    changed: boolean;
+    originHash: string;
+    currentHash: string;
+  } {
+    this.ensureInitialized();
+
+    const originHash = this.getHash(skillId);
+    const currentHash = hashContent(currentContent);
+
+    if (!originHash) {
+      return {
+        changed: true,
+        originHash: '',
+        currentHash,
+      };
     }
 
-    try {
-      const { readFileSync } = await import('node:fs');
-      
-      // 如果是目录，查找主文件
-      if (isDirectory(skill.origin_path)) {
-        const possibleFiles = ['current.md', 'skill.md', `${skillId}.md`];
-        for (const filename of possibleFiles) {
-          const filePath = join(skill.origin_path, filename);
-          if (isFile(filePath)) {
-            return readFileSync(filePath, 'utf-8');
-          }
-        }
+    return {
+      changed: originHash !== currentHash,
+      originHash,
+      currentHash,
+    };
+  }
+
+  /**
+   * Delete an origin entry
+   */
+  delete(skillId: string): boolean {
+    this.ensureInitialized();
+
+    const entry = this.index.get(skillId);
+    if (!entry) return false;
+
+    // Delete origin file
+    const originPath = this.getOriginPath(skillId);
+    if (existsSync(originPath)) {
+      const fs = require('fs');
+      fs.unlinkSync(originPath);
+    }
+
+    // Remove from index
+    this.index.delete(skillId);
+    this.saveIndex();
+
+    logger.info(`Deleted origin for skill: ${skillId}`);
+    return true;
+  }
+
+  /**
+   * Clear all origins
+   */
+  clear(): void {
+    this.ensureInitialized();
+
+    // Delete all origin files
+    for (const skillId of this.index.keys()) {
+      const originPath = this.getOriginPath(skillId);
+      if (existsSync(originPath)) {
+        const fs = require('fs');
+        fs.unlinkSync(originPath);
       }
-      // 如果是文件，直接读取
-      else if (isFile(skill.origin_path)) {
-        return readFileSync(skill.origin_path, 'utf-8');
-      }
-
-      return null;
-    } catch (error) {
-      logger.warn(`Failed to read skill content: ${skillId}`, { error });
-      return null;
     }
+
+    // Clear index
+    this.index.clear();
+    this.saveIndex();
+
+    logger.info('Cleared all origins');
   }
 
   /**
-   * 刷新单个 skill 的版本信息
+   * Ensure registry is initialized
    */
-  refreshSkill(skillId: string): OriginSkill | null {
-    const skill = this.skills.get(skillId);
-    if (!skill) {
-      return null;
-    }
-
-    try {
-      const newVersion = hashFile(skill.origin_path);
-      skill.origin_version = newVersion;
-      skill.last_seen_at = new Date().toISOString();
-      return skill;
-    } catch (error) {
-      logger.warn(`Failed to refresh skill: ${skillId}`, { error });
-      return null;
+  private ensureInitialized(): void {
+    if (!this.initialized) {
+      this.init();
     }
   }
 
+  // ===== Backward Compatibility Methods =====
+
   /**
-   * 获取上次扫描时间
+   * Scan for origins - backward compatibility (no-op)
    */
-  getLastScanTime(): number {
-    return this.lastScanTime;
+  scan(): void {
+    this.ensureInitialized();
+    // No-op: origins are tracked via index
   }
 
   /**
-   * 检查是否需要重新扫描
+   * Read origin content - backward compatibility
    */
-  needsRescan(): boolean {
-    const scanInterval = 3600 * 1000; // 1 小时
-    return Date.now() - this.lastScanTime > scanInterval;
+  async readContent(skillId: string): Promise<string | undefined> {
+    return this.getContent(skillId);
   }
 }
 
-// 导出单例实例
-export const originRegistry = new OriginRegistry();
+/**
+ * Create an OriginRegistry instance
+ */
+export function createOriginRegistry(options: OriginRegistryOptions): OriginRegistry {
+  return new OriginRegistry(options);
+}
+
+/**
+ * Singleton instance for backward compatibility
+ */
+export const originRegistry = new OriginRegistry({ projectPath: process.cwd() });

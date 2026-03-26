@@ -12,16 +12,16 @@ const logger = createChildLogger('trace-manager');
  */
 export class TraceManager {
   private projectRoot: string;
-  private db;
+  private db: Awaited<ReturnType<typeof createSQLiteStorage>> | null = null;
   private traceStore;
   private currentSessionId: string | null = null;
+  private dbPath: string;
 
   constructor(projectRoot: string) {
     this.projectRoot = projectRoot;
 
-    // 初始化数据库
-    const dbPath = join(projectRoot, '.ornn', 'state', 'sessions.db');
-    this.db = createSQLiteStorage(dbPath);
+    // 初始化数据库路径
+    this.dbPath = join(projectRoot, '.ornn', 'state', 'sessions.db');
 
     // 初始化 NDJSON trace store
     const tracesDir = join(projectRoot, '.ornn', 'state');
@@ -32,6 +32,7 @@ export class TraceManager {
    * 初始化
    */
   async init(): Promise<void> {
+    this.db = await createSQLiteStorage(this.dbPath);
     await this.db.init();
     logger.info('Trace manager initialized');
   }
@@ -40,6 +41,7 @@ export class TraceManager {
    * 设置当前 session
    */
   setSession(sessionId: string, runtime: RuntimeType, projectId?: string): void {
+    if (!this.db) throw new Error('TraceManager not initialized');
     try {
       this.currentSessionId = sessionId;
 
@@ -74,6 +76,7 @@ export class TraceManager {
    * 记录 trace（带事务保护和补偿机制）
    */
   recordTrace(trace: Trace): void {
+    if (!this.db) throw new Error('TraceManager not initialized');
     let ndjsonWritten = false;
     
     try {
@@ -300,6 +303,7 @@ export class TraceManager {
    */
   close(): void {
     this.endSession();
+    if (!this.db) throw new Error('TraceManager not initialized');
     this.db.close();
     logger.info('Trace manager closed');
   }

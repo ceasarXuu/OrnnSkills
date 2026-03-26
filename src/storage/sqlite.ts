@@ -1010,6 +1010,6 @@ export class SQLiteStorage {
 }
 
 // 导出工厂函数（使用单例模式）
-export function createSQLiteStorage(dbPath: string): SQLiteStorage {
+export async function createSQLiteStorage(dbPath: string): Promise<SQLiteStorage> {
   return SQLiteStorage.getInstance(dbPath);
 }

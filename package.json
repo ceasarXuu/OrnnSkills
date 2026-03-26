@@ -1,6 +1,6 @@
 {
   "name": "ornn-skills",
-  "version": "0.1.2",
+  "version": "0.1.8",
   "description": "Skill Evolution Agent - Background meta-agent for automatic skill optimization",
   "main": "dist/index.js",
   "bin": {
@@ -13,6 +13,11 @@
     "start": "node dist/cli/index.js",
     "test": "vitest",
     "test:coverage": "vitest --coverage",
+    "test:agent-poc": "tsx tests/agent-poc/run-all-tests.ts",
+    "test:llm-config": "tsx tests/agent-poc/test-llm-config.ts",
+    "test:evaluator": "tsx tests/agent-poc/test-evaluator-agent.ts",
+    "test:patch-gen": "tsx tests/agent-poc/test-patch-generator.ts",
+    "test:multi-model": "tsx tests/agent-poc/test-multi-model.ts",
     "lint": "eslint src/ --ext .ts",
     "lint:fix": "eslint src/ --ext .ts --fix",
     "format": "prettier --write \"src/**/*.ts\"",
@@ -36,12 +41,15 @@
     "commander": "^11.0.0",
     "cosmiconfig": "^8.3.0",
     "diff": "^5.1.0",
+    "dotenv": "^16.4.5",
     "glob": "^13.0.0",
+    "inquirer": "^13.3.2",
     "ora": "^7.0.0",
     "sql.js": "^1.10.0",
     "toml": "^3.0.0",
     "uuid": "^13.0.0",
-    "winston": "^3.11.0"
+    "winston": "^3.11.0",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/diff": "^5.0.0",

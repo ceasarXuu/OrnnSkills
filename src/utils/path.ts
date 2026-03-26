@@ -36,7 +36,7 @@ export function assertValidSkillId(skillId: string): void {
   }
 }
 
-import { lstatSync, realpathSync } from 'node:fs';
+import { realpathSync } from 'node:fs';
 import { sep } from 'node:path';
 
 /**

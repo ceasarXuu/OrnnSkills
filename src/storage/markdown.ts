@@ -285,6 +285,39 @@ export class MarkdownSkill {
     this.write(originContent);
     logger.info('Skill copied from origin', { from: originPath, to: this.filePath });
   }
+
+  /**
+   * 同步到 origin（将当前内容复制回 origin）
+   */
+  copyToOrigin(originPath: string): void {
+    // 确保 origin 目录存在
+    const originDir = dirname(originPath);
+    if (!existsSync(originDir)) {
+      mkdirSync(originDir, { recursive: true });
+    }
+
+    // 读取当前内容
+    const currentContent = this.read();
+
+    // 使用临时文件实现原子写入
+    const tempPath = join(originDir, `.tmp_${Date.now()}_${Math.random().toString(36).slice(2)}.md`);
+
+    try {
+      writeFileSync(tempPath, currentContent, 'utf-8');
+      renameSync(tempPath, originPath); // 原子替换
+      logger.info('Skill synced to origin', { from: this.filePath, to: originPath });
+    } catch (error) {
+      // 清理临时文件
+      try {
+        if (existsSync(tempPath)) {
+          unlinkSync(tempPath);
+        }
+      } catch {
+        // 忽略清理错误
+      }
+      throw error;
+    }
+  }
 }
 
 // 导出工厂函数

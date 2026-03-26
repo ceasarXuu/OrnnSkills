@@ -88,6 +88,21 @@ export type TraceStatus = 'success' | 'failure' | 'retry' | 'interrupted';
 // Runtime 类型
 export type RuntimeType = 'codex' | 'opencode' | 'claude';
 
+// Preprocessed Trace - Observer 预处理后的统一格式
+export interface PreprocessedTrace {
+  sessionId: string;
+  turnId: string;
+  timestamp: string;
+  eventType: TraceEventType;
+  content: unknown;
+  projectContext?: {
+    cwd: string;
+    gitBranch?: string;
+  };
+  skillRefs?: string[];
+  metadata?: Record<string, unknown>;
+}
+
 // Trace 数据结构
 export interface Trace {
   trace_id: string;
@@ -102,6 +117,7 @@ export interface Trace {
   tool_args?: Record<string, unknown>;
   tool_result?: Record<string, unknown>;
   files_changed?: string[];
+  skill_refs?: string[];  // 提取的 skill 引用
   status: TraceStatus;
   metadata?: Record<string, unknown>;
 }

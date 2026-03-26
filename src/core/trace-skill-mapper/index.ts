@@ -31,21 +31,22 @@ export interface SkillTracesGroup {
  * 负责将 traces 映射到对应的 skills
  */
 export class TraceSkillMapper {
-  private db;
+  private db: Awaited<ReturnType<typeof createSQLiteStorage>> | null = null;
   private projectRoot: string;
   private knownSkills: Map<string, OriginSkill> = new Map();
   private shadowSkills: Map<string, ProjectSkillShadow> = new Map();
+  private dbPath: string;
 
   constructor(projectRoot: string) {
     this.projectRoot = projectRoot;
-    const dbPath = join(projectRoot, '.ornn', 'state', 'sessions.db');
-    this.db = createSQLiteStorage(dbPath);
+    this.dbPath = join(projectRoot, '.ornn', 'state', 'sessions.db');
   }
 
   /**
    * 初始化
    */
   async init(): Promise<void> {
+    this.db = await createSQLiteStorage(this.dbPath);
     await this.db.init();
     this.loadKnownSkills();
     logger.info('TraceSkillMapper initialized');
@@ -55,6 +56,7 @@ export class TraceSkillMapper {
    * 加载已知的 skills
    */
   private loadKnownSkills(): void {
+    if (!this.db) throw new Error('TraceSkillMapper not initialized');
     // 从数据库加载 origin skills
     const origins = this.db.listOriginSkills();
     for (const origin of origins) {
@@ -231,9 +233,10 @@ export class TraceSkillMapper {
    * 获取某个 skill 相关的 traces
    */
   getSkillTraces(skillId: string, _limit?: number): Trace[] {
+    if (!this.db) throw new Error('TraceSkillMapper not initialized');
     // 从数据库查询映射关系
     const mappings = this.db.getTraceSkillMappings(skillId);
-    const traceIds = mappings.map((m) => m.trace_id);
+    const traceIds = mappings.map((m: { trace_id: string }) => m.trace_id);
 
     if (traceIds.length === 0) {
       return [];
@@ -384,6 +387,7 @@ export class TraceSkillMapper {
    * 保存映射关系到数据库
    */
   private saveMapping(mapping: TraceSkillMapping): void {
+    if (!this.db) throw new Error('TraceSkillMapper not initialized');
     if (mapping.skill_id && mapping.confidence >= 0.5) {
       this.db.upsertTraceSkillMapping({
         trace_id: mapping.trace_id,
@@ -404,6 +408,7 @@ export class TraceSkillMapper {
     by_skill: Record<string, number>;
     avg_confidence: number;
   } {
+    if (!this.db) throw new Error('TraceSkillMapper not initialized');
     return this.db.getTraceSkillMappingStats();
   }
 
@@ -421,6 +426,7 @@ export class TraceSkillMapper {
    * 清理旧的映射
    */
   cleanupOldMappings(retentionDays: number): number {
+    if (!this.db) throw new Error('TraceSkillMapper not initialized');
     return this.db.cleanupTraceSkillMappings(retentionDays);
   }
 
@@ -428,6 +434,7 @@ export class TraceSkillMapper {
    * 关闭
    */
   close(): void {
+    if (!this.db) throw new Error('TraceSkillMapper not initialized');
     this.db.close();
   }
 }

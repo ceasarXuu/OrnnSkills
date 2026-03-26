@@ -30,3 +30,10 @@ export function hashBuffer(buffer: Buffer): string {
   return createHash('sha256').update(buffer).digest('hex');
 }
 
+/**
+ * 计算内容的 SHA256 哈希（字符串的别名）
+ */
+export function hashContent(content: string): string {
+  return hashString(content);
+}
+

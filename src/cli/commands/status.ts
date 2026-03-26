@@ -91,14 +91,15 @@ export function createStatusCommand(): Command {
             console.log('─'.repeat(70));
 
             for (const shadow of shadows) {
-              const shadowId = `${shadow.skill_id}@${projectRoot}`;
+              const skillId = shadow.skill_id || shadow.skillId || 'unknown';
+              const shadowId = `${skillId}@${projectRoot}`;
               const latestRevision = await journalManager.getLatestRevision(shadowId);
-              const lastOptimized = shadow.last_optimized_at
-                ? new Date(shadow.last_optimized_at).toLocaleDateString()
+              const lastOptimized = (shadow.last_optimized_at || shadow.updatedAt)
+                ? new Date(shadow.last_optimized_at || shadow.updatedAt).toLocaleDateString()
                 : 'Never';
 
               console.log(
-                `${shadow.skill_id.padEnd(22)} ${shadow.status.padEnd(11)} ${String(latestRevision).padEnd(9)} ${lastOptimized}`
+                `${skillId.padEnd(22)} ${shadow.status.padEnd(11)} ${String(latestRevision).padEnd(9)} ${lastOptimized}`
               );
             }
 

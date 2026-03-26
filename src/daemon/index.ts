@@ -192,7 +192,7 @@ export class Daemon {
         startedAt: this.startedAt,
         processedTraces: this.processedTraces,
         lastCheckpointAt: new Date().toISOString(),
-        retryQueueSize: this.retryQueue.length,
+        retryQueueSize: this.retryQueue.size,
       };
 
       const checkpointPath = join(this.projectRoot, CHECKPOINT_FILE);
@@ -238,7 +238,7 @@ export class Daemon {
       startedAt: this.startedAt,
       processedTraces: this.processedTraces,
       lastCheckpointAt: this.lastCheckpointAt,
-      retryQueueSize: this.retryQueue.length,
+      retryQueueSize: this.retryQueue.size,
     };
   }
 

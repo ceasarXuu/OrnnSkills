@@ -4,6 +4,9 @@ import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { EVOConfig, ProjectConfig } from '../types/index.js';
 import { DEFAULT_CONFIG } from './defaults.js';
+import { createChildLogger } from '../utils/logger.js';
+
+const logger = createChildLogger('config');
 
 const MODULE_NAME = 'ornn';
 const GLOBAL_CONFIG_DIR = join(homedir(), '.ornn');

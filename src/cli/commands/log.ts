@@ -91,7 +91,14 @@ export function createLogCommand(): Command {
         } else {
           console.log(`Evolution log for "${skillId}":\n`);
 
-          for (const record of records) {
+          for (const record of records as Array<{
+            timestamp: string;
+            change_type: string;
+            applied_by: string;
+            revision: number;
+            reason: string;
+            source_sessions: string[];
+          }>) {
             const date = new Date(record.timestamp).toLocaleString();
             const changeType = record.change_type.toUpperCase();
             const appliedBy = record.applied_by === 'auto' ? '🤖' : '👤';

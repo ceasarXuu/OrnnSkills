@@ -96,8 +96,14 @@ export function createRollbackCommand(): Command {
         } else if (options.snapshot) {
           // 回滚到最新 snapshot
           console.log(`Rolling back "${skillId}" to latest snapshot...`);
-          journalManager.rollbackToSnapshot(shadowId);
-          console.log(`✅ Successfully rolled back to latest snapshot`);
+          const snapshots = journalManager.getSnapshots(shadowId);
+          if (snapshots.length > 0) {
+            const latestSnapshot = snapshots[snapshots.length - 1];
+            await journalManager.rollbackToSnapshot(shadowId, latestSnapshot.file_path);
+            console.log(`✅ Successfully rolled back to latest snapshot`);
+          } else {
+            console.log(`No snapshots found for "${skillId}"`);
+          }
         } else if (options.to) {
           // 回滚到指定 revision
           let targetRevision: number;

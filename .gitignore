@@ -46,3 +46,4 @@ tests/fixtures/projects/*/.evo/
 
 # Local development
 *.local
+blog-*
