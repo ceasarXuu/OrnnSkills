@@ -26,31 +26,73 @@ npm install -g ornn-skills
 
 ## Quick Start
 
-### 1. Initialize Configuration
+### Prerequisites
+
+Before using OrnnSkills, make sure you have:
+- Node.js 18+ installed
+- An Agent (Codex/OpenCode/Claude) running in your project
+
+### 1. Navigate to Your Project Directory
+
+```bash
+cd /path/to/your/project
+```
+
+OrnnSkills works on a per-project basis, so you need to run it in your project directory.
+
+### 2. Initialize Configuration
 
 ```bash
 ornn init
 ```
 
-### 2. Check Project Shadow Skills Status
+This will:
+- Create `.ornn/` directory in your project
+- Generate default configuration files
+- Scan and register global skills
+
+### 3. Start the Daemon
 
 ```bash
-ornn skills status
+ornn start
 ```
 
-### 3. View Evolution Log for a Skill
+This starts the background daemon that will:
+- Monitor your Agent's execution traces
+- Automatically optimize skills based on real usage
+- Run continuously in the background
+
+### 4. Check Status
+
+```bash
+ornn status
+```
+
+View the current status of the daemon and shadow skills.
+
+### 5. Stop the Daemon
+
+```bash
+ornn stop
+```
+
+Stop the background daemon when you're done.
+
+### Advanced Operations
+
+#### View Evolution Log
 
 ```bash
 ornn skills log <skill-id>
 ```
 
-### 4. Rollback to a Specific Version
+#### Rollback to a Specific Version
 
 ```bash
 ornn skills rollback <skill-id> --to rev_8
 ```
 
-### 5. Freeze/Unfreeze Automatic Optimization
+#### Freeze/Unfreeze Automatic Optimization
 
 ```bash
 ornn skills freeze <skill-id>

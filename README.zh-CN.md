@@ -26,31 +26,73 @@ npm install -g ornn-skills
 
 ## 快速开始
 
-### 1. 初始化配置
+### 前置条件
+
+使用 OrnnSkills 之前，请确保：
+- 已安装 Node.js 18+
+- 项目中正在运行 Agent（Codex/OpenCode/Claude）
+
+### 1. 进入目标项目目录
+
+```bash
+cd /path/to/your/project
+```
+
+OrnnSkills 是基于项目运行的，因此需要在你的项目目录中执行命令。
+
+### 2. 初始化配置
 
 ```bash
 ornn init
 ```
 
-### 2. 查看项目 shadow skills 状态
+这将：
+- 在项目中创建 `.ornn/` 目录
+- 生成默认配置文件
+- 扫描并注册全局 skills
+
+### 3. 启动守护进程
 
 ```bash
-ornn skills status
+ornn start
 ```
 
-### 3. 查看某个 skill 的演化日志
+启动后台守护进程，它会：
+- 监控你的 Agent 执行 trace
+- 基于真实使用情况自动优化 skills
+- 在后台持续运行
+
+### 4. 查看状态
+
+```bash
+ornn status
+```
+
+查看守护进程和影子 skills 的当前状态。
+
+### 5. 停止守护进程
+
+```bash
+ornn stop
+```
+
+完成工作后停止后台守护进程。
+
+### 高级操作
+
+#### 查看演化日志
 
 ```bash
 ornn skills log <skill-id>
 ```
 
-### 4. 回滚到指定版本
+#### 回滚到指定版本
 
 ```bash
 ornn skills rollback <skill-id> --to rev_8
 ```
 
-### 5. 冻结/解冻自动优化
+#### 冻结/解冻自动优化
 
 ```bash
 ornn skills freeze <skill-id>
