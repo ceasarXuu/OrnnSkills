@@ -144,8 +144,17 @@ export class SQLiteStorage {
    */
   commit(): void {
     if (!this.db) throw new Error('Database not initialized');
-    this.db.run('COMMIT');
-    this.save();
+    try {
+      this.db.run('COMMIT');
+      this.save();
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      if (errorMsg.includes('no transaction is active')) {
+        logger.debug('No active transaction to commit');
+      } else {
+        throw error;
+      }
+    }
   }
 
   /**
@@ -153,7 +162,16 @@ export class SQLiteStorage {
    */
   rollback(): void {
     if (!this.db) throw new Error('Database not initialized');
-    this.db.run('ROLLBACK');
+    try {
+      this.db.run('ROLLBACK');
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      if (errorMsg.includes('no transaction is active')) {
+        logger.debug('No active transaction to rollback');
+      } else {
+        throw error;
+      }
+    }
   }
 
   /**

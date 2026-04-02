@@ -47,3 +47,16 @@ tests/fixtures/projects/*/.evo/
 # Local development
 *.local
 blog-*
+
+# OrnnSkills runtime files
+.ornn/config/settings.toml
+.ornn/daemon.pid
+.ornn/state/
+.ornn/sessions.db
+
+# Generated documentation
+summary-my-repo/
+show-my-repo/
+
+# Planning and temporary files
+.sisyphus/

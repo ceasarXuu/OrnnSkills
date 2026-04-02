@@ -172,6 +172,11 @@ export class Journal {
     try {
       const data = this.db.export();
       const fs = await import('fs');
+      const path = await import('path');
+      
+      const dbDir = path.dirname(this.options.dbPath);
+      await fs.promises.mkdir(dbDir, { recursive: true });
+      
       await fs.promises.writeFile(this.options.dbPath, Buffer.from(data));
     } catch (error) {
       logger.error('Failed to persist journal:', error);
@@ -705,7 +710,11 @@ export class Journal {
       ) {
         await new Promise((r) => setTimeout(r, 50));
       }
-      await this.persist();
+      try {
+        await this.persist();
+      } catch (error) {
+        logger.warn('Failed to persist journal during close, but continuing with cleanup:', error);
+      }
       this.db.close();
       this.db = null;
       this.initialized = false;

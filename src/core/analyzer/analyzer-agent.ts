@@ -138,7 +138,7 @@ export class LLMAnalyzerAgent {
         success: true,
         result: parseResult,
         tokenUsage: {
-          prompt: 0, // TODO: Get from LLM
+          prompt: 0,
           completion: 0,
           total: 0,
         },
