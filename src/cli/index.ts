@@ -12,6 +12,7 @@ import { createLogsCommand } from './commands/logs.js';
 import { createPreviewCommand } from './commands/preview.js';
 import { createCompletionCommand } from './commands/completion.js';
 import { createConfigCommand } from './commands/config.js';
+import { createTopLevelStatusCommand } from './commands/top-level-status.js';
 import { initCommand } from '../commands/init.js';
 import { logger } from '../utils/logger.js';
 
@@ -52,6 +53,9 @@ program.addCommand(createStartCommand());
 
 // Stop 命令 (简化版 daemon stop)
 program.addCommand(createStopCommand());
+
+// Status 命令 (整体状态概览)
+program.addCommand(createTopLevelStatusCommand());
 
 // Daemon 命令 (完整的子命令)
 program.addCommand(createDaemonCommand());
