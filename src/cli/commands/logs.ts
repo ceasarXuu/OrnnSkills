@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { existsSync, readFileSync, statSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, statSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { printErrorAndExit } from '../../utils/error-helper.js';
 
@@ -150,6 +150,86 @@ function log(msg: string): void {
   console.log(msg);
 }
 
+function clearLogs(): Promise<void> {
+  const logDir = join(process.env.HOME || '', '.ornn', 'logs');
+
+  if (!existsSync(logDir)) {
+    log('\n📋 No log directory found. Nothing to clear.\n');
+    return Promise.resolve();
+  }
+
+  const files = readdirSync(logDir).filter((f) => f.endsWith('.log'));
+
+  if (files.length === 0) {
+    log('\n📋 No log files to clear.\n');
+    return Promise.resolve();
+  }
+
+  const totalSizeBefore = files.reduce((sum, f) => {
+    try { return sum + statSync(join(logDir, f)).size; } catch { return sum; }
+  }, 0);
+
+  log('\n⚠️  This will clear all log files:');
+  log('');
+  for (const f of files) {
+    const size = statSync(join(logDir, f)).size;
+    log(`   • ${f}  (${formatFileSize(size)})`);
+  }
+  log(`\n   Total: ${formatFileSize(totalSizeBefore)}\n`);
+  log('   Type "yes" to confirm, or press Ctrl+C to cancel:');
+  log('');
+
+  process.stdout.write('   > ');
+
+  let input = '';
+  process.stdin.setRawMode(true);
+  process.stdin.resume();
+
+  return new Promise<void>((resolve) => {
+    process.stdin.on('data', (chunk: Buffer) => {
+      const char = chunk.toString();
+      if (char === '\x03') {
+        process.stdin.setRawMode(false);
+        process.stdin.pause();
+        process.stdin.removeAllListeners('data');
+        log('\n\n   Cancelled. No files were removed.\n');
+        resolve();
+        return;
+      }
+      if (char === '\r' || char === '\n') {
+        process.stdin.setRawMode(false);
+        process.stdin.pause();
+        process.stdin.removeAllListeners('data');
+
+        if (input.toLowerCase() !== 'yes') {
+          log('\n\n   Cancelled. No files were removed.\n');
+          resolve();
+          return;
+        }
+
+        let cleared = 0;
+        for (const file of files) {
+          try {
+            writeFileSync(join(logDir, file), '', 'utf-8');
+            cleared++;
+          } catch {}
+        }
+
+        log(`\n   ✅ Cleared ${cleared}/${files.length} log files (${formatFileSize(totalSizeBefore)} freed)\n`);
+        resolve();
+        return;
+      }
+      if (char === '\x7f') {
+        input = input.slice(0, -1);
+        process.stdout.write('\b \b');
+      } else {
+        input += char;
+        process.stdout.write(char);
+      }
+    });
+  });
+}
+
 export function createLogsCommand(): Command {
   const logs = new Command('logs');
 
@@ -160,7 +240,12 @@ export function createLogsCommand(): Command {
     .option('-l, --level <level>', 'Filter by level (error, warn, info, debug)', 'error')
     .option('-s, --skill <id>', 'Filter logs for specific skill')
     .option('--raw', 'Show raw log lines without grouping', false)
-    .action((options: LogOptions & { raw?: boolean }) => {
+    .option('--clear', 'Clear all log files (requires confirmation)', false)
+    .action((options: LogOptions & { raw?: boolean; clear?: boolean }) => {
+      if (options.clear) {
+        clearLogs();
+        return;
+      }
       try {
         const logFiles = getLogFiles();
 
