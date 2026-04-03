@@ -1,5 +1,4 @@
 import { Command } from 'commander';
-import { cliInfo } from '../../utils/cli-output.js';
 import { existsSync, readFileSync, statSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { printErrorAndExit } from '../../utils/error-helper.js';
@@ -12,94 +11,133 @@ interface LogOptions {
   follow?: boolean;
 }
 
-const PROJECT_LOG_DIR = '.ornn/logs';
+interface ParsedLogEntry {
+  timestamp: string;
+  level: string;
+  message: string;
+  raw: string;
+}
 
-function getLogFiles(projectRoot: string): string[] {
+function getLogFiles(): string[] {
   const logs: string[] = [];
-
-  const projectLogPath = join(projectRoot, PROJECT_LOG_DIR);
   const globalLogPath = join(process.env.HOME || '', '.ornn', 'logs');
-
-  if (existsSync(projectLogPath)) {
-    try {
-      const files = readdirSync(projectLogPath);
-      for (const file of files) {
-        if (file.endsWith('.log')) {
-          logs.push(join(projectLogPath, file));
-        }
-      }
-    } catch {
-      // Directory not accessible, skip
-    }
-  }
 
   if (existsSync(globalLogPath)) {
     try {
       const files = readdirSync(globalLogPath);
       for (const file of files) {
         if (file.endsWith('.log')) {
-          const fullPath = join(globalLogPath, file);
-          if (!logs.includes(fullPath)) {
-            logs.push(fullPath);
-          }
+          logs.push(join(globalLogPath, file));
         }
       }
-    } catch {
-      // Directory not accessible, skip
-    }
+    } catch {}
   }
 
   return logs;
 }
 
-function filterLogContent(content: string, options: LogOptions): string {
-  const lines = content.split('\n');
-  const filteredLines: string[] = [];
-  const maxLines = parseInt(options.tail, 10) || 100;
+function parseLine(line: string): ParsedLogEntry | null {
+  if (!line.trim()) return null;
 
-  const levelMap: Record<string, string[]> = {
-    error: ['ERROR', 'FATAL'],
-    warn: ['WARN', 'WARNING'],
-    info: ['INFO'],
-    debug: ['DEBUG', 'TRACE'],
+  const match = line.match(/^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s+(\w+):\s*(.*)$/);
+  if (!match) return null;
+
+  return {
+    timestamp: match[1],
+    level: match[2].toUpperCase(),
+    message: match[3],
+    raw: line,
   };
+}
 
-  const targetLevels = options.level ? levelMap[options.level] || ['INFO'] : [];
+function truncateMessage(msg: string, maxLen: number = 120): string {
+  if (msg.length <= maxLen) return msg;
+  return msg.slice(0, maxLen) + '...';
+}
 
-  for (const line of lines) {
-    if (!line.trim()) continue;
+function shortenPath(msg: string): string {
+  return msg.replace(/\/var\/folders\/[^/]+\/[^/]+\/T\//g, '/tmp/')
+            .replace(/\/Users\/[^/]+\//g, '~/');
+}
 
-    if (options.level) {
-      const hasLevel = targetLevels.some((l) => line.includes(l));
-      if (!hasLevel) continue;
-    }
+function formatRelativeTime(ts: string): string {
+  try {
+    const diff = Date.now() - new Date(ts).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
+  } catch {
+    return ts;
+  }
+}
 
-    if (targetLevels.length === 0) {
-      if (line.includes('ERROR') || line.includes('FATAL')) {
-        filteredLines.push('🔴 ' + line);
-      } else if (line.includes('WARN') || line.includes('WARNING')) {
-        filteredLines.push('🟡 ' + line);
-      } else if (line.includes('INFO')) {
-        filteredLines.push('🔵 ' + line);
-      } else if (line.includes('DEBUG') || line.includes('TRACE')) {
-        filteredLines.push('⚪ ' + line);
-      } else {
-        filteredLines.push('  ' + line);
-      }
+function levelIcon(level: string): string {
+  switch (level) {
+    case 'ERROR': case 'FATAL': return '🔴';
+    case 'WARN': case 'WARNING': return '🟡';
+    default: return '  ';
+  }
+}
+
+interface LogGroup {
+  message: string;
+  level: string;
+  count: number;
+  firstSeen: string;
+  lastSeen: string;
+  sampleRaw: string;
+}
+
+function groupEntries(entries: ParsedLogEntry[], maxGroupSize: number = 20): LogGroup[] {
+  const map = new Map<string, LogGroup>();
+
+  for (const entry of entries) {
+    const key = `${entry.level}|${entry.message}`;
+    const existing = map.get(key);
+
+    if (existing) {
+      existing.count++;
+      existing.lastSeen = entry.timestamp;
     } else {
-      if (options.level === 'error' && line.includes('ERROR')) {
-        filteredLines.push('🔴 ' + line);
-      } else if (options.level === 'warn' && (line.includes('WARN') || line.includes('WARNING'))) {
-        filteredLines.push('🟡 ' + line);
-      } else if (options.level === 'info' && line.includes('INFO')) {
-        filteredLines.push('🔵 ' + line);
-      } else if (options.level === 'debug' && (line.includes('DEBUG') || line.includes('TRACE'))) {
-        filteredLines.push('⚪ ' + line);
-      }
+      map.set(key, {
+        message: entry.message,
+        level: entry.level,
+        count: 1,
+        firstSeen: entry.timestamp,
+        lastSeen: entry.timestamp,
+        sampleRaw: entry.raw,
+      });
     }
   }
 
-  return filteredLines.slice(-maxLines).join('\n');
+  return Array.from(map.values())
+    .sort((a, b) => b.count - a.count)
+    .slice(0, maxGroupSize);
+}
+
+function filterAndParse(content: string, options: LogOptions): ParsedLogEntry[] {
+  const lines = content.split('\n');
+  const maxLines = parseInt(options.tail, 10) || 100;
+  const targetLevel = (options.level || 'info').toUpperCase();
+
+  const levelPriority: Record<string, number> = {
+    DEBUG: 0, INFO: 1, WARN: 2, ERROR: 3, FATAL: 4,
+  };
+  const minPriority = levelPriority[targetLevel] ?? 1;
+
+  const parsed: ParsedLogEntry[] = [];
+  for (const line of lines) {
+    const entry = parseLine(line);
+    if (!entry) continue;
+    if ((levelPriority[entry.level] ?? 0) < minPriority) continue;
+    parsed.push(entry);
+  }
+
+  return parsed.slice(-maxLines);
 }
 
 function formatFileSize(bytes: number): string {
@@ -108,8 +146,8 @@ function formatFileSize(bytes: number): string {
   return (bytes / (1024 * 1024)).toFixed(1) + 'MB';
 }
 
-function formatDate(date: Date): string {
-  return date.toLocaleString();
+function log(msg: string): void {
+  console.log(msg);
 }
 
 export function createLogsCommand(): Command {
@@ -118,75 +156,93 @@ export function createLogsCommand(): Command {
   logs
     .description('View OrnnSkills logs')
     .option('-p, --project <path>', 'Project root path', process.cwd())
-    .option('-n, --tail <lines>', 'Number of lines to show', '100')
-    .option('-l, --level <level>', 'Filter by level (error, warn, info, debug)', 'info')
+    .option('-n, --tail <lines>', 'Number of lines to show', '50')
+    .option('-l, --level <level>', 'Filter by level (error, warn, info, debug)', 'error')
     .option('-s, --skill <id>', 'Filter logs for specific skill')
-    .option('-f, --follow', 'Follow log output (like tail -f)')
-    .action((options: LogOptions) => {
+    .option('--raw', 'Show raw log lines without grouping', false)
+    .action((options: LogOptions & { raw?: boolean }) => {
       try {
-        const projectRoot = options.project;
-
-        const logFiles = getLogFiles(projectRoot);
+        const logFiles = getLogFiles();
 
         if (logFiles.length === 0) {
-          cliInfo('\n📋 OrnnSkills Logs\n');
-          cliInfo('   No log files found.\n');
-          cliInfo('   Log files are stored at:');
-          cliInfo('   • ~/.ornn/logs/ (global)');
-          cliInfo('   • .ornn/logs/ (project)\n');
-          cliInfo('   The daemon must be running to generate logs.');
-          cliInfo('   Run "ornn daemon start" to start the daemon.\n');
+          log('\n📋 OrnnSkills Logs\n');
+          log('   No log files found.\n');
+          log('   Log files are stored at:');
+          log('   • ~/.ornn/logs/ (global)\n');
+          log('   Run "ornn daemon start" to generate logs.\n');
           return;
         }
-
-        const tailLines = parseInt(options.tail, 10) || 100;
-        const filterLevel = options.level || 'info';
-
-        cliInfo('\n📋 OrnnSkills Logs\n');
-        cliInfo('   Project: ' + projectRoot);
-        cliInfo('   Filter: ' + filterLevel.toUpperCase());
-        cliInfo('   Lines: ' + tailLines);
-        if (options.skill) {
-          cliInfo('   Skill: ' + options.skill);
-        }
-        cliInfo('');
 
         for (const logFile of logFiles) {
           try {
             const stats = statSync(logFile);
             const basename = logFile.split('/').pop() || logFile;
-
-            cliInfo('┌─────────────────────────────────────────────────────────────┐');
-            cliInfo('│ 📄 ' + basename.padEnd(52) + ' │');
-            cliInfo('│    Size: ' +
-              formatFileSize(stats.size).padEnd(20) +
-              ' Modified: ' +
-              formatDate(stats.mtime) +
-              ' │');
-            cliInfo('└─────────────────────────────────────────────────────────────┘');
-            cliInfo('');
-
             const content = readFileSync(logFile, 'utf-8');
-            const filtered = filterLogContent(content, options);
+            const entries = filterAndParse(content, options);
 
-            if (filtered) {
-              cliInfo(filtered);
-            } else {
-              cliInfo('   (no matching log entries)');
+            if (entries.length === 0) {
+              log(`\n📋 ${basename}`);
+              log('   No matching log entries.');
+              continue;
             }
-            cliInfo('');
+
+            log('');
+            log(`┌─ 📄 ${basename}  (${formatFileSize(stats.size)}, ${entries.length} entries) ───────────────────────────────`);
+
+            if (options.raw) {
+              log('│');
+              for (const entry of entries) {
+                const shortMsg = truncateMessage(shortenPath(entry.message), 150);
+                log(`│ ${levelIcon(entry.level)} ${entry.timestamp}  ${shortMsg}`);
+              }
+            } else {
+              const groups = groupEntries(entries);
+
+              log('│');
+              log('│  Summary:');
+              log(`│    Total entries: ${entries.length}`);
+              log(`│    Unique types:  ${groups.length}`);
+              log('│');
+
+              let idx = 0;
+              for (const group of groups) {
+                idx++;
+                const shortMsg = truncateMessage(shortenPath(group.message), 100);
+                const countBadge = group.count > 1 ? `  ×${group.count}` : '';
+                const timeRange = group.firstSeen === group.lastSeen
+                  ? formatRelativeTime(group.firstSeen)
+                  : `${formatRelativeTime(group.firstSeen)} ~ ${formatRelativeTime(group.lastSeen)}`;
+
+                log(`│  ${idx}. ${levelIcon(group.level)} ${shortMsg}${countBadge}`);
+                log(`│     └─ ${timeRange}`);
+
+                if (group.count === 1 && group.sampleRaw.includes('\n')) {
+                  const stackLines = group.sampleRaw.split('\n').slice(1, 4);
+                  for (const sl of stackLines) {
+                    const trimmed = sl.trim();
+                    if (trimmed) log(`│       ${truncateMessage(shortenPath(trimmed), 100)}`);
+                  }
+                }
+              }
+
+              if (groups.length < entries.length) {
+                log('│');
+                log(`│  ... and ${entries.length - groups.reduce((s, g) => s + g.count, 0)} more unique entries (use --raw to see all)`);
+              }
+            }
+
+            log('└──────────────────────────────────────────────────────────────────────┘');
           } catch (error) {
-            cliInfo('   ⚠️  Could not read ' +
-              logFile +
-              ': ' +
-              (error instanceof Error ? error.message : String(error)));
+            log(`\n   ⚠️  Could not read ${logFile}: ${error instanceof Error ? error.message : String(error)}`);
           }
         }
 
-        cliInfo('   ─────────────────────────────────────────────────────────────');
-        cliInfo('   💡 Tip: Use --level error to see only errors');
-        cliInfo('   💡 Tip: Use --tail 50 to see fewer lines');
-        cliInfo('   💡 Tip: Use --follow to watch logs in real-time\n');
+        log('');
+        log('   💡 Tips:');
+        log('     ornn logs --level error    Show only errors');
+        log('     ornn logs --tail 20         Show fewer lines');
+        log('     ornn logs --raw             Show raw ungrouped output');
+        log('');
       } catch (error) {
         printErrorAndExit(
           error instanceof Error ? error.message : String(error),

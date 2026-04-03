@@ -1,5 +1,4 @@
 import { Command } from 'commander';
-import { cliInfo } from '../../utils/cli-output.js';
 import { join, basename } from 'node:path';
 import { existsSync, readFileSync } from 'node:fs';
 import { validateProjectPath } from '../../utils/path.js';
@@ -12,6 +11,10 @@ const CHECKPOINT_FILE = '.ornn/state/daemon-checkpoint.json';
 
 interface StatusOptions {
   project: string;
+}
+
+function log(msg: string): void {
+  console.log(msg);
 }
 
 function readPidFile(projectRoot: string): number | null {
@@ -79,27 +82,26 @@ export function createTopLevelStatusCommand(): Command {
         const ornnDir = join(projectRoot, '.ornn');
         const projectName = basename(projectRoot);
 
-        // === Daemon Status ===
-        cliInfo('\n📊 OrnnSkills Status');
-        cliInfo(`   Project: ${projectName}`);
-        cliInfo(`   Path:   ${projectRoot}`);
+        log('\n📊 OrnnSkills Status');
+        log(`   Project: ${projectName}`);
+        log(`   Path:   ${projectRoot}`);
 
         if (!existsSync(ornnDir)) {
-          cliInfo('\n   🔴 Not initialized');
-          cliInfo('');
-          cliInfo('   Run "ornn init" to get started.');
+          log('\n   🔴 Not initialized');
+          log('');
+          log('   Run "ornn init" to get started.');
           return;
         }
 
         const pid = readPidFile(projectRoot);
         if (!pid || !isProcessRunning(pid)) {
           if (pid) {
-            cliInfo('\n   🟡 Daemon: Stopped (stale PID cleaned)');
+            log('\n   🟡 Daemon: Stopped (stale PID cleaned)');
           } else {
-            cliInfo('\n   🔴 Daemon: Not running');
+            log('\n   🔴 Daemon: Not running');
           }
-          cliInfo('');
-          cliInfo('   Start with: ornn start');
+          log('');
+          log('   Start with: ornn start');
         } else {
           let uptime = 'unknown';
           try {
@@ -111,15 +113,14 @@ export function createTopLevelStatusCommand(): Command {
           } catch {}
 
           const logStats = getLogStats();
-          cliInfo('\n   🟢 Daemon: Running');
-          cliInfo(`     PID:   ${pid}`);
-          cliInfo(`     Uptime: ${uptime}`);
+          log('\n   🟢 Daemon: Running');
+          log(`     PID:    ${pid}`);
+          log(`     Uptime: ${uptime}`);
           if (logStats.errorCount > 0) {
-            cliInfo(`     Errors: ${logStats.errorCount} recent`);
+            log(`     Errors: ${logStats.errorCount} recent`);
           }
         }
 
-        // === Skills Overview ===
         try {
           const shadowRegistry = createShadowRegistry(projectRoot);
           shadowRegistry.init();
@@ -127,10 +128,10 @@ export function createTopLevelStatusCommand(): Command {
           shadowRegistry.close();
 
           if (shadows.length === 0) {
-            cliInfo('\n   📦 Skills: None yet');
-            cliInfo('     Skills are created automatically when you use them.');
+            log('\n   📦 Skills: None yet');
+            log('     Skills are created automatically when you use them.');
           } else {
-            cliInfo(`\n   📦 Skills: ${shadows.length} shadow(s)`);
+            log(`\n   📦 Skills: ${shadows.length} shadow(s)`);
 
             const journalManager = createJournalManager(projectRoot);
             journalManager.init();
@@ -146,23 +147,22 @@ export function createTopLevelStatusCommand(): Command {
               const statusIcon = shadow.status === 'active' ? '✅' :
                 shadow.status === 'frozen' ? '❄️' : '⚪';
 
-              cliInfo(`     ${statusIcon} ${skillId.padEnd(22)} rev:${String(latestRevision).padStart(3)}  optimized: ${lastOptimized}`);
+              log(`     ${statusIcon} ${skillId.padEnd(22)} rev:${String(latestRevision).padStart(3)}  optimized: ${lastOptimized}`);
             }
 
             journalManager.close();
           }
-        } catch (skillsError) {
-          cliInfo('\n   ⚠️ Skills: Unable to load');
+        } catch (_skillsError) {
+          log('\n   ⚠️  Skills: Unable to load');
         }
 
-        // === Quick Commands ===
-        cliInfo('');
-        cliInfo('   Quick commands:');
-        cliInfo('     ornn start           Start the daemon');
-        cliInfo('     ornn stop            Stop the daemon');
-        cliInfo('     ornn skills status   Detailed skill info');
-        cliInfo('     ornn logs            View logs');
-        cliInfo('');
+        log('');
+        log('   Quick commands:');
+        log('     ornn start           Start the daemon');
+        log('     ornn stop            Stop the daemon');
+        log('     ornn skills status   Detailed skill info');
+        log('     ornn logs            View logs');
+        log('');
       } catch (error) {
         printErrorAndExit(
           error instanceof Error ? error.message : String(error),
