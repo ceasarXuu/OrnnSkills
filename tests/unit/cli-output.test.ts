@@ -1,7 +1,18 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { cliInfo, cliWarn, cliError } from '../../src/utils/cli-output.js';
+import { logger } from '../../src/utils/logger.js';
 
 describe('CLI Output', () => {
+  let loggerSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    loggerSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    loggerSpy.mockRestore();
+  });
+
   it('cliInfo should call console.log', () => {
     const spy = vi.spyOn(console, 'log').mockImplementation(() => {});
     cliInfo('test message');
