@@ -231,6 +231,11 @@ export class Journal {
     if (!this.db) throw new Error('Database not initialized');
 
     this.queueWrite(() => {
+      if (!this.db) {
+        logger.warn(`Skipping trace ${trace.trace_id}: database is closed or not initialized`);
+        return;
+      }
+
       try {
         // Serialize complex fields
         const content =
