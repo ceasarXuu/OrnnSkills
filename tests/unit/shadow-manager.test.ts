@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { mkdirSync, rmSync, existsSync } from 'node:fs';
 import { createShadowManager } from '../../src/core/shadow-manager/index.js';
+import type { Trace } from '../../src/types/index.js';
 
 describe('ShadowManager', () => {
   const testProjectPath = join(tmpdir(), 'ornn-sm-test-' + Date.now());
@@ -15,48 +16,64 @@ describe('ShadowManager', () => {
   });
 
   afterEach(() => {
-    if (existsSync(testProjectPath)) {
-      rmSync(testProjectPath, { recursive: true, force: true });
-    }
+    if (existsSync(testProjectPath)) rmSync(testProjectPath, { recursive: true, force: true });
   });
 
-  it('should initialize without errors', async () => {
-    const manager = createShadowManager(testProjectPath);
-    await expect(manager.init()).resolves.not.toThrow();
+  const makeTrace = (id: string, session: string): Trace => ({
+    trace_id: id,
+    session_id: session,
+    turn_id: 'turn-1',
+    runtime: 'codex',
+    event_type: 'user_input',
+    status: 'success',
+    timestamp: new Date().toISOString(),
   });
 
-  it('should cleanup old traces', async () => {
-    const manager = createShadowManager(testProjectPath);
-    await manager.init();
-    const cleaned = manager.cleanupOldTraces(30);
-    expect(typeof cleaned).toBe('number');
+  describe('init', () => {
+    it('should initialize without errors', async () => {
+      const manager = createShadowManager(testProjectPath);
+      await expect(manager.init()).resolves.not.toThrow();
+    });
   });
 
-  it('should return null for non-existent skill state', async () => {
-    const manager = createShadowManager(testProjectPath);
-    await manager.init();
-    const state = manager.getShadowState('non-existent@' + testProjectPath);
-    expect(state).toBeNull();
+  describe('processTrace', () => {
+    it('should process trace without errors', async () => {
+      const manager = createShadowManager(testProjectPath);
+      await manager.init();
+      await expect(manager.processTrace(makeTrace('t-1', 'sess-1'))).resolves.not.toThrow();
+    });
   });
 
-  it('should close without errors', async () => {
-    const manager = createShadowManager(testProjectPath);
-    await manager.init();
-    expect(() => manager.close()).not.toThrow();
+  describe('triggerOptimize', () => {
+    it('should trigger optimization', async () => {
+      const manager = createShadowManager(testProjectPath);
+      await manager.init();
+      const result = await manager.triggerOptimize('skill-1@' + testProjectPath);
+      expect(result).toBeDefined();
+    });
   });
 
-  it('should process trace without errors', async () => {
-    const manager = createShadowManager(testProjectPath);
-    await manager.init();
-    const trace = {
-      trace_id: 'test-1',
-      session_id: 'sess-1',
-      turn_id: 'turn-1',
-      runtime: 'codex' as const,
-      event_type: 'user_input' as const,
-      status: 'completed' as const,
-      timestamp: new Date().toISOString(),
-    };
-    expect(() => manager.processTrace(trace)).not.toThrow();
+  describe('getShadowState', () => {
+    it('should return null for non-existent shadow', async () => {
+      const manager = createShadowManager(testProjectPath);
+      await manager.init();
+      expect(manager.getShadowState('non-existent@' + testProjectPath)).toBeNull();
+    });
+  });
+
+  describe('cleanupOldTraces', () => {
+    it('should return 0', async () => {
+      const manager = createShadowManager(testProjectPath);
+      await manager.init();
+      expect(manager.cleanupOldTraces(30)).toBe(0);
+    });
+  });
+
+  describe('close', () => {
+    it('should close without errors', async () => {
+      const manager = createShadowManager(testProjectPath);
+      await manager.init();
+      expect(() => manager.close()).not.toThrow();
+    });
   });
 });
