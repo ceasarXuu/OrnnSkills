@@ -1,4 +1,5 @@
 import { createChildLogger } from '../../utils/logger.js';
+import { withTimeoutSync } from '../../utils/timeout.js';
 import { configManager } from '../../config/index.js';
 import { BaseStrategy } from './base-strategy.js';
 import { AddFallbackStrategy } from './strategies/add-fallback.js';
@@ -145,10 +146,11 @@ export class PatchGenerator {
     logger.debug(`Generating patch with strategy: ${strategy.getName()}`);
 
     try {
-      // 使用超时控制执行策略
-      const result = await this.executeWithTimeout(
+      // 使用共享超时控制执行策略
+      const result = await withTimeoutSync(
         () => strategy.generate(currentContent, context),
-        strategyConfig?.timeout ?? 5000
+        strategyConfig?.timeout ?? 5000,
+        `Strategy ${strategy.getName()}`
       );
 
       if (result.success) {
@@ -174,26 +176,6 @@ export class PatchGenerator {
         error: `Strategy execution failed: ${error instanceof Error ? error.message : String(error)}`,
       };
     }
-  }
-
-  /**
-   * 带超时控制的执行
-   */
-  private async executeWithTimeout<T>(fn: () => T, timeoutMs: number): Promise<T> {
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        reject(new Error(`Strategy execution timed out after ${timeoutMs}ms`));
-      }, timeoutMs);
-
-      try {
-        const result = fn();
-        clearTimeout(timer);
-        resolve(result);
-      } catch (error) {
-        clearTimeout(timer);
-        reject(error instanceof Error ? error : new Error(String(error)));
-      }
-    });
   }
 
   /**

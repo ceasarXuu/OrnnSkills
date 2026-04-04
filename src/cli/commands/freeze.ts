@@ -1,9 +1,10 @@
 import { Command } from 'commander';
-import { cliInfo, cliError } from '../../utils/cli-output.js';
-import { join } from 'node:path';
-import { existsSync } from 'node:fs';
+import { cliInfo } from '../../utils/cli-output.js';
 import { createShadowRegistry } from '../../core/shadow-registry/index.js';
-import { validateSkillId, validateProjectPath } from '../../utils/path.js';
+import { validateSkillId } from '../../utils/path.js';
+import { printErrorAndExit } from '../../utils/error-helper.js';
+import { validateProjectRootOrExit } from '../../utils/cli-setup.js';
+import { confirmAction, printSuccess } from '../../utils/cli-formatters.js';
 import {
   selectMultipleSkillsInteractively,
   showDryRunPreview,
@@ -18,9 +19,10 @@ interface FreezeOptions {
   interactive?: boolean;
 }
 
+// ─── Freeze ──────────────────────────────────────────────────────────────────
+
 /**
- * Freeze 命令
- * 暂停某个 skill 的自动优化
+ * Freeze 命令 — 暂停某个 skill 的自动优化
  */
 export function createFreezeCommand(): Command {
   const freeze = new Command('freeze');
@@ -34,23 +36,7 @@ export function createFreezeCommand(): Command {
     .option('-i, --interactive', 'Select skills interactively', false)
     .action(async (skillId: string | undefined, options: FreezeOptions) => {
       try {
-        // 验证项目路径安全性
-        let projectRoot: string;
-        try {
-          projectRoot = validateProjectPath(options.project);
-        } catch (error) {
-          cliError(`Error: ${error instanceof Error ? error.message : String(error)}`);
-          process.exit(1);
-        }
-
-        // 检查 .ornn 目录是否存在
-        const ornnDir = join(projectRoot, '.ornn');
-        if (!existsSync(ornnDir)) {
-          cliError('Error: .ornn directory not found. Run "ornn init" first.');
-          process.exit(1);
-        }
-
-        // 初始化组件
+        const projectRoot = validateProjectRootOrExit(options.project, 'freeze');
         const shadowRegistry = createShadowRegistry(projectRoot);
         shadowRegistry.init();
 
@@ -62,7 +48,7 @@ export function createFreezeCommand(): Command {
           return;
         }
 
-        // 处理交互式模式
+        // ── 交互式多选 ──────────────────────────────────────────────────────
         if (options.interactive && !skillId) {
           const skillInfos: SkillInfo[] = shadows.map((s) => ({
             skillId: s.skill_id || s.skillId,
@@ -74,7 +60,7 @@ export function createFreezeCommand(): Command {
 
           const selectedSkills = await selectMultipleSkillsInteractively(
             skillInfos,
-            'Select skills to freeze (use space to select, enter to confirm):'
+            'Select skills to freeze (space to select, enter to confirm):'
           );
 
           if (selectedSkills.length === 0) {
@@ -83,23 +69,11 @@ export function createFreezeCommand(): Command {
             return;
           }
 
-          // 更新 skillId 为选中的技能
-          if (selectedSkills.length === 1) {
-            skillId = selectedSkills[0];
-          } else {
-            // 批量处理选中的技能
-            await freezeMultipleSkills(
-              selectedSkills,
-              shadows,
-              projectRoot,
-              shadowRegistry,
-              options
-            );
-            return;
-          }
+          await freezeSkillList(selectedSkills, shadows, projectRoot, shadowRegistry, options);
+          return;
         }
 
-        // 如果没有指定 skill，显示帮助
+        // ── 无参数：显示帮助 ────────────────────────────────────────────────
         if (!skillId) {
           cliInfo('Usage: ornn skills freeze <skill-id> [--all] [--interactive]');
           cliInfo('\nAvailable skills:');
@@ -107,230 +81,134 @@ export function createFreezeCommand(): Command {
             const sid = shadow.skill_id || shadow.skillId;
             cliInfo(`  - ${sid} [${shadow.status}]`);
           });
-          cliInfo('\nUse --interactive to select skills interactively.');
+          cliInfo('\nTip: use --interactive to select skills visually.');
           shadowRegistry.close();
           return;
         }
 
-        // 处理 --all 选项
+        // ── --all ───────────────────────────────────────────────────────────
         if (skillId === 'all' || options.all) {
-          const skillsToFreeze = shadows.filter((s) => s.status !== 'frozen');
+          const toFreeze = shadows.filter((s) => s.status !== 'frozen');
 
-          if (skillsToFreeze.length === 0) {
+          if (toFreeze.length === 0) {
             cliInfo('All skills are already frozen.');
             shadowRegistry.close();
             return;
           }
 
-          // Dry run 预览
           if (options.dryRun) {
-            const preview = skillsToFreeze.map((shadow) => ({
-              id: shadow.skill_id || shadow.skillId,
-              currentState: shadow.status as string,
-              newState: 'frozen',
-            }));
-            showDryRunPreview('Freeze Skills', preview);
+            showDryRunPreview(
+              'Freeze Skills',
+              toFreeze.map((s) => ({
+                id: s.skill_id || s.skillId,
+                currentState: s.status as string,
+                newState: 'frozen',
+              }))
+            );
             shadowRegistry.close();
             return;
           }
 
-          // 用户确认
           if (!options.force) {
-            const inquirer = await import('inquirer').then((m) => m.default || m);
-            cliInfo(`\n⚠️  Warning: This will freeze ${skillsToFreeze.length} shadow skill(s)`);
-            cliInfo('   Frozen skills will not receive automatic optimizations.');
-            cliInfo('');
-
-            const { confirmed } = await inquirer.prompt<{ confirmed: boolean }>([
-              {
-                type: 'confirm',
-                name: 'confirmed',
-                message: `Are you sure you want to freeze all skills?`,
-                default: false,
-              },
-            ]);
-
-            if (!confirmed) {
+            const ok = await confirmAction({
+              message: `Freeze all ${toFreeze.length} skill(s)?`,
+              warningLines: [
+                `⚠️  This will freeze ${toFreeze.length} shadow skill(s).`,
+                '   Frozen skills will not receive automatic optimizations.',
+              ],
+            });
+            if (!ok) {
               cliInfo('Freeze cancelled.');
               shadowRegistry.close();
               return;
             }
           }
 
-          let frozenCount = 0;
-          for (const shadow of skillsToFreeze) {
+          let count = 0;
+          for (const shadow of toFreeze) {
             const sid = shadow.skill_id || shadow.skillId;
-            const shadowId = `${sid}@${projectRoot}`;
-            shadowRegistry.updateStatus(shadowId, 'frozen');
-            frozenCount++;
+            shadowRegistry.updateStatus(`${sid}@${projectRoot}`, 'frozen');
+            count++;
           }
 
-          cliInfo(`✅ Successfully froze ${frozenCount} shadow skill(s)`);
-          cliInfo('\nTo unfreeze all, use:');
-          cliInfo(`  ornn skills unfreeze all`);
+          printSuccess(`Successfully froze ${count} shadow skill(s)`, [
+            'To unfreeze all:',
+            '  ornn skills unfreeze all',
+          ]);
           shadowRegistry.close();
           return;
         }
 
-        // 单个 skill 操作
-        // 验证 skill ID 格式
+        // ── 单个 skill ──────────────────────────────────────────────────────
         if (!validateSkillId(skillId)) {
-          cliError(
-            `Error: Invalid skill ID "${skillId}". Skill IDs can only contain letters, numbers, hyphens, underscores, and dots.`
+          printErrorAndExit(
+            `Invalid skill ID "${skillId}". Skill IDs can only contain letters, numbers, hyphens, underscores, and dots.`,
+            { operation: 'Freeze skill', skillId, projectPath: projectRoot },
+            'INVALID_SKILL_ID'
           );
-          process.exit(1);
         }
 
-        // 检查 shadow 是否存在
         const shadow = shadowRegistry.get(skillId);
         if (!shadow) {
-          cliError(`Error: Shadow skill "${skillId}" not found`);
-          cliInfo('\nAvailable skills:');
-          shadows.forEach((s) => {
-            cliInfo(`  - ${s.skill_id || s.skillId} [${s.status}]`);
-          });
-          process.exit(1);
+          printErrorAndExit(
+            `Shadow skill "${skillId}" not found`,
+            { operation: 'Freeze skill', skillId, projectPath: projectRoot },
+            'SKILL_NOT_FOUND'
+          );
         }
 
-        // 检查是否已经是 frozen
         if (shadow.status === 'frozen') {
           cliInfo(`Skill "${skillId}" is already frozen.`);
           shadowRegistry.close();
           return;
         }
 
-        // Dry run 预览
         if (options.dryRun) {
           showDryRunPreview('Freeze Skill', [
-            {
-              id: skillId,
-              currentState: shadow.status,
-              newState: 'frozen',
-            },
+            { id: skillId, currentState: shadow.status, newState: 'frozen' },
           ]);
           shadowRegistry.close();
           return;
         }
 
-        // 用户确认
         if (!options.force) {
-          const inquirer = await import('inquirer').then((m) => m.default || m);
-          cliInfo(`\n⚠️  Warning: This will freeze "${skillId}"`);
-          cliInfo('   Frozen skills will not receive automatic optimizations.');
-          cliInfo('');
-
-          const { confirmed } = await inquirer.prompt<{ confirmed: boolean }>([
-            {
-              type: 'confirm',
-              name: 'confirmed',
-              message: `Are you sure you want to proceed?`,
-              default: false,
-            },
-          ]);
-
-          if (!confirmed) {
+          const ok = await confirmAction({
+            message: `Freeze "${skillId}"?`,
+            warningLines: [
+              `⚠️  This will freeze "${skillId}".`,
+              '   Frozen skills will not receive automatic optimizations.',
+            ],
+          });
+          if (!ok) {
             cliInfo('Freeze cancelled.');
             shadowRegistry.close();
             return;
           }
         }
 
-        // 更新状态为 frozen
-        const shadowId = `${skillId}@${projectRoot}`;
-        shadowRegistry.updateStatus(shadowId, 'frozen');
+        shadowRegistry.updateStatus(`${skillId}@${projectRoot}`, 'frozen');
 
-        cliInfo(`✅ Shadow skill "${skillId}" has been frozen`);
-        cliInfo('Automatic optimization is now paused for this skill');
-        cliInfo('\nTo unfreeze, use:');
-        cliInfo(`  ornn skills unfreeze ${skillId}`);
+        printSuccess(`Shadow skill "${skillId}" has been frozen`, [
+          'Automatic optimization is now paused.',
+          `To unfreeze: ornn skills unfreeze ${skillId}`,
+        ]);
 
-        // 关闭
         shadowRegistry.close();
       } catch (error) {
-        cliError(`Error: ${error instanceof Error ? error.message : String(error)}`);
-        process.exit(1);
+        printErrorAndExit(
+          error instanceof Error ? error.message : String(error),
+          { operation: 'Freeze skill', projectPath: options.project }
+        );
       }
     });
 
   return freeze;
 }
 
-/**
- * 批量冻结技能
- */
-async function freezeMultipleSkills(
-  skillIds: string[],
-  shadows: Array<{ skill_id?: string; skillId?: string; status?: string }>,
-  projectRoot: string,
-  shadowRegistry: ReturnType<typeof createShadowRegistry>,
-  options: FreezeOptions
-): Promise<void> {
-  // 过滤出需要冻结的技能
-  const skillsToFreeze = skillIds.filter((id) => {
-    const shadow = shadows.find((s) => (s.skill_id || s.skillId) === id);
-    return shadow && shadow.status !== 'frozen';
-  });
-
-  if (skillsToFreeze.length === 0) {
-    cliInfo('All selected skills are already frozen.');
-    shadowRegistry.close();
-    return;
-  }
-
-  // Dry run 预览
-  if (options.dryRun) {
-    const preview = skillsToFreeze.map((id) => {
-      const shadow = shadows.find((s) => (s.skill_id || s.skillId) === id);
-      return {
-        id,
-        currentState: (shadow?.status as string) || 'unknown',
-        newState: 'frozen',
-      };
-    });
-    showDryRunPreview('Freeze Skills', preview);
-    shadowRegistry.close();
-    return;
-  }
-
-  // 用户确认
-  if (!options.force) {
-    const inquirer = await import('inquirer').then((m) => m.default || m);
-    cliInfo(`\n⚠️  Warning: This will freeze ${skillsToFreeze.length} shadow skill(s)`);
-    cliInfo('   Frozen skills will not receive automatic optimizations.');
-    cliInfo('');
-
-    const { confirmed } = await inquirer.prompt<{ confirmed: boolean }>([
-      {
-        type: 'confirm',
-        name: 'confirmed',
-        message: `Are you sure you want to freeze these skills?`,
-        default: false,
-      },
-    ]);
-
-    if (!confirmed) {
-      cliInfo('Freeze cancelled.');
-      shadowRegistry.close();
-      return;
-    }
-  }
-
-  let frozenCount = 0;
-  for (const id of skillsToFreeze) {
-    const shadowId = `${id}@${projectRoot}`;
-    shadowRegistry.updateStatus(shadowId, 'frozen');
-    frozenCount++;
-  }
-
-  cliInfo(`✅ Successfully froze ${frozenCount} shadow skill(s)`);
-  cliInfo('\nTo unfreeze, use:');
-  cliInfo(`  ornn skills unfreeze <skill-id>`);
-  shadowRegistry.close();
-}
+// ─── Unfreeze ─────────────────────────────────────────────────────────────────
 
 /**
- * Unfreeze 命令
- * 恢复某个 skill 的自动优化
+ * Unfreeze 命令 — 恢复某个 skill 的自动优化
  */
 export function createUnfreezeCommand(): Command {
   const unfreeze = new Command('unfreeze');
@@ -344,23 +222,7 @@ export function createUnfreezeCommand(): Command {
     .option('-i, --interactive', 'Select skills interactively', false)
     .action(async (skillId: string | undefined, options: FreezeOptions) => {
       try {
-        // 验证项目路径安全性
-        let projectRoot: string;
-        try {
-          projectRoot = validateProjectPath(options.project);
-        } catch (error) {
-          cliError(`Error: ${error instanceof Error ? error.message : String(error)}`);
-          process.exit(1);
-        }
-
-        // 检查 .ornn 目录是否存在
-        const ornnDir = join(projectRoot, '.ornn');
-        if (!existsSync(ornnDir)) {
-          cliError('Error: .ornn directory not found. Run "ornn init" first.');
-          process.exit(1);
-        }
-
-        // 初始化组件
+        const projectRoot = validateProjectRootOrExit(options.project, 'unfreeze');
         const shadowRegistry = createShadowRegistry(projectRoot);
         shadowRegistry.init();
 
@@ -372,7 +234,7 @@ export function createUnfreezeCommand(): Command {
           return;
         }
 
-        // 处理交互式模式
+        // ── 交互式多选（仅显示冻结的 skills）──────────────────────────────
         if (options.interactive && !skillId) {
           const frozenSkills = shadows.filter((s) => s.status === 'frozen');
 
@@ -392,7 +254,7 @@ export function createUnfreezeCommand(): Command {
 
           const selectedSkills = await selectMultipleSkillsInteractively(
             skillInfos,
-            'Select skills to unfreeze (use space to select, enter to confirm):'
+            'Select skills to unfreeze (space to select, enter to confirm):'
           );
 
           if (selectedSkills.length === 0) {
@@ -401,223 +263,234 @@ export function createUnfreezeCommand(): Command {
             return;
           }
 
-          // 批量处理选中的技能
-          await unfreezeMultipleSkills(
-            selectedSkills,
-            shadows,
-            projectRoot,
-            shadowRegistry,
-            options
-          );
+          await unfreezeSkillList(selectedSkills, projectRoot, shadowRegistry, options);
           return;
         }
 
-        // 如果没有指定 skill，显示帮助
+        // ── 无参数：显示帮助 ────────────────────────────────────────────────
         if (!skillId) {
           cliInfo('Usage: ornn skills unfreeze <skill-id> [--all] [--interactive]');
-          cliInfo('\nFrozen skills:');
           const frozenSkills = shadows.filter((s) => s.status === 'frozen');
+          cliInfo('\nFrozen skills:');
           if (frozenSkills.length === 0) {
             cliInfo('  (none)');
           } else {
-            frozenSkills.forEach((shadow) => {
-              const sid = shadow.skill_id || shadow.skillId;
-              cliInfo(`  - ${sid}`);
-            });
+            frozenSkills.forEach((s) => cliInfo(`  - ${s.skill_id || s.skillId}`));
           }
-          cliInfo('\nUse --interactive to select skills interactively.');
+          cliInfo('\nTip: use --interactive to select skills visually.');
           shadowRegistry.close();
           return;
         }
 
-        // 处理 --all 选项
+        // ── --all ───────────────────────────────────────────────────────────
         if (skillId === 'all' || options.all) {
-          const skillsToUnfreeze = shadows.filter((s) => s.status === 'frozen');
+          const toUnfreeze = shadows.filter((s) => s.status === 'frozen');
 
-          if (skillsToUnfreeze.length === 0) {
+          if (toUnfreeze.length === 0) {
             cliInfo('No frozen skills to unfreeze.');
             shadowRegistry.close();
             return;
           }
 
-          // Dry run 预览
           if (options.dryRun) {
-            const preview = skillsToUnfreeze.map((shadow) => ({
-              id: shadow.skill_id || shadow.skillId,
-              currentState: shadow.status as string,
-              newState: 'active',
-            }));
-            showDryRunPreview('Unfreeze Skills', preview);
+            showDryRunPreview(
+              'Unfreeze Skills',
+              toUnfreeze.map((s) => ({
+                id: s.skill_id || s.skillId,
+                currentState: s.status as string,
+                newState: 'active',
+              }))
+            );
             shadowRegistry.close();
             return;
           }
 
-          // 用户确认
           if (!options.force) {
-            const inquirer = await import('inquirer').then((m) => m.default || m);
-            cliInfo(`\n⚠️  Warning: This will unfreeze ${skillsToUnfreeze.length} shadow skill(s)`);
-            cliInfo('   Unfrozen skills will resume receiving automatic optimizations.');
-            cliInfo('');
-
-            const { confirmed } = await inquirer.prompt<{ confirmed: boolean }>([
-              {
-                type: 'confirm',
-                name: 'confirmed',
-                message: `Are you sure you want to unfreeze all skills?`,
-                default: false,
-              },
-            ]);
-
-            if (!confirmed) {
+            const ok = await confirmAction({
+              message: `Unfreeze all ${toUnfreeze.length} skill(s)?`,
+              warningLines: [
+                `⚠️  This will unfreeze ${toUnfreeze.length} shadow skill(s).`,
+                '   Automatic optimization will resume for these skills.',
+              ],
+            });
+            if (!ok) {
               cliInfo('Unfreeze cancelled.');
               shadowRegistry.close();
               return;
             }
           }
 
-          let unfrozenCount = 0;
-          for (const shadow of skillsToUnfreeze) {
+          let count = 0;
+          for (const shadow of toUnfreeze) {
             const sid = shadow.skill_id || shadow.skillId;
-            const shadowId = `${sid}@${projectRoot}`;
-            shadowRegistry.updateStatus(shadowId, 'active');
-            unfrozenCount++;
+            shadowRegistry.updateStatus(`${sid}@${projectRoot}`, 'active');
+            count++;
           }
 
-          cliInfo(`✅ Successfully unfroze ${unfrozenCount} shadow skill(s)`);
-          cliInfo('\nAutomatic optimization has been resumed for all skills.');
+          printSuccess(`Successfully unfroze ${count} shadow skill(s)`, [
+            'Automatic optimization has been resumed.',
+          ]);
           shadowRegistry.close();
           return;
         }
 
-        // 单个 skill 操作
-        // 验证 skill ID 格式
+        // ── 单个 skill ──────────────────────────────────────────────────────
         if (!validateSkillId(skillId)) {
-          cliError(
-            `Error: Invalid skill ID "${skillId}". Skill IDs can only contain letters, numbers, hyphens, underscores, and dots.`
+          printErrorAndExit(
+            `Invalid skill ID "${skillId}". Skill IDs can only contain letters, numbers, hyphens, underscores, and dots.`,
+            { operation: 'Unfreeze skill', skillId, projectPath: projectRoot },
+            'INVALID_SKILL_ID'
           );
-          process.exit(1);
         }
 
-        // 检查 shadow 是否存在
         const shadow = shadowRegistry.get(skillId);
         if (!shadow) {
-          cliError(`Error: Shadow skill "${skillId}" not found`);
-          process.exit(1);
+          printErrorAndExit(
+            `Shadow skill "${skillId}" not found`,
+            { operation: 'Unfreeze skill', skillId, projectPath: projectRoot },
+            'SKILL_NOT_FOUND'
+          );
         }
 
-        // 检查是否已经是 active
         if (shadow.status === 'active') {
-          cliInfo(`Skill "${skillId}" is already active.`);
+          cliInfo(`Skill "${skillId}" is already active (not frozen).`);
           shadowRegistry.close();
           return;
         }
 
-        // Dry run 预览
         if (options.dryRun) {
           showDryRunPreview('Unfreeze Skill', [
-            {
-              id: skillId,
-              currentState: shadow.status,
-              newState: 'active',
-            },
+            { id: skillId, currentState: shadow.status, newState: 'active' },
           ]);
           shadowRegistry.close();
           return;
         }
 
-        // 用户确认
         if (!options.force) {
-          const inquirer = await import('inquirer').then((m) => m.default || m);
-          cliInfo(`\n⚠️  Warning: This will unfreeze "${skillId}"`);
-          cliInfo('   Automatic optimization will resume for this skill.');
-          cliInfo('');
-
-          const { confirmed } = await inquirer.prompt<{ confirmed: boolean }>([
-            {
-              type: 'confirm',
-              name: 'confirmed',
-              message: `Are you sure you want to proceed?`,
-              default: false,
-            },
-          ]);
-
-          if (!confirmed) {
+          const ok = await confirmAction({
+            message: `Unfreeze "${skillId}"?`,
+            warningLines: [
+              `⚠️  This will unfreeze "${skillId}".`,
+              '   Automatic optimization will resume for this skill.',
+            ],
+          });
+          if (!ok) {
             cliInfo('Unfreeze cancelled.');
             shadowRegistry.close();
             return;
           }
         }
 
-        // 更新状态为 active
-        const shadowId = `${skillId}@${projectRoot}`;
-        shadowRegistry.updateStatus(shadowId, 'active');
+        shadowRegistry.updateStatus(`${skillId}@${projectRoot}`, 'active');
 
-        cliInfo(`✅ Shadow skill "${skillId}" has been unfrozen`);
-        cliInfo('Automatic optimization is now resumed for this skill');
+        printSuccess(`Shadow skill "${skillId}" has been unfrozen`, [
+          'Automatic optimization has resumed.',
+          `To freeze again: ornn skills freeze ${skillId}`,
+        ]);
 
-        // 关闭
         shadowRegistry.close();
       } catch (error) {
-        cliError(`Error: ${error instanceof Error ? error.message : String(error)}`);
-        process.exit(1);
+        printErrorAndExit(
+          error instanceof Error ? error.message : String(error),
+          { operation: 'Unfreeze skill', projectPath: options.project }
+        );
       }
     });
 
   return unfreeze;
 }
 
-/**
- * 批量解冻技能
- */
-async function unfreezeMultipleSkills(
+// ─── Batch helpers ────────────────────────────────────────────────────────────
+
+async function freezeSkillList(
   skillIds: string[],
-  _shadows: Array<{ skill_id?: string; skillId?: string; status?: string }>,
+  shadows: Array<{ skill_id?: string; skillId?: string; status?: string }>,
   projectRoot: string,
   shadowRegistry: ReturnType<typeof createShadowRegistry>,
   options: FreezeOptions
 ): Promise<void> {
-  // Dry run 预览
-  if (options.dryRun) {
-    const preview = skillIds.map((id) => ({
-      id,
-      currentState: 'frozen',
-      newState: 'active',
-    }));
-    showDryRunPreview('Unfreeze Skills', preview);
+  const toFreeze = skillIds.filter((id) => {
+    const shadow = shadows.find((s) => (s.skill_id || s.skillId) === id);
+    return shadow && shadow.status !== 'frozen';
+  });
+
+  if (toFreeze.length === 0) {
+    cliInfo('All selected skills are already frozen.');
     shadowRegistry.close();
     return;
   }
 
-  // 用户确认
+  if (options.dryRun) {
+    showDryRunPreview(
+      'Freeze Skills',
+      toFreeze.map((id) => {
+        const shadow = shadows.find((s) => (s.skill_id || s.skillId) === id);
+        return { id, currentState: (shadow?.status as string) || 'unknown', newState: 'frozen' };
+      })
+    );
+    shadowRegistry.close();
+    return;
+  }
+
   if (!options.force) {
-    const inquirer = await import('inquirer').then((m) => m.default || m);
-    cliInfo(`\n⚠️  Warning: This will unfreeze ${skillIds.length} shadow skill(s)`);
-    cliInfo('   Unfrozen skills will resume receiving automatic optimizations.');
-    cliInfo('');
+    const ok = await confirmAction({
+      message: `Freeze ${toFreeze.length} selected skill(s)?`,
+      warningLines: [
+        `⚠️  This will freeze ${toFreeze.length} shadow skill(s).`,
+        '   Frozen skills will not receive automatic optimizations.',
+      ],
+    });
+    if (!ok) {
+      cliInfo('Freeze cancelled.');
+      shadowRegistry.close();
+      return;
+    }
+  }
 
-    const { confirmed } = await inquirer.prompt<{ confirmed: boolean }>([
-      {
-        type: 'confirm',
-        name: 'confirmed',
-        message: `Are you sure you want to unfreeze these skills?`,
-        default: false,
-      },
-    ]);
+  for (const id of toFreeze) {
+    shadowRegistry.updateStatus(`${id}@${projectRoot}`, 'frozen');
+  }
 
-    if (!confirmed) {
+  printSuccess(`Successfully froze ${toFreeze.length} shadow skill(s)`, [
+    'To unfreeze: ornn skills unfreeze <skill-id>',
+  ]);
+  shadowRegistry.close();
+}
+
+async function unfreezeSkillList(
+  skillIds: string[],
+  projectRoot: string,
+  shadowRegistry: ReturnType<typeof createShadowRegistry>,
+  options: FreezeOptions
+): Promise<void> {
+  if (options.dryRun) {
+    showDryRunPreview(
+      'Unfreeze Skills',
+      skillIds.map((id) => ({ id, currentState: 'frozen', newState: 'active' }))
+    );
+    shadowRegistry.close();
+    return;
+  }
+
+  if (!options.force) {
+    const ok = await confirmAction({
+      message: `Unfreeze ${skillIds.length} selected skill(s)?`,
+      warningLines: [
+        `⚠️  This will unfreeze ${skillIds.length} shadow skill(s).`,
+        '   Automatic optimization will resume for these skills.',
+      ],
+    });
+    if (!ok) {
       cliInfo('Unfreeze cancelled.');
       shadowRegistry.close();
       return;
     }
   }
 
-  let unfrozenCount = 0;
   for (const id of skillIds) {
-    const shadowId = `${id}@${projectRoot}`;
-    shadowRegistry.updateStatus(shadowId, 'active');
-    unfrozenCount++;
+    shadowRegistry.updateStatus(`${id}@${projectRoot}`, 'active');
   }
 
-  cliInfo(`✅ Successfully unfroze ${unfrozenCount} shadow skill(s)`);
+  printSuccess(`Successfully unfroze ${skillIds.length} shadow skill(s)`);
   shadowRegistry.close();
 }

@@ -1,11 +1,9 @@
 import { Command } from 'commander';
 import { cliInfo } from '../../utils/cli-output.js';
-import { join } from 'node:path';
-import { existsSync } from 'node:fs';
-import { createShadowRegistry } from '../../core/shadow-registry/index.js';
-import { createJournalManager } from '../../core/journal/index.js';
-import { validateSkillId, validateProjectPath } from '../../utils/path.js';
+import { validateSkillId } from '../../utils/path.js';
 import { printErrorAndExit } from '../../utils/error-helper.js';
+import { initProjectComponents } from '../../utils/cli-setup.js';
+import { confirmAction, formatRevision } from '../../utils/cli-formatters.js';
 
 interface RollbackOptions {
   project: string;
@@ -15,30 +13,19 @@ interface RollbackOptions {
   force?: boolean;
 }
 
-/**
- * 验证 revision 号
- */
-function validateRevision(input: string): number {
+function parseRevision(input: string): number {
   const revision = parseInt(input, 10);
-
-  if (isNaN(revision)) {
-    throw new Error('Invalid revision number. Must be a valid integer.');
+  if (isNaN(revision) || revision < 0) {
+    throw new Error(`Invalid revision "${input}". Must be a non-negative integer.`);
   }
-
-  if (revision < 0) {
-    throw new Error('Invalid revision number. Must be a non-negative integer.');
-  }
-
   if (revision > Number.MAX_SAFE_INTEGER) {
-    throw new Error('Invalid revision number. Exceeds maximum safe integer.');
+    throw new Error(`Revision "${input}" exceeds maximum safe integer.`);
   }
-
   return revision;
 }
 
 /**
- * Rollback 命令
- * 回滚 shadow skill 到指定版本
+ * Rollback 命令 — 回滚 shadow skill 到指定版本
  */
 export function createRollbackCommand(): Command {
   const rollback = new Command('rollback');
@@ -53,46 +40,18 @@ export function createRollbackCommand(): Command {
     .option('-f, --force', 'Skip confirmation prompt', false)
     .alias('revert')
     .action(async (skillId: string, options: RollbackOptions) => {
+      if (!validateSkillId(skillId)) {
+        printErrorAndExit(
+          `Invalid skill ID "${skillId}".`,
+          { operation: 'Rollback skill', skillId, projectPath: options.project },
+          'INVALID_SKILL_ID'
+        );
+      }
+
+      const { shadowRegistry, journalManager, projectRoot, close } =
+        await initProjectComponents(options.project, 'rollback');
+
       try {
-        // 验证 skill ID 格式
-        if (!validateSkillId(skillId)) {
-          printErrorAndExit(
-            `Invalid skill ID "${skillId}". Skill IDs can only contain letters, numbers, hyphens, underscores, and dots.`,
-            { operation: 'Validate skill ID', skillId, projectPath: options.project },
-            'INVALID_SKILL_ID'
-          );
-        }
-
-        // 验证项目路径安全性
-        let projectRoot: string;
-        try {
-          projectRoot = validateProjectPath(options.project);
-        } catch (error) {
-          printErrorAndExit(
-            error instanceof Error ? error.message : String(error),
-            { operation: 'Validate project path', projectPath: options.project },
-            'PATH_TRAVERSAL'
-          );
-        }
-
-        // 检查 .ornn 目录是否存在
-        const ornnDir = join(projectRoot, '.ornn');
-        if (!existsSync(ornnDir)) {
-          printErrorAndExit(
-            '.ornn directory not found',
-            { operation: 'Check project initialization', projectPath: projectRoot },
-            'PROJECT_NOT_INITIALIZED'
-          );
-        }
-
-        // 初始化组件
-        const shadowRegistry = createShadowRegistry(projectRoot);
-        const journalManager = createJournalManager(projectRoot);
-
-        shadowRegistry.init();
-        await journalManager.init();
-
-        // 检查 shadow 是否存在
         const shadow = shadowRegistry.get(skillId);
         if (!shadow) {
           printErrorAndExit(
@@ -104,104 +63,82 @@ export function createRollbackCommand(): Command {
 
         const shadowId = `${skillId}@${projectRoot}`;
 
-        // 确定回滚目标
+        // ── 确定回滚目标 ────────────────────────────────────────────────────
         let targetRevision: number | undefined;
         let rollbackDescription = '';
 
         if (options.initial) {
           targetRevision = 0;
-          rollbackDescription = 'initial version';
+          rollbackDescription = `initial version (${formatRevision(0)})`;
         } else if (options.snapshot) {
           const snapshots = journalManager.getSnapshots(shadowId);
-          if (snapshots.length > 0) {
-            const latestSnapshot = snapshots[snapshots.length - 1];
-            targetRevision = latestSnapshot.revision;
-            rollbackDescription = `snapshot at rev_${String(targetRevision).padStart(4, '0')}`;
-          } else {
-            cliInfo(`No snapshots found for "${skillId}"`);
-            shadowRegistry.close();
-            await journalManager.close();
+          if (snapshots.length === 0) {
+            cliInfo(`No snapshots found for "${skillId}".`);
+            cliInfo(`\nTip: run "ornn skills log ${skillId}" to see available revisions.`);
             return;
           }
+          const latest = snapshots[snapshots.length - 1];
+          targetRevision = latest.revision;
+          rollbackDescription = `latest snapshot (${formatRevision(targetRevision)})`;
         } else if (options.to) {
           try {
-            targetRevision = validateRevision(options.to);
+            targetRevision = parseRevision(options.to);
           } catch (error) {
             printErrorAndExit(
               error instanceof Error ? error.message : String(error),
-              { operation: 'Validate revision', skillId, projectPath: projectRoot },
+              { operation: 'Rollback skill', skillId, projectPath: projectRoot },
               'INVALID_REVISION'
             );
           }
-          rollbackDescription = `revision ${targetRevision}`;
+          rollbackDescription = formatRevision(targetRevision);
         } else {
-          // 显示可用的 revisions
-          cliInfo(`Available snapshots for "${skillId}":\n`);
+          // 显示可用选项
+          cliInfo(`\nAvailable rollback targets for "${skillId}":\n`);
           const snapshots = journalManager.getSnapshots(shadowId);
-
           if (snapshots.length === 0) {
-            cliInfo('No snapshots available');
+            cliInfo('  No snapshots available yet.');
           } else {
             for (const snapshot of snapshots) {
-              cliInfo(`  rev_${String(snapshot.revision).padStart(4, '0')} - ${snapshot.timestamp}`);
+              cliInfo(`  ${formatRevision(snapshot.revision)} — ${snapshot.timestamp}`);
             }
           }
-
           cliInfo('\nUsage:');
-          cliInfo(`  ornn skills rollback ${skillId} --to <revision>`);
-          cliInfo(`  ornn skills rollback ${skillId} --snapshot`);
-          cliInfo(`  ornn skills rollback ${skillId} --initial`);
-          shadowRegistry.close();
-          await journalManager.close();
+          cliInfo(`  ornn skills rollback ${skillId} --to <revision>    # specific revision`);
+          cliInfo(`  ornn skills rollback ${skillId} --snapshot          # latest snapshot`);
+          cliInfo(`  ornn skills rollback ${skillId} --initial           # revert to original`);
           return;
         }
 
-        // 用户确认（除非使用 --force）
+        // ── 用户确认 ────────────────────────────────────────────────────────
         if (!options.force) {
-          const inquirer = await import('inquirer').then((m) => m.default || m);
-          cliInfo(`\n⚠️  Warning: This will rollback "${skillId}" to ${rollbackDescription}`);
-          cliInfo('   This action can be reversed by rolling forward again.');
-          cliInfo('');
-
-          const { confirmed } = await inquirer.prompt<{ confirmed: boolean }>([
-            {
-              type: 'confirm',
-              name: 'confirmed',
-              message: `Are you sure you want to proceed?`,
-              default: false,
-            },
-          ]);
-
-          if (!confirmed) {
+          const ok = await confirmAction({
+            message: `Rollback "${skillId}" to ${rollbackDescription}?`,
+            warningLines: [
+              `⚠️  Rolling back "${skillId}" to ${rollbackDescription}.`,
+              '   This can be reversed by rolling forward again.',
+            ],
+          });
+          if (!ok) {
             cliInfo('Rollback cancelled.');
-            shadowRegistry.close();
-            await journalManager.close();
             return;
           }
         }
 
-        // 执行回滚
-        if (options.initial || options.to) {
-          cliInfo(`Rolling back "${skillId}" to ${rollbackDescription}...`);
-          journalManager.rollback(shadowId, targetRevision);
-          cliInfo(`✅ Successfully rolled back to ${rollbackDescription}`);
-        } else if (options.snapshot) {
-          cliInfo(`Rolling back "${skillId}" to ${rollbackDescription}...`);
+        // ── 执行回滚 ────────────────────────────────────────────────────────
+        cliInfo(`\nRolling back "${skillId}" to ${rollbackDescription}...`);
+
+        if (options.snapshot) {
           const snapshots = journalManager.getSnapshots(shadowId);
-          const latestSnapshot = snapshots[snapshots.length - 1];
-          journalManager.rollbackToSnapshot(shadowId, latestSnapshot.file_path);
-          cliInfo(`✅ Successfully rolled back to ${rollbackDescription}`);
+          const latest = snapshots[snapshots.length - 1];
+          journalManager.rollbackToSnapshot(shadowId, latest.file_path);
+        } else {
+          journalManager.rollback(shadowId, targetRevision);
         }
 
-        // 关闭
-        shadowRegistry.close();
-        await journalManager.close();
-      } catch (error) {
-        printErrorAndExit(
-          error instanceof Error ? error.message : String(error),
-          { operation: 'Rollback skill', skillId },
-          undefined
-        );
+        cliInfo(`✅ Successfully rolled back to ${rollbackDescription}`);
+        cliInfo(`\nRun "ornn skills status --skill ${skillId}" to verify.`);
+      } finally {
+        await close();
       }
     });
 

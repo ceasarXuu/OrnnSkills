@@ -1,15 +1,13 @@
 import { createChildLogger } from '../../utils/logger.js';
+import { withTimeout } from '../../utils/timeout.js';
 import { createTraceManager } from '../observer/trace-manager.js';
 import { createTraceSkillMapper } from '../trace-skill-mapper/index.js';
 import { evaluator } from '../evaluator/index.js';
 import { createShadowRegistry } from '../shadow-registry/index.js';
 import type { Trace, EvaluationResult, SkillTracesGroup } from '../../types/index.js';
 
-// Timer 类型
-type Timer = number;
-
-// 声明全局 setInterval
-declare function setInterval(callback: (...args: unknown[]) => void, ms?: number): Timer;
+// Timer 类型（仅用于 startBackgroundLoop 返回值）
+type Timer = ReturnType<typeof setInterval>;
 
 const logger = createChildLogger('pipeline');
 
@@ -104,37 +102,13 @@ export class OptimizationPipeline {
     }
 
     this.state.isRunning = true;
-    this.runningPromise = this.withTimeout(this.doRunOnce(), timeoutMs);
+    this.runningPromise = withTimeout(this.doRunOnce(), timeoutMs, 'Pipeline run');
 
     try {
       return await this.runningPromise;
     } finally {
       this.runningPromise = null;
       this.state.isRunning = false;
-    }
-  }
-
-  /**
-   * 带超时控制的执行
-   */
-  private async withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
-    let timer: ReturnType<typeof setTimeout> | null = null;
-
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => {
-        reject(new Error(`Pipeline run timed out after ${timeoutMs}ms`));
-      }, timeoutMs);
-    });
-
-    try {
-      const result = await Promise.race([promise, timeoutPromise]);
-      return result;
-    } finally {
-      // 确保定时器总是被清理
-      if (timer) {
-        clearTimeout(timer);
-        timer = null;
-      }
     }
   }
 
@@ -252,30 +226,22 @@ export class OptimizationPipeline {
   }
 
   /**
-   * 带超时控制的评估
+   * 带超时控制的评估。
+   * 超时或评估异常时抛出，调用方可在 evaluateSkillGroup 中统一捕获并记录错误。
    */
   private async evaluateWithTimeout(
     traces: Trace[],
     timeoutMs: number
   ): Promise<EvaluationResult | null> {
-    const evaluatePromise = new Promise<EvaluationResult | null>((resolve) => {
+    const evaluatePromise = new Promise<EvaluationResult | null>((resolve, reject) => {
       try {
-        const result = evaluator.evaluate(traces);
-        resolve(result);
+        resolve(evaluator.evaluate(traces));
       } catch (error) {
-        logger.error('Evaluation failed', { error });
-        resolve(null);
+        reject(error instanceof Error ? error : new Error(String(error)));
       }
     });
 
-    const timeoutPromise = new Promise<null>((resolve) => {
-      setTimeout(() => {
-        logger.warn('Evaluation timed out', { timeoutMs });
-        resolve(null);
-      }, timeoutMs);
-    });
-
-    return Promise.race([evaluatePromise, timeoutPromise]);
+    return withTimeout(evaluatePromise, timeoutMs, 'Evaluation');
   }
 
   /**

@@ -49,6 +49,9 @@ export class ShadowRegistry {
   private shadowsDir: string;
   private indexPath: string;
   private index: Map<string, ShadowEntry> = new Map();
+  /** 内容缓存：避免每次 get() 都重新从磁盘读取文件（N+1 读盘）。
+   *  updateContent() / create() 时同步更新缓存，close() 时清理。 */
+  private contentCache: Map<string, string> = new Map();
   private initialized = false;
 
   constructor(options: ShadowRegistryOptions) {
@@ -139,8 +142,9 @@ export class ShadowRegistry {
     const shadowPath = this.getShadowPath(skillId);
     writeFileSync(shadowPath, content, 'utf-8');
 
-    // Update index
+    // Update index and content cache
     this.index.set(skillId, entry);
+    this.contentCache.set(skillId, content);
     this.saveIndex();
 
     logger.info(`Created shadow for skill: ${skillId} (version: ${version})`);
@@ -148,7 +152,8 @@ export class ShadowRegistry {
   }
 
   /**
-   * Get a shadow entry
+   * Get a shadow entry.
+   * Content is served from an in-memory cache to avoid repeated disk reads.
    */
   get(skillId: string): ShadowEntry | undefined {
     this.ensureInitialized();
@@ -156,10 +161,16 @@ export class ShadowRegistry {
     const entry = this.index.get(skillId);
     if (!entry) return undefined;
 
-    // Load latest content from file
-    const shadowPath = this.getShadowPath(skillId);
-    if (existsSync(shadowPath)) {
-      entry.content = readFileSync(shadowPath, 'utf-8');
+    // Serve content from cache; fall back to disk only on first access
+    if (!this.contentCache.has(skillId)) {
+      const shadowPath = this.getShadowPath(skillId);
+      if (existsSync(shadowPath)) {
+        const content = readFileSync(shadowPath, 'utf-8');
+        this.contentCache.set(skillId, content);
+        entry.content = content;
+      }
+    } else {
+      entry.content = this.contentCache.get(skillId)!;
     }
 
     // Add backward compatibility properties
@@ -192,11 +203,12 @@ export class ShadowRegistry {
     const shadowPath = this.getShadowPath(skillId);
     writeFileSync(shadowPath, content, 'utf-8');
 
-    // Update entry
+    // Update entry and content cache
     entry.content = content;
     entry.updatedAt = new Date().toISOString();
 
     this.index.set(skillId, entry);
+    this.contentCache.set(skillId, content);
     this.saveIndex();
 
     logger.debug(`Updated shadow content for skill: ${skillId}`);
@@ -493,10 +505,10 @@ export class ShadowRegistry {
   }
 
   /**
-   * Close registry - backward compatibility
+   * Close registry - clears in-memory caches to free resources.
    */
   close(): void {
-    // Nothing to close for file-based registry
+    this.contentCache.clear();
     logger.debug('Shadow registry closed');
   }
 }

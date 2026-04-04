@@ -108,7 +108,7 @@ export class ClaudeObserver extends BaseObserver {
   }
 
   /**
-   * 停止 observer
+   * 停止 observer，并清理所有跟踪状态以防止内存泄漏。
    */
   async stop(): Promise<void> {
     if (!this.isRunning) {
@@ -121,6 +121,11 @@ export class ClaudeObserver extends BaseObserver {
       await this.watcher.close();
       this.watcher = null;
     }
+
+    // 释放文件跟踪状态，防止 Map 无限增长
+    this.filePositions.clear();
+    this.processedFiles.clear();
+    this.turnCounter.clear();
 
     logger.info('Claude observer stopped');
   }
