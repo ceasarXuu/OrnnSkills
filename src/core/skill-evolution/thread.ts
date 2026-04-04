@@ -82,13 +82,13 @@ export class SkillEvolutionThread {
    */
   start(): void {
     if (this.isRunning) {
-      logger.warn(`Skill evolution thread ${this.state.skillId} already running`);
+      logger.warn('Skill evolution thread already running', { skillId: this.state.skillId });
       return;
     }
 
     this.isRunning = true;
     this.state.status = 'collecting';
-    logger.info(`Started skill evolution thread: ${this.state.skillId}`);
+    logger.info('Skill evolution thread started', { skillId: this.state.skillId });
   }
 
   /**
@@ -101,7 +101,7 @@ export class SkillEvolutionThread {
 
     this.isRunning = false;
     this.state.status = 'idle';
-    logger.info(`Stopped skill evolution thread: ${this.state.skillId}`);
+    logger.info('Skill evolution thread stopped', { skillId: this.state.skillId });
   }
 
   /**
@@ -120,7 +120,11 @@ export class SkillEvolutionThread {
     this.state.queue.push(trace);
     this.state.totalTurnsCollected++;
 
-    logger.debug(`Added trace ${trace.trace_id} to skill ${this.state.skillId}, queue size: ${this.state.queue.length}`);
+    logger.debug('Trace added to queue', {
+      skillId: this.state.skillId,
+      traceId: trace.trace_id,
+      queueSize: this.state.queue.length,
+    });
 
     // Check trigger conditions
     return this.checkTriggers();
@@ -131,11 +135,11 @@ export class SkillEvolutionThread {
    */
   recordInvocation(): TriggerResult {
     this.state.invokeCount++;
-    logger.debug(`Recorded invocation for skill ${this.state.skillId}, total: ${this.state.invokeCount}`);
+    logger.debug('Invocation recorded', { skillId: this.state.skillId, invokeCount: this.state.invokeCount });
 
     // Check if this is a re-invocation (invokeCount > submittedCount)
     if (this.state.invokeCount > this.state.submittedCount) {
-      logger.info(`Re-invocation detected for skill ${this.state.skillId}`);
+      logger.info('Re-invocation detected', { skillId: this.state.skillId });
       return this.trigger('Re-invocation detected');
     }
 
@@ -154,7 +158,11 @@ export class SkillEvolutionThread {
     const uniqueTurns = this.countUniqueTurns();
 
     if (uniqueTurns >= (this.options.turnsThreshold || 10)) {
-      logger.info(`Turn threshold reached for skill ${this.state.skillId}: ${uniqueTurns} turns`);
+      logger.info('Turn threshold reached', {
+        skillId: this.state.skillId,
+        turns: uniqueTurns,
+        threshold: this.options.turnsThreshold,
+      });
       return this.trigger(`Turn threshold reached (${uniqueTurns} turns)`);
     }
 
@@ -193,7 +201,7 @@ export class SkillEvolutionThread {
       try {
         this.options.onTrigger(this.state);
       } catch (error) {
-        logger.error(`Trigger callback failed for skill ${this.state.skillId}:`, error);
+        logger.error('Trigger callback failed', { skillId: this.state.skillId, error });
       }
     }
 
@@ -212,7 +220,7 @@ export class SkillEvolutionThread {
     this.state.queue = []; // Clear the queue
     this.state.status = 'collecting';
     this.state.totalTurnsCollected = 0;
-    logger.info(`Marked as submitted for skill ${this.state.skillId}`);
+    logger.info('Skill queue submitted', { skillId: this.state.skillId });
   }
 
   /**
@@ -220,7 +228,7 @@ export class SkillEvolutionThread {
    */
   incrementVersion(): number {
     this.state.version++;
-    logger.info(`Incremented version for skill ${this.state.skillId} to v${this.state.version}`);
+    logger.info('Skill version incremented', { skillId: this.state.skillId, version: this.state.version });
     return this.state.version;
   }
 

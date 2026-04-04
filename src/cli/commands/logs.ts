@@ -20,6 +20,7 @@ interface LogOptions {
 interface ParsedLogEntry {
   timestamp: string;
   level: string;
+  context: string;
   message: string;
   raw: string;
 }
@@ -44,23 +45,47 @@ function getLogFiles(): string[] {
   return logs;
 }
 
+/**
+ * Parse a single log line in the format:
+ *   [YYYY-MM-DD HH:mm:ss] LEVEL  [context] message | key=val
+ * Also accepts the old format (no context) for backward compatibility.
+ */
 function parseLine(line: string): ParsedLogEntry | null {
   if (!line.trim()) return null;
 
-  const match = line.match(/^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s+(\w+):\s*(.*)$/);
-  if (!match) return null;
+  // New format: [timestamp] LEVEL  [context] message
+  const newFmt = line.match(
+    /^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\] (\w+)\s+\[([^\]]+)\] (.*)/
+  );
+  if (newFmt) {
+    return {
+      timestamp: newFmt[1],
+      level: newFmt[2].toUpperCase(),
+      context: newFmt[3],
+      message: newFmt[4],
+      raw: line,
+    };
+  }
 
-  return {
-    timestamp: match[1],
-    level: match[2].toUpperCase(),
-    message: match[3],
-    raw: line,
-  };
+  // Old / context-less format: [timestamp] LEVEL  message  OR  [timestamp] LEVEL: message
+  const oldFmt = line.match(/^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\] (\w+)[:\s]+\s*(.*)/);
+  if (oldFmt) {
+    return {
+      timestamp: oldFmt[1],
+      level: oldFmt[2].toUpperCase(),
+      context: '',
+      message: oldFmt[3],
+      raw: line,
+    };
+  }
+
+  return null;
 }
 
 interface LogGroup {
   message: string;
   level: string;
+  context: string;
   count: number;
   firstSeen: string;
   lastSeen: string;
@@ -71,7 +96,7 @@ function groupEntries(entries: ParsedLogEntry[], maxGroupSize: number = 20): Log
   const map = new Map<string, LogGroup>();
 
   for (const entry of entries) {
-    const key = `${entry.level}|${entry.message}`;
+    const key = `${entry.level}|${entry.context}|${entry.message}`;
     const existing = map.get(key);
 
     if (existing) {
@@ -81,6 +106,7 @@ function groupEntries(entries: ParsedLogEntry[], maxGroupSize: number = 20): Log
       map.set(key, {
         message: entry.message,
         level: entry.level,
+        context: entry.context,
         count: 1,
         firstSeen: entry.timestamp,
         lastSeen: entry.timestamp,
@@ -98,6 +124,7 @@ function filterAndParse(content: string, options: LogOptions): ParsedLogEntry[] 
   const lines = content.split('\n');
   const maxLines = parseInt(options.tail, 10) || 100;
   const targetLevel = (options.level || 'info').toUpperCase();
+  const skillFilter = options.skill?.toLowerCase();
 
   const levelPriority: Record<string, number> = {
     DEBUG: 0, INFO: 1, WARN: 2, ERROR: 3, FATAL: 4,
@@ -109,6 +136,9 @@ function filterAndParse(content: string, options: LogOptions): ParsedLogEntry[] 
     const entry = parseLine(line);
     if (!entry) continue;
     if ((levelPriority[entry.level] ?? 0) < minPriority) continue;
+    // --skill filters on the full raw line so it catches skill IDs in both
+    // template-interpolated messages and structured metadata (key=skillId).
+    if (skillFilter && !entry.raw.toLowerCase().includes(skillFilter)) continue;
     parsed.push(entry);
   }
 
@@ -254,8 +284,9 @@ export function createLogsCommand(): Command {
             if (options.raw) {
               log('│');
               for (const entry of entries) {
-                const shortMsg = truncateMessage(shortenPath(entry.message), 150);
-                log(`│ ${levelIcon(entry.level)} ${entry.timestamp}  ${shortMsg}`);
+                const ctx = entry.context ? `[${entry.context}] ` : '';
+                const shortMsg = truncateMessage(shortenPath(entry.message), 140);
+                log(`│ ${levelIcon(entry.level)} ${entry.timestamp}  ${ctx}${shortMsg}`);
               }
             } else {
               const groups = groupEntries(entries);
@@ -269,13 +300,14 @@ export function createLogsCommand(): Command {
               let idx = 0;
               for (const group of groups) {
                 idx++;
-                const shortMsg = truncateMessage(shortenPath(group.message), 100);
+                const ctx = group.context ? `[${group.context}] ` : '';
+                const shortMsg = truncateMessage(shortenPath(group.message), 95);
                 const countBadge = group.count > 1 ? `  ×${group.count}` : '';
                 const timeRange = group.firstSeen === group.lastSeen
                   ? formatRelativeTime(group.firstSeen)
                   : `${formatRelativeTime(group.firstSeen)} ~ ${formatRelativeTime(group.lastSeen)}`;
 
-                log(`│  ${idx}. ${levelIcon(group.level)} ${shortMsg}${countBadge}`);
+                log(`│  ${idx}. ${levelIcon(group.level)} ${ctx}${shortMsg}${countBadge}`);
                 log(`│     └─ ${timeRange}`);
 
                 if (group.count === 1 && group.sampleRaw.includes('\n')) {

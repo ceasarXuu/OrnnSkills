@@ -176,7 +176,8 @@ export class SkillDeployer {
     try {
       const targetPath = this.getTargetPath(skillId);
       return existsSync(targetPath);
-    } catch {
+    } catch (error) {
+      logger.debug('Could not check skill existence', { skillId, error });
       return false;
     }
   }

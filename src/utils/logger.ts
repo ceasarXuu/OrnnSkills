@@ -5,48 +5,97 @@ import { homedir } from 'node:os';
 
 const LOG_DIR = join(homedir(), '.ornn', 'logs');
 
+/** Fields added by Winston internals — excluded from metadata output. */
+const SKIP_FIELDS = new Set(['timestamp', 'level', 'message', 'stack', 'context', 'splat', 'service']);
+
 /**
  * 脱敏敏感信息
  */
 function sanitizeMessage(message: string): string {
-  // 脱敏 API 密钥
   let sanitized = message.replace(
     /api[_-]?key['":\s]*['"]?([a-zA-Z0-9]{20,})['"]?/gi,
     'api_key: [REDACTED]'
   );
-
-  // 脱敏令牌
   sanitized = sanitized.replace(
     /token['":\s]*['"]?([a-zA-Z0-9._-]{20,})['"]?/gi,
     'token: [REDACTED]'
   );
-
-  // 脱敏密码
   sanitized = sanitized.replace(/password['":\s]*['"]?([^\s'"]+)['"]?/gi, 'password: [REDACTED]');
-
-  // 脱敏私钥
   sanitized = sanitized.replace(
     /-----BEGIN [A-Z ]+ PRIVATE KEY-----[\s\S]*?-----END [A-Z ]+ PRIVATE KEY-----/g,
     '[PRIVATE_KEY_REDACTED]'
   );
-
-  // 脱敏邮箱
   sanitized = sanitized.replace(
     /([a-zA-Z0-9._%+-]+)@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g,
     '[EMAIL_REDACTED]@$2'
   );
-
-  // 脱敏文件路径中的用户名
   sanitized = sanitized.replace(/\/Users\/([^/]+)\//g, '/Users/[USER]/');
   sanitized = sanitized.replace(/\/home\/([^/]+)\//g, '/home/[USER]/');
-
   return sanitized;
 }
 
 /**
- * 自定义日志格式（带脱敏）
+ * 将 metadata 值序列化为可读字符串.
+ * Error 对象显示 .message；对象显示 JSON；其余 String().
+ */
+function formatMetaValue(v: unknown): string {
+  if (v instanceof Error) return v.message;
+  if (typeof v === 'object' && v !== null) {
+    const obj = v as Record<string, unknown>;
+    if (typeof obj['message'] === 'string') return obj['message'];
+    try {
+      return JSON.stringify(v);
+    } catch {
+      return '[object]';
+    }
+  }
+  return String(v);
+}
+
 /**
- * 自定义日志格式
+ * 构建单条日志行.
+ *
+ * 格式: [YYYY-MM-DD HH:mm:ss] LEVEL  [context] message | key=val key2=val2
+ *        (stack trace indented 2 spaces on following lines)
+ */
+function buildLogLine(info: winston.Logform.TransformableInfo): string {
+  const timestamp = (info['timestamp'] as string) ?? '';
+  // Strip ANSI colour codes so padEnd gives correct visual width
+  const rawLevel = String(info.level).replace(/\u001b\[\d+m/g, '');
+  const levelStr = rawLevel.toUpperCase().padEnd(5);
+  const message = String(info.message);
+  const stack = info['stack'] as string | undefined;
+  const context = info['context'] as string | undefined;
+
+  const ctx = context ? ` [${context}]` : '';
+  const sanitizedMsg = sanitizeMessage(message);
+
+  const metaPairs = Object.entries(info as Record<string, unknown>)
+    .filter(([k]) => !SKIP_FIELDS.has(k))
+    .map(([k, v]) => `${k}=${sanitizeMessage(formatMetaValue(v))}`)
+    .join(' ');
+
+  const line = `[${timestamp}] ${levelStr}${ctx} ${sanitizedMsg}${metaPairs ? ' | ' + metaPairs : ''}`;
+
+  if (typeof stack === 'string') {
+    const sanitizedStack = sanitizeMessage(stack).split('\n').join('\n  ');
+    return `${line}\n  ${sanitizedStack}`;
+  }
+  return line;
+}
+
+/**
+ * 从环境变量解析日志级别.
+ * LOG_LEVEL=debug  或  DEBUG=ornn  → debug
+ */
+function resolveLogLevel(): string {
+  const env = process.env['LOG_LEVEL']?.toLowerCase();
+  const valid = new Set(['error', 'warn', 'info', 'debug', 'verbose']);
+  if (env && valid.has(env)) return env;
+  const debug = process.env['DEBUG'];
+  if (debug === 'ornn' || debug === '*') return 'debug';
+  return 'info';
+}
 
 /**
  * 创建日志目录
@@ -57,25 +106,10 @@ function ensureLogDir(): void {
   }
 }
 
-/**
- * 自定义日志格式
- */
 const logFormat = winston.format.combine(
   winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
   winston.format.errors({ stack: true }),
-  winston.format.printf(({ timestamp, level, message, stack }) => {
-    // 脱敏消息
-    const sanitizedMessage = sanitizeMessage(String(message));
-    const baseMessage = `[${String(timestamp)}] ${String(level).toUpperCase()}: ${sanitizedMessage}`;
-
-    // 脱敏堆栈
-    let stackStr: string | undefined;
-    if (typeof stack === 'string') {
-      stackStr = sanitizeMessage(stack);
-    }
-
-    return stackStr ? `${baseMessage}\n${stackStr}` : baseMessage;
-  })
+  winston.format.printf(buildLogLine)
 );
 
 /**
@@ -85,10 +119,9 @@ function createLogger(): winston.Logger {
   ensureLogDir();
 
   return winston.createLogger({
-    level: 'info',
+    level: resolveLogLevel(),
     format: logFormat,
     transports: [
-      // 文件日志
       new winston.transports.File({
         filename: join(LOG_DIR, 'error.log'),
         level: 'error',
@@ -102,7 +135,6 @@ function createLogger(): winston.Logger {
       }),
       // 控制台日志（仅在开发环境）
       new winston.transports.Console({
-        format: winston.format.combine(winston.format.colorize(), logFormat),
         silent: process.env.NODE_ENV === 'production',
       }),
     ],
@@ -113,14 +145,15 @@ function createLogger(): winston.Logger {
 export const logger = createLogger();
 
 /**
- * 创建带上下文的 logger
+ * 创建带模块上下文的 logger.
+ * 日志行将显示 [context] 字段，便于定位来源.
  */
 export function createChildLogger(context: string): winston.Logger {
   return logger.child({ context });
 }
 
 /**
- * 设置日志级别
+ * 设置日志级别（运行时覆盖）
  */
 export function setLogLevel(level: string): void {
   logger.level = level;

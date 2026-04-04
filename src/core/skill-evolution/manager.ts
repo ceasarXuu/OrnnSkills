@@ -47,11 +47,11 @@ export class SkillEvolutionManager {
   trackSkill(skillId: string, originPath: string, runtime: RuntimeType): SkillEvolutionThread {
     // Check if already tracking
     if (this.threads.has(skillId)) {
-      logger.debug(`Skill ${skillId} already being tracked`);
+      logger.debug('Skill already being tracked', { skillId });
       return this.threads.get(skillId)!.thread;
     }
 
-    logger.info(`Starting to track skill: ${skillId}`);
+    logger.info('Tracking skill', { skillId, runtime, originPath });
 
     // Create evolution thread
     const thread = new SkillEvolutionThread({
@@ -74,7 +74,7 @@ export class SkillEvolutionManager {
     };
 
     this.threads.set(skillId, trackedSkill);
-    logger.info(`Now tracking skill: ${skillId}`);
+    logger.debug('Skill tracking started', { skillId });
 
     return thread;
   }
@@ -90,7 +90,7 @@ export class SkillEvolutionManager {
 
     tracked.thread.stop();
     this.threads.delete(skillId);
-    logger.info(`Stopped tracking skill: ${skillId}`);
+    logger.info('Skill tracking stopped', { skillId });
     return true;
   }
 
@@ -100,14 +100,14 @@ export class SkillEvolutionManager {
   routeTrace(skillId: string, trace: Trace): boolean {
     const tracked = this.threads.get(skillId);
     if (!tracked) {
-      logger.warn(`Cannot route trace: skill ${skillId} not being tracked`);
+      logger.warn('Cannot route trace: skill not being tracked', { skillId });
       return false;
     }
 
     const result = tracked.thread.addTrace(trace);
 
     if (result.triggered) {
-      logger.info(`Skill ${skillId} triggered: ${result.reason}`);
+      logger.info('Skill triggered', { skillId, reason: result.reason });
     }
 
     return true;
@@ -119,14 +119,14 @@ export class SkillEvolutionManager {
   recordInvocation(skillId: string): boolean {
     const tracked = this.threads.get(skillId);
     if (!tracked) {
-      logger.warn(`Cannot record invocation: skill ${skillId} not being tracked`);
+      logger.warn('Cannot record invocation: skill not being tracked', { skillId });
       return false;
     }
 
     const result = tracked.thread.recordInvocation();
 
     if (result.triggered) {
-      logger.info(`Skill ${skillId} triggered by re-invocation`);
+      logger.info('Skill triggered by re-invocation', { skillId });
     }
 
     return true;
@@ -136,7 +136,7 @@ export class SkillEvolutionManager {
    * Handle trigger event
    */
   private handleTrigger(skillId: string, state: SkillEvolutionState): void {
-    logger.info(`Skill ${skillId} evolution triggered`);
+    logger.info('Skill evolution triggered', { skillId, version: state.version, queueSize: state.queue.length });
 
     if (this.options.onSkillTrigger) {
       this.options.onSkillTrigger(skillId, state);
@@ -237,10 +237,10 @@ export class SkillEvolutionManager {
    * Stop all threads
    */
   stopAll(): void {
-    logger.info('Stopping all skill evolution threads...');
+    logger.info('Stopping all skill evolution threads', { count: this.threads.size });
     for (const [skillId, tracked] of this.threads) {
       tracked.thread.stop();
-      logger.debug(`Stopped thread for skill: ${skillId}`);
+      logger.debug('Skill thread stopped', { skillId });
     }
     this.threads.clear();
     logger.info('All skill evolution threads stopped');

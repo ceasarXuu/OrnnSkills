@@ -167,8 +167,8 @@ export class CodexObserver extends BaseObserver {
           if (preprocessed) {
             traces.push(preprocessed);
           }
-        } catch {
-          // 忽略解析错误
+        } catch (parseError) {
+          logger.debug('Skipping malformed NDJSON line', { sessionId, error: parseError });
         }
       }
 

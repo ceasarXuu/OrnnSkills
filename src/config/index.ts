@@ -223,8 +223,9 @@ export class ConfigManager {
           console.warn('Invalid EVOConfig structure, using default config');
         }
       }
-    } catch {
-      // 配置文件不存在或格式错误，使用默认配置
+    } catch (error) {
+      // Config file missing or malformed — fall back to default
+      logger.debug('Global config not loaded, using defaults', { error });
     }
   }
 
@@ -248,8 +249,9 @@ export class ConfigManager {
           console.warn('Invalid ProjectConfig structure, ignoring project config');
         }
       }
-    } catch {
-      // 项目配置不存在
+    } catch (error) {
+      // Project config missing — use global/default config
+      logger.debug('Project config not loaded, using defaults', { error });
     }
   }
 
