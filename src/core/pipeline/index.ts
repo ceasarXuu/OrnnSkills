@@ -6,9 +6,6 @@ import { evaluator } from '../evaluator/index.js';
 import { createShadowRegistry } from '../shadow-registry/index.js';
 import type { Trace, EvaluationResult, SkillTracesGroup } from '../../types/index.js';
 
-// Timer 类型（仅用于 startBackgroundLoop 返回值）
-type Timer = ReturnType<typeof setInterval>;
-
 const logger = createChildLogger('pipeline');
 
 /**
@@ -64,6 +61,7 @@ export class OptimizationPipeline {
   private shadowRegistry;
   private state: PipelineState;
   private runningPromise: Promise<OptimizationTask[]> | null = null;
+  private backgroundTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(config: PipelineConfig) {
     this.config = config;
@@ -247,10 +245,14 @@ export class OptimizationPipeline {
   /**
    * 启动后台循环
    */
-  startBackgroundLoop(intervalMs: number = 60000): Timer {
+  startBackgroundLoop(intervalMs: number = 60000): void {
+    if (this.backgroundTimer !== null) {
+      logger.warn('Background loop already running');
+      return;
+    }
     logger.info('Starting background pipeline loop', { intervalMs });
 
-    const timer = setInterval(() => {
+    this.backgroundTimer = setInterval(() => {
       void (async (): Promise<void> => {
         try {
           if (this.config.autoOptimize) {
@@ -261,8 +263,17 @@ export class OptimizationPipeline {
         }
       })();
     }, intervalMs);
+  }
 
-    return timer;
+  /**
+   * 停止后台循环
+   */
+  stopBackgroundLoop(): void {
+    if (this.backgroundTimer !== null) {
+      clearInterval(this.backgroundTimer);
+      this.backgroundTimer = null;
+      logger.info('Background pipeline loop stopped');
+    }
   }
 
   /**
@@ -305,6 +316,7 @@ export class OptimizationPipeline {
    * 关闭 pipeline
    */
   close(): void {
+    this.stopBackgroundLoop();
     this.traceManager.close();
     this.traceSkillMapper.close();
     this.shadowRegistry.close();

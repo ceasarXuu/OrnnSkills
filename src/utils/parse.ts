@@ -41,13 +41,4 @@ export function buildShadowId(skillId: string, projectRoot: string): string {
   return `${skillId}@${projectRoot}`;
 }
 
-/**
- * 安全解析整数，非法输入抛出描述性错误。
- */
-export function parseIntSafe(value: string, fieldName = 'value'): number {
-  const n = parseInt(value, 10);
-  if (isNaN(n)) {
-    throw new Error(`Invalid ${fieldName}: "${value}" is not a valid integer.`);
-  }
-  return n;
-}
+

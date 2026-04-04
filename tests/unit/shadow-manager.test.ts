@@ -73,7 +73,7 @@ describe('ShadowManager', () => {
     it('should close without errors', async () => {
       const manager = createShadowManager(testProjectPath);
       await manager.init();
-      expect(() => manager.close()).not.toThrow();
+      await expect(manager.close()).resolves.toBeUndefined();
     });
   });
 });

@@ -1,8 +1,7 @@
 import { Command } from 'commander';
 import { cliInfo } from '../../utils/cli-output.js';
-import { validateSkillId } from '../../utils/path.js';
 import { printErrorAndExit } from '../../utils/error-helper.js';
-import { initProjectComponents } from '../lib/cli-setup.js';
+import { initProjectComponents, validateSkillIdOrExit, getShadowOrExit } from '../lib/cli-setup.js';
 import { buildShadowId } from '../../utils/parse.js';
 import { formatTimestamp, formatRevision } from '../../utils/cli-formatters.js';
 import type { JournalRecord } from '../../core/journal/index.js';
@@ -39,26 +38,13 @@ export function createLogCommand(): Command {
     .option('-p, --project <path>', 'Project root path', process.cwd())
     .alias('history')
     .action(async (skillId: string, options: LogOptions) => {
-      if (!validateSkillId(skillId)) {
-        printErrorAndExit(
-          `Invalid skill ID "${skillId}".`,
-          { operation: 'Show evolution log', skillId },
-          'INVALID_SKILL_ID'
-        );
-      }
+      validateSkillIdOrExit(skillId, 'Show evolution log', options.project);
 
       const { shadowRegistry, journalManager, projectRoot, close } =
         await initProjectComponents(options.project, 'log');
 
       try {
-        const shadow = shadowRegistry.get(skillId);
-        if (!shadow) {
-          printErrorAndExit(
-            `Shadow skill "${skillId}" not found`,
-            { operation: 'Show evolution log', skillId, projectPath: projectRoot },
-            'SKILL_NOT_FOUND'
-          );
-        }
+        getShadowOrExit(shadowRegistry, skillId, 'Show evolution log', projectRoot);
 
         const shadowId = buildShadowId(skillId, projectRoot);
 

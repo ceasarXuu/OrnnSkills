@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { hashString, shortHash } from '../../src/utils/hash.js';
+import { hashString } from '../../src/utils/hash.js';
 import { hasChanges, countChanges } from '../../src/utils/diff.js';
 
 describe('Hash Utils', () => {
@@ -16,10 +16,10 @@ describe('Hash Utils', () => {
     expect(hash1).not.toBe(hash2);
   });
 
-  it('should generate short hash', () => {
+  it('should generate a 64-char hex hash', () => {
     const content = 'test content';
-    const short = shortHash(content);
-    expect(short.length).toBe(16);
+    const hash = hashString(content);
+    expect(hash.length).toBe(64);
   });
 });
 

@@ -1,73 +1,22 @@
 import { Command } from 'commander';
 import { cliInfo } from '../../utils/cli-output.js';
 import { join } from 'node:path';
-import { existsSync, writeFileSync, readFileSync, unlinkSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { Daemon } from '../../daemon/index.js';
 import { printErrorAndExit } from '../../utils/error-helper.js';
 import { validateProjectRootOrExit } from '../lib/cli-setup.js';
+import {
+  readPidFile,
+  writePidFile,
+  removePidFile,
+  isProcessRunning,
+  formatUptime,
+  getLogStats,
+} from '../lib/daemon-helpers.js';
 import ora from 'ora';
-
-const PID_FILE = '.ornn/daemon.pid';
 
 interface DaemonOptions {
   project: string;
-}
-
-/**
- * 获取 PID 文件路径
- */
-function getPidFilePath(projectRoot: string): string {
-  return join(projectRoot, PID_FILE);
-}
-
-/**
- * 读取 PID 文件
- */
-function readPidFile(projectRoot: string): number | null {
-  const pidFile = getPidFilePath(projectRoot);
-  if (!existsSync(pidFile)) {
-    return null;
-  }
-  try {
-    const pid = parseInt(readFileSync(pidFile, 'utf-8').trim(), 10);
-    return isNaN(pid) ? null : pid;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * 写入 PID 文件
- */
-function writePidFile(projectRoot: string, pid: number): void {
-  const pidFile = getPidFilePath(projectRoot);
-  writeFileSync(pidFile, pid.toString(), 'utf-8');
-}
-
-/**
- * 删除 PID 文件
- */
-function removePidFile(projectRoot: string): void {
-  const pidFile = getPidFilePath(projectRoot);
-  if (existsSync(pidFile)) {
-    try {
-      unlinkSync(pidFile);
-    } catch {
-      // 忽略删除错误
-    }
-  }
-}
-
-/**
- * 检查进程是否运行
- */
-function isProcessRunning(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 /**
@@ -79,9 +28,8 @@ export function createStartCommand(): Command {
   start
     .description('Start the OrnnSkills daemon')
     .option('-p, --project <path>', 'Project root path', process.cwd())
-    .action((options: DaemonOptions): void => {
-      void (async (): Promise<void> => {
-        try {
+    .action(async (options: DaemonOptions): Promise<void> => {
+      try {
           const projectRoot = validateProjectRootOrExit(options.project, 'daemon start');
 
           // 检查是否已经在运行
@@ -136,17 +84,16 @@ export function createStartCommand(): Command {
             process.on('exit', () => {
               clearInterval(keepAlive);
             });
-          } catch (error) {
+          } catch (startError) {
             spinner.fail('Failed to start daemon');
-            throw error;
+            throw startError;
           }
-        } catch (error) {
-          printErrorAndExit(
-            error instanceof Error ? error.message : String(error),
-            { operation: 'Start daemon', projectPath: options.project }
-          );
-        }
-      })();
+      } catch (error) {
+        printErrorAndExit(
+          error instanceof Error ? error.message : String(error),
+          { operation: 'Start daemon', projectPath: options.project }
+        );
+      }
     });
 
   return start;
@@ -218,25 +165,6 @@ export function createStopCommand(): Command {
 }
 
 /**
- * 格式化运行时长
- */
-function formatUptime(startedAt: string): string {
-  const start = new Date(startedAt).getTime();
-  const now = Date.now();
-  const diff = now - start;
-
-  const seconds = Math.floor(diff / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const hours = Math.floor(minutes / 60);
-  const days = Math.floor(hours / 24);
-
-  if (days > 0) return `${days}d ${hours % 24}h ${minutes % 60}m`;
-  if (hours > 0) return `${hours}h ${minutes % 60}m ${seconds % 60}s`;
-  if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
-  return `${seconds}s`;
-}
-
-/**
  * 读取检查点文件获取统计信息
  */
 function readCheckpointStats(
@@ -256,28 +184,6 @@ function readCheckpointStats(
     };
   } catch {
     return null;
-  }
-}
-
-/**
- * 获取日志文件统计
- */
-function getLogStats(): { errorCount: number; warningCount: number } {
-  const LOG_DIR = join(process.env.HOME || '', '.ornn', 'logs');
-  if (!existsSync(LOG_DIR)) {
-    return { errorCount: 0, warningCount: 0 };
-  }
-
-  try {
-    const errorLogPath = join(LOG_DIR, 'error.log');
-    let errorCount = 0;
-    if (existsSync(errorLogPath)) {
-      const content = readFileSync(errorLogPath, 'utf-8');
-      errorCount = content.split('\n').filter((line) => line.includes('ERROR')).length;
-    }
-    return { errorCount, warningCount: 0 };
-  } catch {
-    return { errorCount: 0, warningCount: 0 };
   }
 }
 

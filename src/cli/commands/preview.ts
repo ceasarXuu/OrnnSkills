@@ -1,9 +1,8 @@
 import { Command } from 'commander';
 import { cliInfo } from '../../utils/cli-output.js';
-import { validateSkillId } from '../../utils/path.js';
 import { printErrorAndExit } from '../../utils/error-helper.js';
 import { buildShadowId } from '../../utils/parse.js';
-import { initProjectComponents } from '../lib/cli-setup.js';
+import { initProjectComponents, validateSkillIdOrExit, getShadowOrExit } from '../lib/cli-setup.js';
 import type { JournalRecord } from '../../core/journal/index.js';
 
 interface PreviewOptions {
@@ -20,25 +19,12 @@ export function createPreviewCommand(): Command {
     .option('-r, --revision <rev>', 'Preview changes from specific revision')
     .option('-p, --project <path>', 'Project root path', process.cwd())
     .action(async (skillId: string, options: PreviewOptions) => {
-      if (!validateSkillId(skillId)) {
-        printErrorAndExit(
-          `Invalid skill ID "${skillId}". Skill IDs can only contain letters, numbers, hyphens, underscores, and dots.`,
-          { operation: 'Validate skill ID', skillId, projectPath: options.project },
-          'INVALID_SKILL_ID'
-        );
-      }
+      validateSkillIdOrExit(skillId, 'Preview skill', options.project);
 
       const { shadowRegistry, journalManager, projectRoot, close } =
         await initProjectComponents(options.project, 'preview');
       try {
-        const shadow = shadowRegistry.get(skillId);
-        if (!shadow) {
-          printErrorAndExit(
-            `Shadow skill "${skillId}" not found`,
-            { operation: 'Preview skill', skillId, projectPath: options.project },
-            'SKILL_NOT_FOUND'
-          );
-        }
+        getShadowOrExit(shadowRegistry, skillId, 'Preview skill', projectRoot);
 
         const shadowId = buildShadowId(skillId, projectRoot);
         const latestRevision = journalManager.getLatestRevision(shadowId);

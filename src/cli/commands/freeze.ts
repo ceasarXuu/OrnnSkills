@@ -1,8 +1,7 @@
 import { Command } from 'commander';
 import { cliInfo } from '../../utils/cli-output.js';
-import { validateSkillId } from '../../utils/path.js';
 import { printErrorAndExit } from '../../utils/error-helper.js';
-import { initRegistryOnly } from '../lib/cli-setup.js';
+import { initRegistryOnly, validateSkillIdOrExit, getShadowOrExit } from '../lib/cli-setup.js';
 import { createShadowRegistry } from '../../core/shadow-registry/index.js';
 import { buildShadowId } from '../../utils/parse.js';
 import { confirmAction, printSuccess } from '../../utils/cli-formatters.js';
@@ -131,22 +130,8 @@ export function createFreezeCommand(): Command {
         }
 
         // ── 単個 skill ──────────────────────────────────────────────────────
-        if (!validateSkillId(skillId)) {
-          printErrorAndExit(
-            `Invalid skill ID "${skillId}". Skill IDs can only contain letters, numbers, hyphens, underscores, and dots.`,
-            { operation: 'Freeze skill', skillId, projectPath: projectRoot },
-            'INVALID_SKILL_ID'
-          );
-        }
-
-        const shadow = shadowRegistry.get(skillId);
-        if (!shadow) {
-          printErrorAndExit(
-            `Shadow skill "${skillId}" not found`,
-            { operation: 'Freeze skill', skillId, projectPath: projectRoot },
-            'SKILL_NOT_FOUND'
-          );
-        }
+        validateSkillIdOrExit(skillId, 'Freeze skill', projectRoot);
+        const shadow = getShadowOrExit(shadowRegistry, skillId, 'Freeze skill', projectRoot);
 
         if (shadow.status === 'frozen') {
           cliInfo(`Skill "${skillId}" is already frozen.`);
@@ -312,22 +297,8 @@ export function createUnfreezeCommand(): Command {
         }
 
         // ── 单个 skill ──────────────────────────────────────────────────────
-        if (!validateSkillId(skillId)) {
-          printErrorAndExit(
-            `Invalid skill ID "${skillId}". Skill IDs can only contain letters, numbers, hyphens, underscores, and dots.`,
-            { operation: 'Unfreeze skill', skillId, projectPath: projectRoot },
-            'INVALID_SKILL_ID'
-          );
-        }
-
-        const shadow = shadowRegistry.get(skillId);
-        if (!shadow) {
-          printErrorAndExit(
-            `Shadow skill "${skillId}" not found`,
-            { operation: 'Unfreeze skill', skillId, projectPath: projectRoot },
-            'SKILL_NOT_FOUND'
-          );
-        }
+        validateSkillIdOrExit(skillId, 'Unfreeze skill', projectRoot);
+        const shadow = getShadowOrExit(shadowRegistry, skillId, 'Unfreeze skill', projectRoot);
 
         if (shadow.status === 'active') {
           cliInfo(`Skill "${skillId}" is already active (not frozen).`);

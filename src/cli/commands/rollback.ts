@@ -1,8 +1,7 @@
 import { Command } from 'commander';
 import { cliInfo } from '../../utils/cli-output.js';
-import { validateSkillId } from '../../utils/path.js';
 import { printErrorAndExit } from '../../utils/error-helper.js';
-import { initProjectComponents } from '../lib/cli-setup.js';
+import { initProjectComponents, validateSkillIdOrExit, getShadowOrExit } from '../lib/cli-setup.js';
 import { buildShadowId } from '../../utils/parse.js';
 import { confirmAction, formatRevision } from '../../utils/cli-formatters.js';
 
@@ -41,26 +40,13 @@ export function createRollbackCommand(): Command {
     .option('-f, --force', 'Skip confirmation prompt', false)
     .alias('revert')
     .action(async (skillId: string, options: RollbackOptions) => {
-      if (!validateSkillId(skillId)) {
-        printErrorAndExit(
-          `Invalid skill ID "${skillId}".`,
-          { operation: 'Rollback skill', skillId, projectPath: options.project },
-          'INVALID_SKILL_ID'
-        );
-      }
+      validateSkillIdOrExit(skillId, 'Rollback skill', options.project);
 
       const { shadowRegistry, journalManager, projectRoot, close } =
         await initProjectComponents(options.project, 'rollback');
 
       try {
-        const shadow = shadowRegistry.get(skillId);
-        if (!shadow) {
-          printErrorAndExit(
-            `Shadow skill "${skillId}" not found`,
-            { operation: 'Rollback skill', skillId, projectPath: projectRoot },
-            'SKILL_NOT_FOUND'
-          );
-        }
+        const shadow = getShadowOrExit(shadowRegistry, skillId, 'Rollback skill', projectRoot);
 
         const shadowId = buildShadowId(skillId, projectRoot);
 

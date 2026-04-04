@@ -488,7 +488,7 @@ export class Daemon {
 
     // 4. 关闭 shadow manager
     try {
-      this.shadowManager.close();
+      await this.shadowManager.close();
       logger.debug('Shadow manager closed');
     } catch (error) {
       logger.error('Failed to close shadow manager', { error });

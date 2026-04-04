@@ -1,13 +1,18 @@
 import { Command } from 'commander';
-import { join, basename } from 'node:path';
+import { basename, join } from 'node:path';
 import { existsSync, readFileSync } from 'node:fs';
 import { validateProjectPath } from '../../utils/path.js';
 import { printErrorAndExit } from '../../utils/error-helper.js';
 import { buildShadowId } from '../../utils/parse.js';
 import { createShadowRegistry } from '../../core/shadow-registry/index.js';
 import { createJournalManager } from '../../core/journal/index.js';
+import {
+  readPidFile,
+  isProcessRunning,
+  formatUptime,
+  getLogStats,
+} from '../lib/daemon-helpers.js';
 
-const PID_FILE = '.ornn/daemon.pid';
 const CHECKPOINT_FILE = '.ornn/state/daemon-checkpoint.json';
 
 interface StatusOptions {
@@ -16,49 +21,6 @@ interface StatusOptions {
 
 function log(msg: string): void {
   console.log(msg);
-}
-
-function readPidFile(projectRoot: string): number | null {
-  const pidFile = join(projectRoot, PID_FILE);
-  if (!existsSync(pidFile)) return null;
-  try {
-    const pid = parseInt(readFileSync(pidFile, 'utf-8').trim(), 10);
-    return isNaN(pid) ? null : pid;
-  } catch {
-    return null;
-  }
-}
-
-function isProcessRunning(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function formatUptime(startedAt?: string): string {
-  if (!startedAt) return 'unknown';
-  const diff = Date.now() - new Date(startedAt).getTime();
-  const days = Math.floor(diff / 86400000);
-  const hours = Math.floor((diff % 86400000) / 3600000);
-  const minutes = Math.floor((diff % 3600000) / 60000);
-  if (days > 0) return `${days}d ${hours}h ${minutes}m`;
-  if (hours > 0) return `${hours}h ${minutes}m`;
-  return `${minutes}m`;
-}
-
-function getLogStats(): { errorCount: number } {
-  const logPath = join(process.env.HOME || '', '.ornn', 'logs', 'error.log');
-  if (!existsSync(logPath)) return { errorCount: 0 };
-  try {
-    const content = readFileSync(logPath, 'utf-8');
-    const lines = content.split('\n').filter((l) => l.includes('ERROR:'));
-    return { errorCount: lines.length };
-  } catch {
-    return { errorCount: 0 };
-  }
 }
 
 export function createTopLevelStatusCommand(): Command {

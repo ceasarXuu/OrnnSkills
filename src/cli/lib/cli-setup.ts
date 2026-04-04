@@ -7,10 +7,11 @@
 
 import { join } from 'node:path';
 import { existsSync } from 'node:fs';
-import { validateProjectPath } from '../../utils/path.js';
+import { validateProjectPath, validateSkillId } from '../../utils/path.js';
 import { printErrorAndExit } from '../../utils/error-helper.js';
-import { createShadowRegistry } from '../../core/shadow-registry/index.js';
+import { createShadowRegistry, ShadowEntry } from '../../core/shadow-registry/index.js';
 import { createJournalManager } from '../../core/journal/index.js';
+import type { ShadowRegistry } from '../../core/shadow-registry/index.js';
 
 /**
  * 验证项目路径安全性，并确认 .ornn 目录存在。
@@ -115,4 +116,41 @@ export async function initProjectComponents(
       await journalManager.close();
     },
   };
+}
+
+/**
+ * skillId 格式校验。不合法时打印友好错误并退出进程。
+ */
+export function validateSkillIdOrExit(
+  skillId: string,
+  operation: string,
+  projectPath: string
+): void {
+  if (!validateSkillId(skillId)) {
+    printErrorAndExit(
+      `Invalid skill ID "${skillId}". Skill IDs can only contain letters, numbers, hyphens, underscores, and dots.`,
+      { operation, skillId, projectPath },
+      'INVALID_SKILL_ID'
+    );
+  }
+}
+
+/**
+ * 从注册表查找 shadow skill。未找到时打印友好错误并退出进程。
+ */
+export function getShadowOrExit(
+  shadowRegistry: ShadowRegistry,
+  skillId: string,
+  operation: string,
+  projectPath: string
+): ShadowEntry {
+  const shadow = shadowRegistry.get(skillId);
+  if (!shadow) {
+    printErrorAndExit(
+      `Shadow skill "${skillId}" not found`,
+      { operation, skillId, projectPath },
+      'SKILL_NOT_FOUND'
+    );
+  }
+  return shadow;
 }

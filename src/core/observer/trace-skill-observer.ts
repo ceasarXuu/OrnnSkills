@@ -116,7 +116,7 @@ export class TraceSkillObserver {
 
     try {
       // 获取 shadow 信息
-      const shadow = this.mapper['shadowSkills'].get(skillId);
+      const shadow = this.mapper.getShadowSkill(skillId);
       if (!shadow) {
         logger.warn('Shadow skill not found, skipping flush', { skill_id: skillId });
         this.buffer.delete(skillId);

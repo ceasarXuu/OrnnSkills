@@ -2,10 +2,9 @@ import { Command } from 'commander';
 import { cliInfo } from '../../utils/cli-output.js';
 import { readFileSync } from 'node:fs';
 import { createUnifiedDiff } from '../../utils/diff.js';
-import { validateSkillId } from '../../utils/path.js';
 import { printErrorAndExit } from '../../utils/error-helper.js';
 import { buildShadowId } from '../../utils/parse.js';
-import { initProjectComponents } from '../lib/cli-setup.js';
+import { initProjectComponents, validateSkillIdOrExit, getShadowOrExit } from '../lib/cli-setup.js';
 import { originRegistry } from '../../core/origin-registry/index.js';
 
 interface DiffOptions {
@@ -28,25 +27,12 @@ export function createDiffCommand(): Command {
     .option('-o, --origin', 'Compare with origin skill')
     .option('-p, --project <path>', 'Project root path', process.cwd())
     .action(async (skillId: string, options: DiffOptions) => {
-      if (!validateSkillId(skillId)) {
-        printErrorAndExit(
-          `Invalid skill ID "${skillId}". Skill IDs can only contain letters, numbers, hyphens, underscores, and dots.`,
-          { operation: 'Validate skill ID', skillId, projectPath: options.project },
-          'INVALID_SKILL_ID'
-        );
-      }
+      validateSkillIdOrExit(skillId, 'Validate skill ID', options.project);
 
       const { shadowRegistry, journalManager, projectRoot, close } =
         await initProjectComponents(options.project, 'diff');
       try {
-        const shadow = shadowRegistry.get(skillId);
-        if (!shadow) {
-          printErrorAndExit(
-            `Shadow skill "${skillId}" not found`,
-            { operation: 'Show diff', skillId, projectPath: projectRoot },
-            'SKILL_NOT_FOUND'
-          );
-        }
+        const shadow = getShadowOrExit(shadowRegistry, skillId, 'Show diff', projectRoot);
 
         const currentContent = shadowRegistry.readContent(skillId);
         if (!currentContent) {

@@ -303,9 +303,9 @@ export class ShadowManager {
   /**
    * 关闭
    */
-  close(): void {
+  async close(): Promise<void> {
     this.shadowRegistry.close();
-    void this.journalManager.close();
+    await this.journalManager.close();
     this.traceManager.close();
     this.traceSkillMapper.close();
     logger.info('Shadow manager closed');

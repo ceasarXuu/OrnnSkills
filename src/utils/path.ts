@@ -148,34 +148,6 @@ export function getSkillSnapshotsDir(projectRoot: string, skillId: string): stri
 }
 
 /**
- * 获取 shadow skill 的路径（别名）
- */
-export function getShadowSkillPath(projectRoot: string, skillId: string): string {
-  return getSkillCurrentPath(projectRoot, skillId);
-}
-
-/**
- * 获取 shadow meta 的路径（别名）
- */
-export function getShadowMetaPath(projectRoot: string, skillId: string): string {
-  return getSkillMetaPath(projectRoot, skillId);
-}
-
-/**
- * 获取 shadow journal 的路径（别名）
- */
-export function getShadowJournalPath(projectRoot: string, skillId: string): string {
-  return getSkillJournalPath(projectRoot, skillId);
-}
-
-/**
- * 获取 snapshots 目录（别名）
- */
-export function getSnapshotsDir(projectRoot: string, skillId: string): string {
-  return getSkillSnapshotsDir(projectRoot, skillId);
-}
-
-/**
  * 检查路径是否存在
  */
 export function pathExists(path: string): boolean {

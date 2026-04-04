@@ -1,8 +1,7 @@
 import { Command } from 'commander';
 import { cliInfo } from '../../utils/cli-output.js';
-import { validateSkillId } from '../../utils/path.js';
 import { printErrorAndExit } from '../../utils/error-helper.js';
-import { initProjectComponents } from '../lib/cli-setup.js';
+import { initProjectComponents, validateSkillIdOrExit, getShadowOrExit } from '../lib/cli-setup.js';
 import {
   printSkillsTable,
   formatDate,
@@ -60,22 +59,8 @@ export function createStatusCommand(): Command {
 
         // ── 单个 skill 详情 ───────────────────────────────────────────────
         if (options.skill) {
-          if (!validateSkillId(options.skill)) {
-            printErrorAndExit(
-              `Invalid skill ID "${options.skill}".`,
-              { operation: 'Show skill status', skillId: options.skill, projectPath: projectRoot },
-              'INVALID_SKILL_ID'
-            );
-          }
-
-          const shadow = shadowRegistry.get(options.skill);
-          if (!shadow) {
-            printErrorAndExit(
-              `Shadow skill "${options.skill}" not found`,
-              { operation: 'Show skill status', skillId: options.skill, projectPath: projectRoot },
-              'SKILL_NOT_FOUND'
-            );
-          }
+          validateSkillIdOrExit(options.skill, 'Show skill status', projectRoot);
+          const shadow = getShadowOrExit(shadowRegistry, options.skill, 'Show skill status', projectRoot);
 
           const shadowId = buildShadowId(options.skill, projectRoot);
           const latestRevision = journalManager.getLatestRevision(shadowId);

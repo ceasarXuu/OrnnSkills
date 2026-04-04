@@ -440,6 +440,13 @@ export class TraceSkillMapper {
   }
 
   /**
+   * 获取指定 skillId 对应的 shadow skill（供外部模块安全访问）
+   */
+  getShadowSkill(skillId: string): ProjectSkillShadow | undefined {
+    return this.shadowSkills.get(skillId);
+  }
+
+  /**
    * 关闭
    */
   close(): void {

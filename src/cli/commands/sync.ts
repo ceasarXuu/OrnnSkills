@@ -2,11 +2,11 @@ import { Command } from 'commander';
 import { cliInfo } from '../../utils/cli-output.js';
 import { writeFileSync } from 'node:fs';
 import { createMarkdownSkill } from '../../storage/markdown.js';
-import { validateSkillId, getShadowSkillPath } from '../../utils/path.js';
+import { getSkillCurrentPath } from '../../utils/path.js';
 import { printErrorAndExit } from '../../utils/error-helper.js';
 import { createUnifiedDiff, countChanges } from '../../utils/diff.js';
 import { confirmAction } from '../../utils/cli-formatters.js';
-import { initRegistryOnly } from '../lib/cli-setup.js';
+import { initRegistryOnly, validateSkillIdOrExit, getShadowOrExit } from '../lib/cli-setup.js';
 import { originRegistry } from '../../core/origin-registry/index.js';
 
 interface SyncOptions {
@@ -27,24 +27,11 @@ export function createSyncCommand(): Command {
     .option('-p, --project <path>', 'Project root path', process.cwd())
     .option('-f, --force', 'Force sync without confirmation', false)
     .action(async (skillId: string, options: SyncOptions) => {
-      if (!validateSkillId(skillId)) {
-        printErrorAndExit(
-          `Invalid skill ID "${skillId}". Skill IDs can only contain letters, numbers, hyphens, underscores, and dots.`,
-          { operation: 'Validate skill ID', skillId, projectPath: options.project },
-          'INVALID_SKILL_ID'
-        );
-      }
+      validateSkillIdOrExit(skillId, 'Sync skill', options.project);
 
       const { shadowRegistry, projectRoot, close } = initRegistryOnly(options.project, 'sync');
       try {
-        const shadow = shadowRegistry.get(skillId);
-        if (!shadow) {
-          printErrorAndExit(
-            `Shadow skill "${skillId}" not found in this project`,
-            { operation: 'Sync skill', skillId, projectPath: projectRoot },
-            'SKILL_NOT_FOUND'
-          );
-        }
+        const shadow = getShadowOrExit(shadowRegistry, skillId, 'Sync skill', projectRoot);
 
         originRegistry.scan();
         const origin = originRegistry.get(skillId);
@@ -57,7 +44,7 @@ export function createSyncCommand(): Command {
           );
         }
 
-        const shadowPath = getShadowSkillPath(projectRoot, skillId);
+        const shadowPath = getSkillCurrentPath(projectRoot, skillId);
         const shadowSkill = createMarkdownSkill(shadowPath);
         const shadowContent = shadowSkill.read();
         const originContent = originRegistry.readContent(skillId);
