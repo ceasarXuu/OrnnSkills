@@ -469,23 +469,4 @@ export function printErrorAndExit(
   process.exit(exitCode);
 }
 
-/**
- * 包装异步函数，自动处理错误
- */
-export function withErrorHandling<T extends (...args: unknown[]) => Promise<unknown>>(
-  fn: T,
-  context: ErrorContext,
-  errorType?: string
-): T {
-  return (async (...args: unknown[]) => {
-    try {
-      return await fn(...args);
-    } catch (error) {
-      printErrorAndExit(
-        error instanceof Error ? error : String(error),
-        context,
-        errorType
-      );
-    }
-  }) as T;
-}
+

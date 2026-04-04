@@ -105,6 +105,7 @@ export class CodexObserver extends BaseObserver {
       this.watcher = null;
     }
 
+    this.processedFiles.clear();
     logger.info('Codex observer stopped');
   }
 

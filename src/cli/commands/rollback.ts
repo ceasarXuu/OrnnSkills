@@ -2,7 +2,8 @@ import { Command } from 'commander';
 import { cliInfo } from '../../utils/cli-output.js';
 import { validateSkillId } from '../../utils/path.js';
 import { printErrorAndExit } from '../../utils/error-helper.js';
-import { initProjectComponents } from '../../utils/cli-setup.js';
+import { initProjectComponents } from '../lib/cli-setup.js';
+import { buildShadowId } from '../../utils/parse.js';
 import { confirmAction, formatRevision } from '../../utils/cli-formatters.js';
 
 interface RollbackOptions {
@@ -61,7 +62,7 @@ export function createRollbackCommand(): Command {
           );
         }
 
-        const shadowId = `${skillId}@${projectRoot}`;
+        const shadowId = buildShadowId(skillId, projectRoot);
 
         // ── 确定回滚目标 ────────────────────────────────────────────────────
         let targetRevision: number | undefined;

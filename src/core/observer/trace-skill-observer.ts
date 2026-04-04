@@ -214,6 +214,7 @@ export class TraceSkillObserver {
       this.flushInterval = null;
     }
     this.flushBuffers();
+    this.buffer.clear();
     this.mapper.close();
     this.traceManager.close();
     logger.info('TraceSkillObserver closed');

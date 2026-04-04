@@ -39,7 +39,7 @@ export interface SkillTableRow {
   skillId: string;
   status: string;
   revision: number;
-  lastOptimized?: string | null;
+  lastOptimized: string | null;
 }
 
 /**

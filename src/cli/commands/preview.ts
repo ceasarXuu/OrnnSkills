@@ -1,11 +1,10 @@
 import { Command } from 'commander';
 import { cliInfo } from '../../utils/cli-output.js';
-import { join } from 'node:path';
-import { existsSync } from 'node:fs';
-import { createShadowRegistry } from '../../core/shadow-registry/index.js';
-import { createJournalManager } from '../../core/journal/index.js';
-import { validateSkillId, validateProjectPath } from '../../utils/path.js';
+import { validateSkillId } from '../../utils/path.js';
 import { printErrorAndExit } from '../../utils/error-helper.js';
+import { buildShadowId } from '../../utils/parse.js';
+import { initProjectComponents } from '../lib/cli-setup.js';
+import type { JournalRecord } from '../../core/journal/index.js';
 
 interface PreviewOptions {
   project: string;
@@ -21,91 +20,57 @@ export function createPreviewCommand(): Command {
     .option('-r, --revision <rev>', 'Preview changes from specific revision')
     .option('-p, --project <path>', 'Project root path', process.cwd())
     .action(async (skillId: string, options: PreviewOptions) => {
+      if (!validateSkillId(skillId)) {
+        printErrorAndExit(
+          `Invalid skill ID "${skillId}". Skill IDs can only contain letters, numbers, hyphens, underscores, and dots.`,
+          { operation: 'Validate skill ID', skillId, projectPath: options.project },
+          'INVALID_SKILL_ID'
+        );
+      }
+
+      const { shadowRegistry, journalManager, projectRoot, close } =
+        await initProjectComponents(options.project, 'preview');
       try {
-        if (!validateSkillId(skillId)) {
-          printErrorAndExit(
-            'Invalid skill ID "' +
-              skillId +
-              '". Skill IDs can only contain letters, numbers, hyphens, underscores, and dots.',
-            { operation: 'Validate skill ID', skillId, projectPath: options.project },
-            'INVALID_SKILL_ID'
-          );
-        }
-
-        let projectRoot: string;
-        try {
-          projectRoot = validateProjectPath(options.project);
-        } catch (error) {
-          printErrorAndExit(
-            error instanceof Error ? error.message : String(error),
-            { operation: 'Validate project path', projectPath: options.project },
-            'PATH_TRAVERSAL'
-          );
-        }
-
-        const ornnDir = join(projectRoot, '.ornn');
-        if (!existsSync(ornnDir)) {
-          printErrorAndExit(
-            '.ornn directory not found. Run "ornn init" first.',
-            { operation: 'Check project initialization', projectPath: projectRoot },
-            'PROJECT_NOT_INITIALIZED'
-          );
-        }
-
-        const shadowRegistry = createShadowRegistry(projectRoot);
-        const journalManager = createJournalManager(projectRoot);
-
-        shadowRegistry.init();
-        await journalManager.init();
-
         const shadow = shadowRegistry.get(skillId);
         if (!shadow) {
           printErrorAndExit(
-            'Shadow skill "' + skillId + '" not found',
+            `Shadow skill "${skillId}" not found`,
             { operation: 'Preview skill', skillId, projectPath: options.project },
             'SKILL_NOT_FOUND'
           );
         }
 
-        const shadowId = skillId + '@' + projectRoot;
+        const shadowId = buildShadowId(skillId, projectRoot);
         const latestRevision = journalManager.getLatestRevision(shadowId);
         const records = journalManager.getJournalRecords(shadowId, { limit: 10 });
 
         cliInfo('');
-        cliInfo('  Preview for Shadow Skill: ' + skillId);
+        cliInfo(`  Preview for Shadow Skill: ${skillId}`);
         cliInfo('');
-        cliInfo('   Current Revision: ' + latestRevision);
-        cliInfo('   Status: ' + shadow.status);
-        cliInfo('   Last Optimized: ' + (shadow.last_optimized_at || 'Never'));
+        cliInfo(`   Current Revision: ${latestRevision}`);
+        cliInfo(`   Status: ${shadow.status}`);
+        cliInfo(`   Last Optimized: ${shadow.last_optimized_at || 'Never'}`);
         cliInfo('');
 
         if (records.length === 0) {
           cliInfo('   No optimization history found.');
           cliInfo('   This skill has not been optimized yet.');
           cliInfo('');
-          shadowRegistry.close();
-          await journalManager.close();
           return;
         }
 
         cliInfo('  Recent Optimization History:');
         cliInfo('');
 
-        const recentRecords = records.slice(0, 5);
-        for (const record of recentRecords as Array<{
-          revision: number;
-          timestamp: string;
-          change_type: string;
-          reason: string;
-          applied_by: string;
-        }>) {
+        const recentRecords: JournalRecord[] = records.slice(0, 5);
+        for (const record of recentRecords) {
           const date = new Date(record.timestamp).toLocaleString();
           const type = record.change_type.toUpperCase().padEnd(20);
           const appliedBy = record.applied_by === 'auto' ? 'Auto' : 'Manual';
 
-          cliInfo('   rev_' + String(record.revision).padStart(4, '0') + ' - ' + date);
-          cliInfo('      Type: ' + type + ' | By: ' + appliedBy);
-          cliInfo('      Reason: ' + record.reason);
+          cliInfo(`   rev_${String(record.revision).padStart(4, '0')} - ${date}`);
+          cliInfo(`      Type: ${type} | By: ${appliedBy}`);
+          cliInfo(`      Reason: ${record.reason}`);
           cliInfo('');
         }
 
@@ -115,7 +80,7 @@ export function createPreviewCommand(): Command {
         cliInfo('');
 
         const changeTypeCounts: Record<string, number> = {};
-        for (const record of records as Array<{ change_type: string }>) {
+        for (const record of records) {
           changeTypeCounts[record.change_type] = (changeTypeCounts[record.change_type] || 0) + 1;
         }
 
@@ -146,24 +111,23 @@ export function createPreviewCommand(): Command {
         cliInfo('');
         cliInfo('  Next Steps:');
         cliInfo('');
-        cliInfo('   To view detailed diff between versions:');
-        cliInfo('     $ ornn skills diff ' + skillId + ' --from <revision>');
+        cliInfo(`   To view detailed diff between versions:`);
+        cliInfo(`     $ ornn skills diff ${skillId} --from <revision>`);
         cliInfo('');
-        cliInfo('   To trigger a new optimization analysis:');
-        cliInfo('     $ ornn optimize ' + skillId);
+        cliInfo(`   To trigger a new optimization analysis:`);
+        cliInfo(`     $ ornn optimize ${skillId}`);
         cliInfo('');
-        cliInfo('   To freeze automatic optimizations:');
-        cliInfo('     $ ornn skills freeze ' + skillId);
+        cliInfo(`   To freeze automatic optimizations:`);
+        cliInfo(`     $ ornn skills freeze ${skillId}`);
         cliInfo('');
-
-        shadowRegistry.close();
-        await journalManager.close();
       } catch (error) {
         printErrorAndExit(
           error instanceof Error ? error.message : String(error),
           { operation: 'Preview skill', skillId },
           undefined
         );
+      } finally {
+        await close();
       }
     });
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander';
+import { createRequire } from 'node:module';
 import { createStatusCommand } from './commands/status.js';
 import { createRollbackCommand } from './commands/rollback.js';
 import { createLogCommand } from './commands/log.js';
@@ -16,9 +17,12 @@ import { createTopLevelStatusCommand } from './commands/top-level-status.js';
 import { initCommand } from '../commands/init.js';
 import { logger } from '../utils/logger.js';
 
+const require = createRequire(import.meta.url);
+const pkg = require('../../package.json') as { version: string };
+
 const program = new Command();
 
-program.name('ornn').description('OrnnSkills - Skill Evolution Agent').version('0.1.9');
+program.name('ornn').description('OrnnSkills - Skill Evolution Agent').version(pkg.version);
 
 // Init 命令
 program

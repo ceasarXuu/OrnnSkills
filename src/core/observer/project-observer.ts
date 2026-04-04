@@ -71,6 +71,7 @@ export class ProjectObserver {
       this.claudeWatcher = null;
     }
 
+    this.processedFiles.clear();
     logger.info('Project observer stopped');
   }
 

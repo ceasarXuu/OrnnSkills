@@ -3,6 +3,7 @@ import { join, basename } from 'node:path';
 import { existsSync, readFileSync } from 'node:fs';
 import { validateProjectPath } from '../../utils/path.js';
 import { printErrorAndExit } from '../../utils/error-helper.js';
+import { buildShadowId } from '../../utils/parse.js';
 import { createShadowRegistry } from '../../core/shadow-registry/index.js';
 import { createJournalManager } from '../../core/journal/index.js';
 
@@ -140,7 +141,7 @@ export function createTopLevelStatusCommand(): Command {
 
             for (const shadow of shadows) {
               const skillId = shadow.skill_id || shadow.skillId || 'unknown';
-              const shadowId = `${skillId}@${projectRoot}`;
+              const shadowId = buildShadowId(skillId, projectRoot);
               const latestRevision = journalManager.getLatestRevision(shadowId);
               const lastOptimized = shadow.last_optimized_at || shadow.updatedAt
                 ? new Date(shadow.last_optimized_at || shadow.updatedAt).toLocaleDateString()

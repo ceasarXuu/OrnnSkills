@@ -2,8 +2,10 @@ import { Command } from 'commander';
 import { cliInfo } from '../../utils/cli-output.js';
 import { validateSkillId } from '../../utils/path.js';
 import { printErrorAndExit } from '../../utils/error-helper.js';
-import { initProjectComponents } from '../../utils/cli-setup.js';
+import { initProjectComponents } from '../lib/cli-setup.js';
+import { buildShadowId } from '../../utils/parse.js';
 import { formatTimestamp, formatRevision } from '../../utils/cli-formatters.js';
+import type { JournalRecord } from '../../core/journal/index.js';
 import type { ChangeType } from '../../types/index.js';
 
 interface LogOptions {
@@ -58,7 +60,7 @@ export function createLogCommand(): Command {
           );
         }
 
-        const shadowId = `${skillId}@${projectRoot}`;
+        const shadowId = buildShadowId(skillId, projectRoot);
 
         // ── 参数验证 ────────────────────────────────────────────────────────
         const limit = parseInt(options.limit, 10);
@@ -119,33 +121,25 @@ export function createLogCommand(): Command {
         }
 
         // ── 获取并过滤记录 ───────────────────────────────────────────────────
-        let records = journalManager.getJournalRecords(shadowId, {
+        let records: JournalRecord[] = journalManager.getJournalRecords(shadowId, {
           limit,
           changeType: changeTypes?.[0],
         });
 
         if (sinceDate) {
           const sd = sinceDate;
-          records = records.filter(
-            (r) => new Date((r as { timestamp: string }).timestamp) >= sd
-          );
+          records = records.filter((r) => new Date(r.timestamp) >= sd);
         }
         if (untilDate) {
           const ud = untilDate;
-          records = records.filter(
-            (r) => new Date((r as { timestamp: string }).timestamp) <= ud
-          );
+          records = records.filter((r) => new Date(r.timestamp) <= ud);
         }
         if (options.search) {
           const searchLower = options.search.toLowerCase();
-          records = records.filter((r) =>
-            ((r as { reason: string }).reason || '').toLowerCase().includes(searchLower)
-          );
+          records = records.filter((r) => (r.reason || '').toLowerCase().includes(searchLower));
         }
         if (options.appliedBy) {
-          records = records.filter(
-            (r) => (r as { applied_by: string }).applied_by === options.appliedBy
-          );
+          records = records.filter((r) => r.applied_by === options.appliedBy);
         }
 
         // ── 构建过滤条件摘要 ───────────────────────────────────────────────
@@ -173,14 +167,7 @@ export function createLogCommand(): Command {
         }
         cliInfo('');
 
-        for (const record of records as Array<{
-          timestamp: string;
-          change_type: string;
-          applied_by: string;
-          revision: number;
-          reason: string;
-          source_sessions: string[];
-        }>) {
+        for (const record of records) {
           const appliedBy = record.applied_by === 'auto' ? '🤖' : '👤';
           cliInfo(`${appliedBy} ${formatRevision(record.revision)} — ${formatTimestamp(record.timestamp)}`);
           cliInfo(`   Type:     ${record.change_type.toUpperCase()}`);

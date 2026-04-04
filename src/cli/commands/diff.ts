@@ -1,13 +1,12 @@
 import { Command } from 'commander';
 import { cliInfo } from '../../utils/cli-output.js';
-import { join } from 'node:path';
-import { existsSync, readFileSync } from 'node:fs';
-import { createShadowRegistry } from '../../core/shadow-registry/index.js';
-import { createJournalManager } from '../../core/journal/index.js';
-import { originRegistry } from '../../core/origin-registry/index.js';
+import { readFileSync } from 'node:fs';
 import { createUnifiedDiff } from '../../utils/diff.js';
-import { validateSkillId, validateProjectPath } from '../../utils/path.js';
+import { validateSkillId } from '../../utils/path.js';
 import { printErrorAndExit } from '../../utils/error-helper.js';
+import { buildShadowId } from '../../utils/parse.js';
+import { initProjectComponents } from '../lib/cli-setup.js';
+import { originRegistry } from '../../core/origin-registry/index.js';
 
 interface DiffOptions {
   project: string;
@@ -29,46 +28,17 @@ export function createDiffCommand(): Command {
     .option('-o, --origin', 'Compare with origin skill')
     .option('-p, --project <path>', 'Project root path', process.cwd())
     .action(async (skillId: string, options: DiffOptions) => {
+      if (!validateSkillId(skillId)) {
+        printErrorAndExit(
+          `Invalid skill ID "${skillId}". Skill IDs can only contain letters, numbers, hyphens, underscores, and dots.`,
+          { operation: 'Validate skill ID', skillId, projectPath: options.project },
+          'INVALID_SKILL_ID'
+        );
+      }
+
+      const { shadowRegistry, journalManager, projectRoot, close } =
+        await initProjectComponents(options.project, 'diff');
       try {
-        // 验证 skill ID 格式
-        if (!validateSkillId(skillId)) {
-          printErrorAndExit(
-            `Invalid skill ID "${skillId}". Skill IDs can only contain letters, numbers, hyphens, underscores, and dots.`,
-            { operation: 'Validate skill ID', skillId, projectPath: options.project },
-            'INVALID_SKILL_ID'
-          );
-        }
-
-        // 验证项目路径安全性
-        let projectRoot: string;
-        try {
-          projectRoot = validateProjectPath(options.project);
-        } catch (error) {
-          printErrorAndExit(
-            error instanceof Error ? error.message : String(error),
-            { operation: 'Validate project path', projectPath: options.project },
-            'PATH_TRAVERSAL'
-          );
-        }
-
-        // 检查 .ornn 目录是否存在
-        const ornnDir = join(projectRoot, '.ornn');
-        if (!existsSync(ornnDir)) {
-          printErrorAndExit(
-            '.ornn directory not found',
-            { operation: 'Check project initialization', projectPath: projectRoot },
-            'PROJECT_NOT_INITIALIZED'
-          );
-        }
-
-        // 初始化组件
-        const shadowRegistry = createShadowRegistry(projectRoot);
-        const journalManager = createJournalManager(projectRoot);
-
-        shadowRegistry.init();
-        await journalManager.init();
-
-        // 检查 shadow 是否存在
         const shadow = shadowRegistry.get(skillId);
         if (!shadow) {
           printErrorAndExit(
@@ -78,7 +48,6 @@ export function createDiffCommand(): Command {
           );
         }
 
-        // 读取当前内容
         const currentContent = shadowRegistry.readContent(skillId);
         if (!currentContent) {
           printErrorAndExit(`Cannot read shadow content for "${skillId}"`, {
@@ -88,7 +57,7 @@ export function createDiffCommand(): Command {
           });
         }
 
-        const shadowId = `${skillId}@${projectRoot}`;
+        const shadowId = buildShadowId(skillId, projectRoot);
 
         if (options.origin) {
           // 与 origin 比较
@@ -201,16 +170,14 @@ export function createDiffCommand(): Command {
             }
           }
         }
-
-        // 关闭
-        shadowRegistry.close();
-        await journalManager.close();
       } catch (error) {
         printErrorAndExit(
           error instanceof Error ? error.message : String(error),
           { operation: 'Show diff', skillId },
           undefined
         );
+      } finally {
+        await close();
       }
     });
 

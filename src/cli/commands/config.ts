@@ -7,7 +7,7 @@ import {
 } from '../../config/manager.js';
 import { cliInfo } from '../../utils/cli-output.js';
 import { printErrorAndExit } from '../../utils/error-helper.js';
-import { validateProjectRootOrExit } from '../../utils/cli-setup.js';
+import { validateProjectRootOrExit } from '../lib/cli-setup.js';
 
 interface ConfigOptions {
   project?: string;

@@ -326,8 +326,9 @@ export class ShadowRegistry {
       unlinkSync(shadowPath);
     }
 
-    // Remove from index
+    // Remove from index and cache
     this.index.delete(skillId);
+    this.contentCache.delete(skillId);
     this.saveIndex();
 
     logger.info(`Deleted shadow for skill: ${skillId}`);

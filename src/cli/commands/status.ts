@@ -2,7 +2,7 @@ import { Command } from 'commander';
 import { cliInfo } from '../../utils/cli-output.js';
 import { validateSkillId } from '../../utils/path.js';
 import { printErrorAndExit } from '../../utils/error-helper.js';
-import { initProjectComponents } from '../../utils/cli-setup.js';
+import { initProjectComponents } from '../lib/cli-setup.js';
 import {
   printSkillsTable,
   formatDate,
@@ -10,6 +10,7 @@ import {
   printNoSkillsFound,
 } from '../../utils/cli-formatters.js';
 import { selectSkillInteractively, type SkillInfo } from '../../utils/interactive-selector.js';
+import { buildShadowId } from '../../utils/parse.js';
 
 interface StatusOptions {
   project: string;
@@ -76,7 +77,7 @@ export function createStatusCommand(): Command {
             );
           }
 
-          const shadowId = `${options.skill}@${projectRoot}`;
+          const shadowId = buildShadowId(options.skill, projectRoot);
           const latestRevision = journalManager.getLatestRevision(shadowId);
           const snapshots = journalManager.getSnapshots(shadowId);
 
@@ -108,7 +109,7 @@ export function createStatusCommand(): Command {
 
         const rows = shadows.map((shadow) => {
           const skillId = shadow.skill_id || shadow.skillId || 'unknown';
-          const shadowId = `${skillId}@${projectRoot}`;
+          const shadowId = buildShadowId(skillId, projectRoot);
           const latestRevision = journalManager.getLatestRevision(shadowId);
           return {
             skillId,

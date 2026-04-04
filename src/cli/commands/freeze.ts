@@ -1,9 +1,10 @@
 import { Command } from 'commander';
 import { cliInfo } from '../../utils/cli-output.js';
-import { createShadowRegistry } from '../../core/shadow-registry/index.js';
 import { validateSkillId } from '../../utils/path.js';
 import { printErrorAndExit } from '../../utils/error-helper.js';
-import { validateProjectRootOrExit } from '../../utils/cli-setup.js';
+import { initRegistryOnly } from '../lib/cli-setup.js';
+import { createShadowRegistry } from '../../core/shadow-registry/index.js';
+import { buildShadowId } from '../../utils/parse.js';
 import { confirmAction, printSuccess } from '../../utils/cli-formatters.js';
 import {
   selectMultipleSkillsInteractively,
@@ -35,16 +36,12 @@ export function createFreezeCommand(): Command {
     .option('--dry-run', 'Show what would be frozen without making changes', false)
     .option('-i, --interactive', 'Select skills interactively', false)
     .action(async (skillId: string | undefined, options: FreezeOptions) => {
+      const { shadowRegistry, projectRoot, close } = initRegistryOnly(options.project, 'freeze');
       try {
-        const projectRoot = validateProjectRootOrExit(options.project, 'freeze');
-        const shadowRegistry = createShadowRegistry(projectRoot);
-        shadowRegistry.init();
-
         const shadows = shadowRegistry.list();
 
         if (shadows.length === 0) {
           cliInfo('No shadow skills found in this project');
-          shadowRegistry.close();
           return;
         }
 
@@ -65,7 +62,6 @@ export function createFreezeCommand(): Command {
 
           if (selectedSkills.length === 0) {
             cliInfo('No skills selected. Freeze cancelled.');
-            shadowRegistry.close();
             return;
           }
 
@@ -82,7 +78,6 @@ export function createFreezeCommand(): Command {
             cliInfo(`  - ${sid} [${shadow.status}]`);
           });
           cliInfo('\nTip: use --interactive to select skills visually.');
-          shadowRegistry.close();
           return;
         }
 
@@ -92,7 +87,6 @@ export function createFreezeCommand(): Command {
 
           if (toFreeze.length === 0) {
             cliInfo('All skills are already frozen.');
-            shadowRegistry.close();
             return;
           }
 
@@ -105,7 +99,6 @@ export function createFreezeCommand(): Command {
                 newState: 'frozen',
               }))
             );
-            shadowRegistry.close();
             return;
           }
 
@@ -119,7 +112,6 @@ export function createFreezeCommand(): Command {
             });
             if (!ok) {
               cliInfo('Freeze cancelled.');
-              shadowRegistry.close();
               return;
             }
           }
@@ -127,7 +119,7 @@ export function createFreezeCommand(): Command {
           let count = 0;
           for (const shadow of toFreeze) {
             const sid = shadow.skill_id || shadow.skillId;
-            shadowRegistry.updateStatus(`${sid}@${projectRoot}`, 'frozen');
+            shadowRegistry.updateStatus(buildShadowId(sid, projectRoot), 'frozen');
             count++;
           }
 
@@ -135,11 +127,10 @@ export function createFreezeCommand(): Command {
             'To unfreeze all:',
             '  ornn skills unfreeze all',
           ]);
-          shadowRegistry.close();
           return;
         }
 
-        // ── 单个 skill ──────────────────────────────────────────────────────
+        // ── 単個 skill ──────────────────────────────────────────────────────
         if (!validateSkillId(skillId)) {
           printErrorAndExit(
             `Invalid skill ID "${skillId}". Skill IDs can only contain letters, numbers, hyphens, underscores, and dots.`,
@@ -159,7 +150,6 @@ export function createFreezeCommand(): Command {
 
         if (shadow.status === 'frozen') {
           cliInfo(`Skill "${skillId}" is already frozen.`);
-          shadowRegistry.close();
           return;
         }
 
@@ -167,7 +157,6 @@ export function createFreezeCommand(): Command {
           showDryRunPreview('Freeze Skill', [
             { id: skillId, currentState: shadow.status, newState: 'frozen' },
           ]);
-          shadowRegistry.close();
           return;
         }
 
@@ -181,24 +170,23 @@ export function createFreezeCommand(): Command {
           });
           if (!ok) {
             cliInfo('Freeze cancelled.');
-            shadowRegistry.close();
             return;
           }
         }
 
-        shadowRegistry.updateStatus(`${skillId}@${projectRoot}`, 'frozen');
+        shadowRegistry.updateStatus(buildShadowId(skillId, projectRoot), 'frozen');
 
         printSuccess(`Shadow skill "${skillId}" has been frozen`, [
           'Automatic optimization is now paused.',
           `To unfreeze: ornn skills unfreeze ${skillId}`,
         ]);
-
-        shadowRegistry.close();
       } catch (error) {
         printErrorAndExit(
           error instanceof Error ? error.message : String(error),
           { operation: 'Freeze skill', projectPath: options.project }
         );
+      } finally {
+        close();
       }
     });
 
@@ -221,16 +209,12 @@ export function createUnfreezeCommand(): Command {
     .option('--dry-run', 'Show what would be unfrozen without making changes', false)
     .option('-i, --interactive', 'Select skills interactively', false)
     .action(async (skillId: string | undefined, options: FreezeOptions) => {
+      const { shadowRegistry, projectRoot, close } = initRegistryOnly(options.project, 'unfreeze');
       try {
-        const projectRoot = validateProjectRootOrExit(options.project, 'unfreeze');
-        const shadowRegistry = createShadowRegistry(projectRoot);
-        shadowRegistry.init();
-
         const shadows = shadowRegistry.list();
 
         if (shadows.length === 0) {
           cliInfo('No shadow skills found in this project');
-          shadowRegistry.close();
           return;
         }
 
@@ -240,7 +224,6 @@ export function createUnfreezeCommand(): Command {
 
           if (frozenSkills.length === 0) {
             cliInfo('No frozen skills to unfreeze.');
-            shadowRegistry.close();
             return;
           }
 
@@ -259,7 +242,6 @@ export function createUnfreezeCommand(): Command {
 
           if (selectedSkills.length === 0) {
             cliInfo('No skills selected. Unfreeze cancelled.');
-            shadowRegistry.close();
             return;
           }
 
@@ -278,7 +260,6 @@ export function createUnfreezeCommand(): Command {
             frozenSkills.forEach((s) => cliInfo(`  - ${s.skill_id || s.skillId}`));
           }
           cliInfo('\nTip: use --interactive to select skills visually.');
-          shadowRegistry.close();
           return;
         }
 
@@ -288,7 +269,6 @@ export function createUnfreezeCommand(): Command {
 
           if (toUnfreeze.length === 0) {
             cliInfo('No frozen skills to unfreeze.');
-            shadowRegistry.close();
             return;
           }
 
@@ -301,7 +281,6 @@ export function createUnfreezeCommand(): Command {
                 newState: 'active',
               }))
             );
-            shadowRegistry.close();
             return;
           }
 
@@ -315,7 +294,6 @@ export function createUnfreezeCommand(): Command {
             });
             if (!ok) {
               cliInfo('Unfreeze cancelled.');
-              shadowRegistry.close();
               return;
             }
           }
@@ -323,14 +301,13 @@ export function createUnfreezeCommand(): Command {
           let count = 0;
           for (const shadow of toUnfreeze) {
             const sid = shadow.skill_id || shadow.skillId;
-            shadowRegistry.updateStatus(`${sid}@${projectRoot}`, 'active');
+            shadowRegistry.updateStatus(buildShadowId(sid, projectRoot), 'active');
             count++;
           }
 
           printSuccess(`Successfully unfroze ${count} shadow skill(s)`, [
             'Automatic optimization has been resumed.',
           ]);
-          shadowRegistry.close();
           return;
         }
 
@@ -354,7 +331,6 @@ export function createUnfreezeCommand(): Command {
 
         if (shadow.status === 'active') {
           cliInfo(`Skill "${skillId}" is already active (not frozen).`);
-          shadowRegistry.close();
           return;
         }
 
@@ -362,7 +338,6 @@ export function createUnfreezeCommand(): Command {
           showDryRunPreview('Unfreeze Skill', [
             { id: skillId, currentState: shadow.status, newState: 'active' },
           ]);
-          shadowRegistry.close();
           return;
         }
 
@@ -376,24 +351,23 @@ export function createUnfreezeCommand(): Command {
           });
           if (!ok) {
             cliInfo('Unfreeze cancelled.');
-            shadowRegistry.close();
             return;
           }
         }
 
-        shadowRegistry.updateStatus(`${skillId}@${projectRoot}`, 'active');
+        shadowRegistry.updateStatus(buildShadowId(skillId, projectRoot), 'active');
 
         printSuccess(`Shadow skill "${skillId}" has been unfrozen`, [
           'Automatic optimization has resumed.',
           `To freeze again: ornn skills freeze ${skillId}`,
         ]);
-
-        shadowRegistry.close();
       } catch (error) {
         printErrorAndExit(
           error instanceof Error ? error.message : String(error),
           { operation: 'Unfreeze skill', projectPath: options.project }
         );
+      } finally {
+        close();
       }
     });
 
@@ -416,7 +390,6 @@ async function freezeSkillList(
 
   if (toFreeze.length === 0) {
     cliInfo('All selected skills are already frozen.');
-    shadowRegistry.close();
     return;
   }
 
@@ -428,7 +401,6 @@ async function freezeSkillList(
         return { id, currentState: (shadow?.status as string) || 'unknown', newState: 'frozen' };
       })
     );
-    shadowRegistry.close();
     return;
   }
 
@@ -442,19 +414,17 @@ async function freezeSkillList(
     });
     if (!ok) {
       cliInfo('Freeze cancelled.');
-      shadowRegistry.close();
       return;
     }
   }
 
   for (const id of toFreeze) {
-    shadowRegistry.updateStatus(`${id}@${projectRoot}`, 'frozen');
+    shadowRegistry.updateStatus(buildShadowId(id, projectRoot), 'frozen');
   }
 
   printSuccess(`Successfully froze ${toFreeze.length} shadow skill(s)`, [
     'To unfreeze: ornn skills unfreeze <skill-id>',
   ]);
-  shadowRegistry.close();
 }
 
 async function unfreezeSkillList(
@@ -468,7 +438,6 @@ async function unfreezeSkillList(
       'Unfreeze Skills',
       skillIds.map((id) => ({ id, currentState: 'frozen', newState: 'active' }))
     );
-    shadowRegistry.close();
     return;
   }
 
@@ -482,15 +451,13 @@ async function unfreezeSkillList(
     });
     if (!ok) {
       cliInfo('Unfreeze cancelled.');
-      shadowRegistry.close();
       return;
     }
   }
 
   for (const id of skillIds) {
-    shadowRegistry.updateStatus(`${id}@${projectRoot}`, 'active');
+    shadowRegistry.updateStatus(buildShadowId(id, projectRoot), 'active');
   }
 
   printSuccess(`Successfully unfroze ${skillIds.length} shadow skill(s)`);
-  shadowRegistry.close();
 }

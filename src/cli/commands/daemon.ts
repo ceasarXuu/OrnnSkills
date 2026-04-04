@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { existsSync, writeFileSync, readFileSync, unlinkSync } from 'node:fs';
 import { Daemon } from '../../daemon/index.js';
 import { printErrorAndExit } from '../../utils/error-helper.js';
-import { validateProjectRootOrExit } from '../../utils/cli-setup.js';
+import { validateProjectRootOrExit } from '../lib/cli-setup.js';
 import ora from 'ora';
 
 const PID_FILE = '.ornn/daemon.pid';

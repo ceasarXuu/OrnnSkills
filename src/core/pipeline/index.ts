@@ -196,7 +196,7 @@ export class OptimizationPipeline {
 
     // 使用 evaluator 评估 traces（带超时控制）
     const evaluation = await this.evaluateWithTimeout(traces, 10000);
-    if (!evaluation || !evaluation.should_patch) {
+    if (!evaluation.should_patch) {
       logger.debug('No optimization needed for skill', { skill_id });
       return null;
     }
@@ -232,8 +232,8 @@ export class OptimizationPipeline {
   private async evaluateWithTimeout(
     traces: Trace[],
     timeoutMs: number
-  ): Promise<EvaluationResult | null> {
-    const evaluatePromise = new Promise<EvaluationResult | null>((resolve, reject) => {
+  ): Promise<EvaluationResult> {
+    const evaluatePromise = new Promise<EvaluationResult>((resolve, reject) => {
       try {
         resolve(evaluator.evaluate(traces));
       } catch (error) {

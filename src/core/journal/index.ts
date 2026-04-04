@@ -13,6 +13,15 @@ import type { Trace, TraceEventType, TraceStatus, RuntimeType } from '../../type
 
 const logger = createChildLogger('journal');
 
+export interface JournalRecord {
+  revision: number;
+  timestamp: string;
+  change_type: string;
+  applied_by: string;
+  reason: string;
+  source_sessions: string[];
+}
+
 export interface JournalOptions {
   projectPath: string;
   dbPath?: string;
@@ -751,7 +760,7 @@ export class Journal {
   getJournalRecords(
     _shadowId: string,
     _options?: { limit?: number; changeType?: string }
-  ): unknown[] {
+  ): JournalRecord[] {
     return [];
   }
 
