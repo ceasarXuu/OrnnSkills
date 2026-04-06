@@ -451,18 +451,23 @@ function connectSSE() {
 }
 
 function handleUpdate(data) {
+  let shouldRerenderMain = false;
+
   if (data.projects) {
     state.projects = data.projects;
     renderSidebar();
   }
   if (data.projectData) {
     state.projectData = { ...state.projectData, ...data.projectData };
+    if (state.selectedProjectId && Object.prototype.hasOwnProperty.call(data.projectData, state.selectedProjectId)) {
+      shouldRerenderMain = true;
+    }
   }
   if (data.logs) {
     state.allLogs = [...state.allLogs, ...data.logs].slice(-1000);
     renderLogs();
   }
-  if (state.selectedProjectId) {
+  if (state.selectedProjectId && shouldRerenderMain) {
     renderMainPanel(state.selectedProjectId);
   }
 }
@@ -557,6 +562,11 @@ async function selectProject(path) {
 
 // ─── Main Panel ───────────────────────────────────────────────────────────────
 function renderMainPanel(projectPath) {
+  const active = document.activeElement;
+  const shouldRestoreSearchFocus = active && active.id === 'skillSearchInput';
+  const prevSearchSelectionStart = shouldRestoreSearchFocus ? active.selectionStart : null;
+  const prevSearchSelectionEnd = shouldRestoreSearchFocus ? active.selectionEnd : null;
+
   const el = document.getElementById('mainPanel');
   const pd = state.projectData[projectPath];
   if (!pd) { el.innerHTML = '<div class="panel-inner"><div class="no-project">' + t('mainNoData') + '</div></div>'; return; }
@@ -672,6 +682,16 @@ function renderMainPanel(projectPath) {
     </div>\` : ''}
 
   </div>\`;
+
+  if (shouldRestoreSearchFocus) {
+    const nextInput = document.getElementById('skillSearchInput');
+    if (nextInput) {
+      nextInput.focus();
+      if (prevSearchSelectionStart !== null && prevSearchSelectionEnd !== null) {
+        nextInput.setSelectionRange(prevSearchSelectionStart, prevSearchSelectionEnd);
+      }
+    }
+  }
 }
 
 function renderStateBadge(state) {
