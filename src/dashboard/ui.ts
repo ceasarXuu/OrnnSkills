@@ -524,21 +524,42 @@ function setHeaderStatus(status) {
   }
 }
 
+async function fetchJsonWithTimeout(url, timeoutMs = 8000, options = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    if (!response.ok) {
+      throw new Error('HTTP ' + response.status + ': ' + response.statusText);
+    }
+    return await response.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // ─── Initial Load ────────────────────────────────────────────────────────────
 async function init() {
   try {
     const browserLang = detectBrowserLang();
     if (browserLang !== currentLang) switchLang(browserLang);
 
-    const r = await fetch('/api/projects');
-    const data = await r.json();
+    const data = await fetchJsonWithTimeout('/api/projects', 6000);
     state.projects = data.projects || [];
     renderSidebar();
-    // Load initial logs
-    const lr = await fetch('/api/logs');
-    const logData = await lr.json();
-    state.allLogs = logData.lines || [];
-    renderLogs();
+
+    // 日志异步加载，不阻塞主页面渲染，避免 dashboard 卡在 loading
+    fetchJsonWithTimeout('/api/logs', 5000)
+      .then((logData) => {
+        state.allLogs = logData.lines || [];
+        if (state.selectedMainTab === 'logs') {
+          renderLogs();
+        }
+      })
+      .catch((e) => {
+        console.warn('[dashboard] initial logs fetch skipped', { error: String(e) });
+      });
+
     // Auto-select first project
     if (state.projects.length > 0) {
       await selectProject(state.projects[0].path);
@@ -590,11 +611,7 @@ async function selectProject(path) {
     document.getElementById('mainPanel').innerHTML = '<div class="panel-inner"><div class="no-project">' + t('mainLoading') + '</div></div>';
     try {
       const enc = encodeURIComponent(path);
-      const r = await fetch(\`/api/projects/\${enc}/snapshot\`);
-      if (!r.ok) {
-        throw new Error(\`HTTP \${r.status}: \${r.statusText}\`);
-      }
-      const data = await r.json();
+      const data = await fetchJsonWithTimeout(\`/api/projects/\${enc}/snapshot\`, 8000);
       state.projectData[path] = data;
     } catch (e) {
       console.error('Failed to load project', e);
