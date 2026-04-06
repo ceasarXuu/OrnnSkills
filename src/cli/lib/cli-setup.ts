@@ -9,9 +9,11 @@ import { join } from 'node:path';
 import { existsSync } from 'node:fs';
 import { validateProjectPath, validateSkillId } from '../../utils/path.js';
 import { printErrorAndExit } from '../../utils/error-helper.js';
-import { createShadowRegistry, ShadowEntry } from '../../core/shadow-registry/index.js';
+import { createShadowRegistry } from '../../core/shadow-registry/index.js';
+import type { ShadowEntry } from '../../core/shadow-registry/index.js';
 import { createJournalManager } from '../../core/journal/index.js';
 import type { ShadowRegistry } from '../../core/shadow-registry/index.js';
+import type { RuntimeType } from '../../types/index.js';
 
 /**
  * 验证项目路径安全性，并确认 .ornn 目录存在。
@@ -142,13 +144,14 @@ export function getShadowOrExit(
   shadowRegistry: ShadowRegistry,
   skillId: string,
   operation: string,
-  projectPath: string
+  projectPath: string,
+  runtime?: RuntimeType
 ): ShadowEntry {
-  const shadow = shadowRegistry.get(skillId);
+  const shadow = shadowRegistry.get(skillId, runtime);
   if (!shadow) {
     printErrorAndExit(
-      `Shadow skill "${skillId}" not found`,
-      { operation, skillId, projectPath },
+      `Shadow skill "${skillId}"${runtime ? ` [${runtime}]` : ''} not found`,
+      { operation, skillId, runtime, projectPath },
       'SKILL_NOT_FOUND'
     );
   }

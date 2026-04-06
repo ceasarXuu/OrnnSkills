@@ -224,6 +224,7 @@ export class SQLiteStorage {
         shadow_id TEXT PRIMARY KEY,
         project_id TEXT NOT NULL,
         skill_id TEXT NOT NULL,
+        runtime TEXT DEFAULT 'codex',
         origin_skill_id TEXT NOT NULL,
         origin_version_at_fork TEXT NOT NULL,
         shadow_path TEXT NOT NULL,
@@ -314,6 +315,11 @@ export class SQLiteStorage {
 
     // 创建索引
     this.db.run('CREATE INDEX IF NOT EXISTS idx_shadow_project ON shadow_skills(project_id);');
+    try {
+      this.db.run("ALTER TABLE shadow_skills ADD COLUMN runtime TEXT DEFAULT 'codex';");
+    } catch {
+      // ignore when column already exists
+    }
     this.db.run(
       'CREATE INDEX IF NOT EXISTS idx_evolution_shadow ON evolution_records_index(shadow_id);'
     );
@@ -349,14 +355,15 @@ export class SQLiteStorage {
 
     this.db.run(
       `INSERT OR REPLACE INTO shadow_skills (
-        shadow_id, project_id, skill_id, origin_skill_id, origin_version_at_fork,
+        shadow_id, project_id, skill_id, runtime, origin_skill_id, origin_version_at_fork,
         shadow_path, current_revision, status, created_at, last_optimized_at,
         hit_count, success_count, manual_override_count, health_score
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         shadow.shadow_id,
         shadow.project_id,
         shadow.skill_id,
+        shadow.runtime ?? 'codex',
         shadow.origin_skill_id,
         shadow.origin_version_at_fork,
         shadow.shadow_path,
@@ -381,14 +388,15 @@ export class SQLiteStorage {
 
     this.db.run(
       `INSERT OR REPLACE INTO shadow_skills (
-        shadow_id, project_id, skill_id, origin_skill_id, origin_version_at_fork,
+        shadow_id, project_id, skill_id, runtime, origin_skill_id, origin_version_at_fork,
         shadow_path, current_revision, status, created_at, last_optimized_at,
         hit_count, success_count, manual_override_count, health_score
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         shadow.shadow_id,
         shadow.project_id,
         shadow.skill_id,
+        shadow.runtime ?? 'codex',
         shadow.origin_skill_id,
         shadow.origin_version_at_fork,
         shadow.shadow_path,
@@ -444,6 +452,7 @@ export class SQLiteStorage {
     return {
       project_id: row.project_id as string,
       skill_id: row.skill_id as string,
+      runtime: (row.runtime as RuntimeType | null) ?? undefined,
       shadow_id: row.shadow_id as string,
       origin_skill_id: row.origin_skill_id as string,
       origin_version_at_fork: row.origin_version_at_fork as string,
@@ -472,6 +481,7 @@ export class SQLiteStorage {
       results.push({
         project_id: row.project_id as string,
         skill_id: row.skill_id as string,
+        runtime: (row.runtime as RuntimeType | null) ?? undefined,
         shadow_id: row.shadow_id as string,
         origin_skill_id: row.origin_skill_id as string,
         origin_version_at_fork: row.origin_version_at_fork as string,

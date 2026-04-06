@@ -29,6 +29,18 @@ describe('ShadowRegistry', () => {
       registry.init();
       registry.init();
     });
+
+    it('should migrate legacy flat shadow files into codex directory', () => {
+      const legacyPath = join(testProjectPath, '.ornn', 'shadows', 'legacy-skill.md');
+      writeFileSync(legacyPath, '# Legacy');
+
+      const registry = createShadowRegistry(testProjectPath);
+      registry.init();
+
+      const migratedPath = join(testProjectPath, '.ornn', 'shadows', 'codex', 'legacy-skill.md');
+      expect(existsSync(legacyPath)).toBe(false);
+      expect(existsSync(migratedPath)).toBe(true);
+    });
   });
 
   describe('create', () => {
@@ -46,7 +58,7 @@ describe('ShadowRegistry', () => {
       registry.init();
 
       registry.create('test-skill', '# Test Content', 'codex');
-      const shadowPath = join(testProjectPath, '.ornn', 'shadows', 'test-skill.md');
+      const shadowPath = join(testProjectPath, '.ornn', 'shadows', 'codex', 'test-skill.md');
       expect(existsSync(shadowPath)).toBe(true);
     });
 
@@ -77,6 +89,16 @@ describe('ShadowRegistry', () => {
       registry.init();
 
       expect(registry.get('non-existent')).toBeUndefined();
+    });
+
+    it('should isolate lookups by runtime when runtime is specified', () => {
+      const registry = createShadowRegistry(testProjectPath);
+      registry.init();
+
+      registry.create('test-skill', '# Test', 'codex');
+      expect(registry.has('test-skill', 'codex')).toBe(true);
+      expect(registry.has('test-skill', 'claude')).toBe(false);
+      expect(registry.get('test-skill', 'claude')).toBeUndefined();
     });
   });
 

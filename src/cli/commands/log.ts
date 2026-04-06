@@ -6,6 +6,7 @@ import { buildShadowId } from '../../utils/parse.js';
 import { formatTimestamp, formatRevision } from '../../utils/cli-formatters.js';
 import type { JournalRecord } from '../../core/journal/index.js';
 import type { ChangeType } from '../../types/index.js';
+import { parseRuntimeOption } from '../lib/runtime-option.js';
 
 interface LogOptions {
   project: string;
@@ -16,6 +17,7 @@ interface LogOptions {
   until?: string;
   search?: string;
   appliedBy?: string;
+  runtime?: string;
 }
 
 /**
@@ -35,6 +37,7 @@ export function createLogCommand(): Command {
     .option('--until <date>', 'Show records until date (YYYY-MM-DD or ISO 8601)')
     .option('--search <keyword>', 'Search in reason field (case-insensitive)')
     .option('--applied-by <source>', 'Filter by who applied the change (auto|manual)')
+    .option('--runtime <runtime>', 'Runtime scope: codex | claude | opencode')
     .option('-p, --project <path>', 'Project root path', process.cwd())
     .alias('history')
     .action(async (skillId: string, options: LogOptions) => {
@@ -44,9 +47,16 @@ export function createLogCommand(): Command {
         await initProjectComponents(options.project, 'log');
 
       try {
-        getShadowOrExit(shadowRegistry, skillId, 'Show evolution log', projectRoot);
+        const runtime = parseRuntimeOption(options.runtime);
+        const shadow = getShadowOrExit(
+          shadowRegistry,
+          skillId,
+          'Show evolution log',
+          projectRoot,
+          runtime
+        );
 
-        const shadowId = buildShadowId(skillId, projectRoot);
+        const shadowId = buildShadowId(skillId, projectRoot, shadow.runtime ?? 'codex');
 
         // ── 参数验证 ────────────────────────────────────────────────────────
         const limit = parseInt(options.limit, 10);

@@ -3,13 +3,14 @@ import { cliInfo } from '../../utils/cli-output.js';
 import { printErrorAndExit } from '../../utils/error-helper.js';
 import { initRegistryOnly, validateSkillIdOrExit, getShadowOrExit } from '../lib/cli-setup.js';
 import { createShadowRegistry } from '../../core/shadow-registry/index.js';
-import { buildShadowId } from '../../utils/parse.js';
 import { confirmAction, printSuccess } from '../../utils/cli-formatters.js';
 import {
   selectMultipleSkillsInteractively,
   showDryRunPreview,
   type SkillInfo,
 } from '../../utils/interactive-selector.js';
+import { parseRuntimeOption } from '../lib/runtime-option.js';
+import type { RuntimeType } from '../../types/index.js';
 
 interface FreezeOptions {
   project: string;
@@ -17,6 +18,7 @@ interface FreezeOptions {
   force?: boolean;
   dryRun?: boolean;
   interactive?: boolean;
+  runtime?: string;
 }
 
 // ─── Freeze ──────────────────────────────────────────────────────────────────
@@ -31,13 +33,18 @@ export function createFreezeCommand(): Command {
     .description('Pause automatic optimization for a shadow skill')
     .argument('[skill]', 'Skill ID to freeze (use "all" to freeze all skills)')
     .option('-p, --project <path>', 'Project root path', process.cwd())
+    .option('-r, --runtime <runtime>', 'Runtime scope: codex | claude | opencode')
     .option('-f, --force', 'Skip confirmation prompt', false)
     .option('--dry-run', 'Show what would be frozen without making changes', false)
     .option('-i, --interactive', 'Select skills interactively', false)
     .action(async (skillId: string | undefined, options: FreezeOptions) => {
       const { shadowRegistry, projectRoot, close } = initRegistryOnly(options.project, 'freeze');
       try {
-        const shadows = shadowRegistry.list();
+        const runtime = parseRuntimeOption(options.runtime);
+        const allShadows = shadowRegistry.list();
+        const shadows = runtime
+          ? allShadows.filter((s) => (s.runtime ?? 'codex') === runtime)
+          : allShadows;
 
         if (shadows.length === 0) {
           cliInfo('No shadow skills found in this project');
@@ -118,7 +125,7 @@ export function createFreezeCommand(): Command {
           let count = 0;
           for (const shadow of toFreeze) {
             const sid = shadow.skill_id || shadow.skillId;
-            shadowRegistry.updateStatus(buildShadowId(sid, projectRoot), 'frozen');
+            shadowRegistry.updateStatus(sid, 'frozen', shadow.runtime);
             count++;
           }
 
@@ -131,7 +138,13 @@ export function createFreezeCommand(): Command {
 
         // ── 単個 skill ──────────────────────────────────────────────────────
         validateSkillIdOrExit(skillId, 'Freeze skill', projectRoot);
-        const shadow = getShadowOrExit(shadowRegistry, skillId, 'Freeze skill', projectRoot);
+        const shadow = getShadowOrExit(
+          shadowRegistry,
+          skillId,
+          'Freeze skill',
+          projectRoot,
+          runtime
+        );
 
         if (shadow.status === 'frozen') {
           cliInfo(`Skill "${skillId}" is already frozen.`);
@@ -159,7 +172,7 @@ export function createFreezeCommand(): Command {
           }
         }
 
-        shadowRegistry.updateStatus(buildShadowId(skillId, projectRoot), 'frozen');
+        shadowRegistry.updateStatus(skillId, 'frozen', shadow.runtime);
 
         printSuccess(`Shadow skill "${skillId}" has been frozen`, [
           'Automatic optimization is now paused.',
@@ -190,13 +203,18 @@ export function createUnfreezeCommand(): Command {
     .description('Resume automatic optimization for a shadow skill')
     .argument('[skill]', 'Skill ID to unfreeze (use "all" to unfreeze all skills)')
     .option('-p, --project <path>', 'Project root path', process.cwd())
+    .option('-r, --runtime <runtime>', 'Runtime scope: codex | claude | opencode')
     .option('-f, --force', 'Skip confirmation prompt', false)
     .option('--dry-run', 'Show what would be unfrozen without making changes', false)
     .option('-i, --interactive', 'Select skills interactively', false)
     .action(async (skillId: string | undefined, options: FreezeOptions) => {
       const { shadowRegistry, projectRoot, close } = initRegistryOnly(options.project, 'unfreeze');
       try {
-        const shadows = shadowRegistry.list();
+        const runtime = parseRuntimeOption(options.runtime);
+        const allShadows = shadowRegistry.list();
+        const shadows = runtime
+          ? allShadows.filter((s) => (s.runtime ?? 'codex') === runtime)
+          : allShadows;
 
         if (shadows.length === 0) {
           cliInfo('No shadow skills found in this project');
@@ -230,7 +248,7 @@ export function createUnfreezeCommand(): Command {
             return;
           }
 
-          await unfreezeSkillList(selectedSkills, projectRoot, shadowRegistry, options);
+          await unfreezeSkillList(selectedSkills, shadows, projectRoot, shadowRegistry, options);
           return;
         }
 
@@ -286,7 +304,7 @@ export function createUnfreezeCommand(): Command {
           let count = 0;
           for (const shadow of toUnfreeze) {
             const sid = shadow.skill_id || shadow.skillId;
-            shadowRegistry.updateStatus(buildShadowId(sid, projectRoot), 'active');
+            shadowRegistry.updateStatus(sid, 'active', shadow.runtime);
             count++;
           }
 
@@ -298,7 +316,13 @@ export function createUnfreezeCommand(): Command {
 
         // ── 单个 skill ──────────────────────────────────────────────────────
         validateSkillIdOrExit(skillId, 'Unfreeze skill', projectRoot);
-        const shadow = getShadowOrExit(shadowRegistry, skillId, 'Unfreeze skill', projectRoot);
+        const shadow = getShadowOrExit(
+          shadowRegistry,
+          skillId,
+          'Unfreeze skill',
+          projectRoot,
+          runtime
+        );
 
         if (shadow.status === 'active') {
           cliInfo(`Skill "${skillId}" is already active (not frozen).`);
@@ -326,7 +350,7 @@ export function createUnfreezeCommand(): Command {
           }
         }
 
-        shadowRegistry.updateStatus(buildShadowId(skillId, projectRoot), 'active');
+        shadowRegistry.updateStatus(skillId, 'active', shadow.runtime);
 
         printSuccess(`Shadow skill "${skillId}" has been unfrozen`, [
           'Automatic optimization has resumed.',
@@ -349,8 +373,8 @@ export function createUnfreezeCommand(): Command {
 
 async function freezeSkillList(
   skillIds: string[],
-  shadows: Array<{ skill_id?: string; skillId?: string; status?: string }>,
-  projectRoot: string,
+  shadows: Array<{ skill_id?: string; skillId?: string; status?: string; runtime?: RuntimeType }>,
+  _projectRoot: string,
   shadowRegistry: ReturnType<typeof createShadowRegistry>,
   options: FreezeOptions
 ): Promise<void> {
@@ -390,7 +414,8 @@ async function freezeSkillList(
   }
 
   for (const id of toFreeze) {
-    shadowRegistry.updateStatus(buildShadowId(id, projectRoot), 'frozen');
+    const shadow = shadows.find((s) => (s.skill_id || s.skillId) === id);
+    shadowRegistry.updateStatus(id, 'frozen', shadow?.runtime);
   }
 
   printSuccess(`Successfully froze ${toFreeze.length} shadow skill(s)`, [
@@ -400,7 +425,8 @@ async function freezeSkillList(
 
 async function unfreezeSkillList(
   skillIds: string[],
-  projectRoot: string,
+  shadows: Array<{ skill_id?: string; skillId?: string; status?: string; runtime?: RuntimeType }>,
+  _projectRoot: string,
   shadowRegistry: ReturnType<typeof createShadowRegistry>,
   options: FreezeOptions
 ): Promise<void> {
@@ -427,7 +453,8 @@ async function unfreezeSkillList(
   }
 
   for (const id of skillIds) {
-    shadowRegistry.updateStatus(buildShadowId(id, projectRoot), 'active');
+    const shadow = shadows.find((s) => (s.skill_id || s.skillId) === id);
+    shadowRegistry.updateStatus(id, 'active', shadow?.runtime);
   }
 
   printSuccess(`Successfully unfroze ${skillIds.length} shadow skill(s)`);

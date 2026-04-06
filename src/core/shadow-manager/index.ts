@@ -7,12 +7,18 @@ import { createTraceSkillMapper } from '../trace-skill-mapper/index.js';
 import { evaluator } from '../evaluator/index.js';
 import { patchGenerator } from '../patch-generator/index.js';
 import { hashString } from '../../utils/hash.js';
-import { skillIdFromShadowId } from '../../utils/parse.js';
+import { buildShadowId, runtimeFromShadowId, skillIdFromShadowId } from '../../utils/parse.js';
 import { createSQLiteStorage } from '../../storage/sqlite.js';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import type { Trace, EvaluationResult, AutoOptimizePolicy, ShadowStatus } from '../../types/index.js';
+import type {
+  Trace,
+  EvaluationResult,
+  AutoOptimizePolicy,
+  ShadowStatus,
+  RuntimeType,
+} from '../../types/index.js';
 
 const logger = createChildLogger('shadow-manager');
 
@@ -77,6 +83,7 @@ export class ShadowManager {
       join(homedir(), '.codex', 'skills'),
     ]);
 
+    const runtimes = configManager.getGlobalConfig().observer.enabled_runtimes;
     let discovered = 0;
     let registered = 0;
     let createdShadows = 0;
@@ -122,28 +129,33 @@ export class ShadowManager {
 
         this.db.upsertOriginSkill(origin);
 
-        if (!this.shadowRegistry.has(skillId)) {
-          this.shadowRegistry.create(skillId, content, originVersion);
-          createdShadows++;
-        }
+        for (const runtime of runtimes) {
+          const scopedSkillId = `${runtime}::${skillId}`;
 
-        const shadowEntry = this.shadowRegistry.get(skillId);
-        const status: ShadowStatus = shadowEntry?.status === 'frozen' ? 'frozen' : 'active';
-        const shadow = {
-          project_id: this.projectRoot,
-          skill_id: skillId,
-          shadow_id: `${skillId}@${this.projectRoot}`,
-          origin_skill_id: skillId,
-          origin_version_at_fork: originVersion,
-          shadow_path: join(this.projectRoot, '.ornn', 'shadows', `${skillId}.md`),
-          current_revision: 0,
-          status,
-          created_at: now,
-          last_optimized_at: now,
-        };
-        this.db.upsertShadowSkill(shadow);
-        this.traceSkillMapper.registerSkill(origin, shadow);
-        registered++;
+          if (!this.shadowRegistry.has(skillId, runtime)) {
+            this.shadowRegistry.create(skillId, content, originVersion, runtime);
+            createdShadows++;
+          }
+
+          const shadowEntry = this.shadowRegistry.get(skillId, runtime);
+          const status: ShadowStatus = shadowEntry?.status === 'frozen' ? 'frozen' : 'active';
+          const shadow = {
+            project_id: this.projectRoot,
+            skill_id: scopedSkillId,
+            runtime,
+            shadow_id: buildShadowId(skillId, this.projectRoot, runtime),
+            origin_skill_id: skillId,
+            origin_version_at_fork: originVersion,
+            shadow_path: join(this.projectRoot, '.ornn', 'shadows', runtime, `${skillId}.md`),
+            current_revision: 0,
+            status,
+            created_at: now,
+            last_optimized_at: now,
+          };
+          this.db.upsertShadowSkill(shadow);
+          this.traceSkillMapper.registerSkill(origin, shadow);
+          registered++;
+        }
       }
     }
 
@@ -170,8 +182,9 @@ export class ShadowManager {
 
     // 记录命中次数，供 dashboard 监控展示
     const skillId = skillIdFromShadowId(shadowId);
+    const runtime = runtimeFromShadowId(shadowId);
     if (skillId) {
-      this.shadowRegistry.incrementTraceCount(skillId);
+      this.shadowRegistry.incrementTraceCount(skillId, (runtime ?? trace.runtime) as RuntimeType);
     }
 
     // 获取最近的 traces
@@ -244,7 +257,9 @@ export class ShadowManager {
     }
 
     // 检查是否被冻结
-    const shadow = this.shadowRegistry.get(skillIdFromShadowId(shadowId) ?? shadowId.split('@')[0]);
+    const skillId = skillIdFromShadowId(shadowId) ?? shadowId.split('@')[0];
+    const runtime = runtimeFromShadowId(shadowId) ?? 'codex';
+    const shadow = this.shadowRegistry.get(skillId, runtime);
     if (shadow?.status === 'frozen') {
       logger.debug(`Shadow ${shadowId} is frozen, skipping patch`);
       return;
@@ -265,10 +280,11 @@ export class ShadowManager {
    */
   private async executePatch(shadowId: string, evaluation: EvaluationResult): Promise<void> {
     const skillId = skillIdFromShadowId(shadowId) ?? shadowId.split('@')[0];
+    const runtime = runtimeFromShadowId(shadowId) ?? 'codex';
 
     try {
       // 读取当前内容
-      const currentContent = this.shadowRegistry.readContent(skillId);
+      const currentContent = this.shadowRegistry.readContent(skillId, runtime);
       if (!currentContent) {
         logger.warn(`Cannot read shadow content: ${skillId}`);
         return;
@@ -296,7 +312,7 @@ export class ShadowManager {
       const currentRevision = this.journalManager.getLatestRevision(shadowId);
 
       // 写入新内容
-      this.shadowRegistry.writeContent(skillId, patchResult.newContent);
+      this.shadowRegistry.writeContent(skillId, patchResult.newContent, runtime);
 
       // 记录演化
       this.journalManager.record(shadowId, {
@@ -384,7 +400,8 @@ export class ShadowManager {
     last_patch_time: number | undefined;
   } | null {
     const skillId = skillIdFromShadowId(shadowId) ?? shadowId.split('@')[0];
-    const shadow = this.shadowRegistry.get(skillId);
+    const runtime = runtimeFromShadowId(shadowId) ?? 'codex';
+    const shadow = this.shadowRegistry.get(skillId, runtime);
 
     if (!shadow) {
       return null;

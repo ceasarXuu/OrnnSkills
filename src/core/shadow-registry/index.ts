@@ -5,14 +5,24 @@
  * Shadow 技能是优化中的临时版本，不会直接部署到运行时。
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync } from 'fs';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+  unlinkSync,
+  readdirSync,
+  renameSync,
+} from 'fs';
 import { join } from 'path';
 import { createChildLogger } from '../../utils/logger.js';
+import type { RuntimeType } from '../../types/index.js';
 
 const logger = createChildLogger('shadow-registry');
 
 export interface ShadowEntry {
   skillId: string;
+  runtime?: RuntimeType;
   version: string;
   content: string;
   status: 'pending' | 'analyzing' | 'optimized' | 'deployed' | 'discarded' | 'frozen' | 'active';
@@ -54,6 +64,33 @@ export class ShadowRegistry {
   private contentCache: Map<string, string> = new Map();
   private initialized = false;
 
+  private normalizeRuntime(runtime?: RuntimeType): RuntimeType {
+    return runtime ?? 'codex';
+  }
+
+  private buildScopedKey(skillId: string, runtime?: RuntimeType): string {
+    return `${this.normalizeRuntime(runtime)}::${skillId}`;
+  }
+
+  private resolveScopedKey(skillId: string, runtime?: RuntimeType): string | null {
+    if (runtime) {
+      const key = this.buildScopedKey(skillId, runtime);
+      return this.index.has(key) ? key : null;
+    }
+
+    const codexKey = this.buildScopedKey(skillId, 'codex');
+    if (this.index.has(codexKey)) {
+      return codexKey;
+    }
+
+    for (const key of this.index.keys()) {
+      if (key.endsWith(`::${skillId}`)) {
+        return key;
+      }
+    }
+    return null;
+  }
+
   constructor(options: ShadowRegistryOptions) {
     this.options = {
       ...options,
@@ -75,9 +112,48 @@ export class ShadowRegistry {
 
     // Load index if exists
     this.loadIndex();
+    this.migrateLegacyFlatShadowFiles();
 
     this.initialized = true;
     logger.debug('Shadow Registry initialized');
+  }
+
+  /**
+   * 迁移旧版平铺 shadow 文件结构：
+   * .ornn/shadows/<skill>.md -> .ornn/shadows/codex/<skill>.md
+   */
+  private migrateLegacyFlatShadowFiles(): void {
+    let moved = 0;
+    let skipped = 0;
+
+    try {
+      const entries = readdirSync(this.shadowsDir, { withFileTypes: true });
+      const codexDir = join(this.shadowsDir, 'codex');
+      mkdirSync(codexDir, { recursive: true });
+
+      for (const entry of entries) {
+        if (!entry.isFile()) continue;
+        if (!entry.name.endsWith('.md')) continue;
+
+        const oldPath = join(this.shadowsDir, entry.name);
+        const newPath = join(codexDir, entry.name);
+
+        if (existsSync(newPath)) {
+          skipped++;
+          continue;
+        }
+
+        renameSync(oldPath, newPath);
+        moved++;
+      }
+    } catch (error) {
+      logger.warn('Legacy shadow file migration failed', { error });
+      return;
+    }
+
+    if (moved > 0 || skipped > 0) {
+      logger.info('Legacy shadow file migration completed', { moved, skipped });
+    }
   }
 
   /**
@@ -92,7 +168,12 @@ export class ShadowRegistry {
     try {
       const data = readFileSync(this.indexPath, 'utf-8');
       const entries = JSON.parse(data) as ShadowEntry[];
-      this.index = new Map(entries.map((e) => [e.skillId, e]));
+      this.index = new Map(
+        entries.map((e) => [
+          this.buildScopedKey(e.skillId, this.normalizeRuntime(e.runtime)),
+          { ...e, runtime: this.normalizeRuntime(e.runtime) },
+        ])
+      );
       logger.debug(`Loaded ${entries.length} shadow entries from index`);
     } catch (error) {
       logger.error('Failed to load shadow index:', error);
@@ -117,19 +198,22 @@ export class ShadowRegistry {
   /**
    * Get shadow file path
    */
-  private getShadowPath(skillId: string): string {
-    return join(this.shadowsDir, `${skillId}.md`);
+  private getShadowPath(skillId: string, runtime?: RuntimeType): string {
+    const rt = this.normalizeRuntime(runtime);
+    return join(this.shadowsDir, rt, `${skillId}.md`);
   }
 
   /**
    * Create a new shadow entry
    */
-  create(skillId: string, content: string, version: string): ShadowEntry {
+  create(skillId: string, content: string, version: string, runtime?: RuntimeType): ShadowEntry {
     this.ensureInitialized();
+    const rt = this.normalizeRuntime(runtime);
 
     const now = new Date().toISOString();
     const entry: ShadowEntry = {
       skillId,
+      runtime: rt,
       version,
       content,
       status: 'pending',
@@ -139,12 +223,14 @@ export class ShadowRegistry {
     };
 
     // Save content to file
-    const shadowPath = this.getShadowPath(skillId);
+    const shadowPath = this.getShadowPath(skillId, rt);
+    mkdirSync(join(this.shadowsDir, rt), { recursive: true });
     writeFileSync(shadowPath, content, 'utf-8');
 
     // Update index and content cache
-    this.index.set(skillId, entry);
-    this.contentCache.set(skillId, content);
+    const key = this.buildScopedKey(skillId, rt);
+    this.index.set(key, entry);
+    this.contentCache.set(key, content);
     this.saveIndex();
 
     logger.info(`Created shadow for skill: ${skillId} (version: ${version})`);
@@ -155,22 +241,24 @@ export class ShadowRegistry {
    * Get a shadow entry.
    * Content is served from an in-memory cache to avoid repeated disk reads.
    */
-  get(skillId: string): ShadowEntry | undefined {
+  get(skillId: string, runtime?: RuntimeType): ShadowEntry | undefined {
     this.ensureInitialized();
 
-    const entry = this.index.get(skillId);
+    const key = this.resolveScopedKey(skillId, runtime);
+    if (!key) return undefined;
+    const entry = this.index.get(key);
     if (!entry) return undefined;
 
     // Serve content from cache; fall back to disk only on first access
-    if (!this.contentCache.has(skillId)) {
-      const shadowPath = this.getShadowPath(skillId);
+    if (!this.contentCache.has(key)) {
+      const shadowPath = this.getShadowPath(entry.skillId, entry.runtime);
       if (existsSync(shadowPath)) {
         const content = readFileSync(shadowPath, 'utf-8');
-        this.contentCache.set(skillId, content);
+        this.contentCache.set(key, content);
         entry.content = content;
       }
     } else {
-      entry.content = this.contentCache.get(skillId)!;
+      entry.content = this.contentCache.get(key)!;
     }
 
     // Add backward compatibility properties
@@ -185,30 +273,33 @@ export class ShadowRegistry {
   /**
    * Check if shadow exists
    */
-  has(skillId: string): boolean {
+  has(skillId: string, runtime?: RuntimeType): boolean {
     this.ensureInitialized();
-    return this.index.has(skillId);
+    return this.resolveScopedKey(skillId, runtime) !== null;
   }
 
   /**
    * Update shadow content
    */
-  updateContent(skillId: string, content: string): ShadowEntry | undefined {
+  updateContent(skillId: string, content: string, runtime?: RuntimeType): ShadowEntry | undefined {
     this.ensureInitialized();
 
-    const entry = this.index.get(skillId);
+    const key = this.resolveScopedKey(skillId, runtime);
+    if (!key) return undefined;
+    const entry = this.index.get(key);
     if (!entry) return undefined;
 
     // Update content file
-    const shadowPath = this.getShadowPath(skillId);
+    const shadowPath = this.getShadowPath(entry.skillId, entry.runtime);
+    mkdirSync(join(this.shadowsDir, this.normalizeRuntime(entry.runtime)), { recursive: true });
     writeFileSync(shadowPath, content, 'utf-8');
 
     // Update entry and content cache
     entry.content = content;
     entry.updatedAt = new Date().toISOString();
 
-    this.index.set(skillId, entry);
-    this.contentCache.set(skillId, content);
+    this.index.set(key, entry);
+    this.contentCache.set(key, content);
     this.saveIndex();
 
     logger.debug(`Updated shadow content for skill: ${skillId}`);
@@ -218,16 +309,22 @@ export class ShadowRegistry {
   /**
    * Update shadow status
    */
-  updateStatus(skillId: string, status: ShadowEntry['status']): ShadowEntry | undefined {
+  updateStatus(
+    skillId: string,
+    status: ShadowEntry['status'],
+    runtime?: RuntimeType
+  ): ShadowEntry | undefined {
     this.ensureInitialized();
 
-    const entry = this.index.get(skillId);
+    const key = this.resolveScopedKey(skillId, runtime);
+    if (!key) return undefined;
+    const entry = this.index.get(key);
     if (!entry) return undefined;
 
     entry.status = status;
     entry.updatedAt = new Date().toISOString();
 
-    this.index.set(skillId, entry);
+    this.index.set(key, entry);
     this.saveIndex();
 
     logger.info(`Updated shadow status for ${skillId}: ${status}`);
@@ -239,17 +336,20 @@ export class ShadowRegistry {
    */
   updateAnalysis(
     skillId: string,
-    analysisResult: ShadowEntry['analysisResult']
+    analysisResult: ShadowEntry['analysisResult'],
+    runtime?: RuntimeType
   ): ShadowEntry | undefined {
     this.ensureInitialized();
 
-    const entry = this.index.get(skillId);
+    const key = this.resolveScopedKey(skillId, runtime);
+    if (!key) return undefined;
+    const entry = this.index.get(key);
     if (!entry) return undefined;
 
     entry.analysisResult = analysisResult;
     entry.updatedAt = new Date().toISOString();
 
-    this.index.set(skillId, entry);
+    this.index.set(key, entry);
     this.saveIndex();
 
     logger.debug(`Updated analysis result for skill: ${skillId}`);
@@ -259,16 +359,18 @@ export class ShadowRegistry {
   /**
    * Increment trace count
    */
-  incrementTraceCount(skillId: string): ShadowEntry | undefined {
+  incrementTraceCount(skillId: string, runtime?: RuntimeType): ShadowEntry | undefined {
     this.ensureInitialized();
 
-    const entry = this.index.get(skillId);
+    const key = this.resolveScopedKey(skillId, runtime);
+    if (!key) return undefined;
+    const entry = this.index.get(key);
     if (!entry) return undefined;
 
     entry.traceCount++;
     entry.updatedAt = new Date().toISOString();
 
-    this.index.set(skillId, entry);
+    this.index.set(key, entry);
     this.saveIndex();
 
     return entry;
@@ -314,21 +416,23 @@ export class ShadowRegistry {
   /**
    * Delete a shadow entry
    */
-  delete(skillId: string): boolean {
+  delete(skillId: string, runtime?: RuntimeType): boolean {
     this.ensureInitialized();
 
-    const entry = this.index.get(skillId);
+    const key = this.resolveScopedKey(skillId, runtime);
+    if (!key) return false;
+    const entry = this.index.get(key);
     if (!entry) return false;
 
     // Delete content file
-    const shadowPath = this.getShadowPath(skillId);
+    const shadowPath = this.getShadowPath(entry.skillId, entry.runtime);
     if (existsSync(shadowPath)) {
       unlinkSync(shadowPath);
     }
 
     // Remove from index and cache
-    this.index.delete(skillId);
-    this.contentCache.delete(skillId);
+    this.index.delete(key);
+    this.contentCache.delete(key);
     this.saveIndex();
 
     logger.info(`Deleted shadow for skill: ${skillId}`);
@@ -342,8 +446,8 @@ export class ShadowRegistry {
     this.ensureInitialized();
 
     // Delete all shadow files
-    for (const skillId of this.index.keys()) {
-      const shadowPath = this.getShadowPath(skillId);
+    for (const entry of this.index.values()) {
+      const shadowPath = this.getShadowPath(entry.skillId, entry.runtime);
       if (existsSync(shadowPath)) {
         unlinkSync(shadowPath);
       }
@@ -359,16 +463,18 @@ export class ShadowRegistry {
   /**
    * Promote shadow to deployed status
    */
-  promote(skillId: string): ShadowEntry | undefined {
+  promote(skillId: string, runtime?: RuntimeType): ShadowEntry | undefined {
     this.ensureInitialized();
 
-    const entry = this.index.get(skillId);
+    const key = this.resolveScopedKey(skillId, runtime);
+    if (!key) return undefined;
+    const entry = this.index.get(key);
     if (!entry) return undefined;
 
     entry.status = 'deployed';
     entry.updatedAt = new Date().toISOString();
 
-    this.index.set(skillId, entry);
+    this.index.set(key, entry);
     this.saveIndex();
 
     logger.info(`Promoted shadow to deployed: ${skillId}`);
@@ -378,16 +484,18 @@ export class ShadowRegistry {
   /**
    * Discard a shadow
    */
-  discard(skillId: string): ShadowEntry | undefined {
+  discard(skillId: string, runtime?: RuntimeType): ShadowEntry | undefined {
     this.ensureInitialized();
 
-    const entry = this.index.get(skillId);
+    const key = this.resolveScopedKey(skillId, runtime);
+    if (!key) return undefined;
+    const entry = this.index.get(key);
     if (!entry) return undefined;
 
     entry.status = 'discarded';
     entry.updatedAt = new Date().toISOString();
 
-    this.index.set(skillId, entry);
+    this.index.set(key, entry);
     this.saveIndex();
 
     logger.info(`Discarded shadow: ${skillId}`);
@@ -454,17 +562,19 @@ export class ShadowRegistry {
     let deletedCount = 0;
     const entriesToDelete: string[] = [];
 
-    for (const [skillId, entry] of this.index.entries()) {
+    for (const [key, entry] of this.index.entries()) {
       if (entry.status === 'discarded' || entry.status === 'deployed') {
         const updatedAt = new Date(entry.updatedAt);
         if (updatedAt < cutoffDate) {
-          entriesToDelete.push(skillId);
+          entriesToDelete.push(key);
         }
       }
     }
 
-    for (const skillId of entriesToDelete) {
-      this.delete(skillId);
+    for (const scopedKey of entriesToDelete) {
+      const parts = scopedKey.split('::');
+      if (parts.length !== 2) continue;
+      this.delete(parts[1], parts[0] as RuntimeType);
       deletedCount++;
     }
 
@@ -487,15 +597,15 @@ export class ShadowRegistry {
   /**
    * Read shadow content - backward compatibility
    */
-  readContent(skillId: string): string | undefined {
-    return this.get(skillId)?.content;
+  readContent(skillId: string, runtime?: RuntimeType): string | undefined {
+    return this.get(skillId, runtime)?.content;
   }
 
   /**
    * Write shadow content - backward compatibility
    */
-  writeContent(skillId: string, content: string): void {
-    this.updateContent(skillId, content);
+  writeContent(skillId: string, content: string, runtime?: RuntimeType): void {
+    this.updateContent(skillId, content, runtime);
   }
 
   /**

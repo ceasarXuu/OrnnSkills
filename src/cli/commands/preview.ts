@@ -4,10 +4,12 @@ import { printErrorAndExit } from '../../utils/error-helper.js';
 import { buildShadowId } from '../../utils/parse.js';
 import { initProjectComponents, validateSkillIdOrExit, getShadowOrExit } from '../lib/cli-setup.js';
 import type { JournalRecord } from '../../core/journal/index.js';
+import { parseRuntimeOption } from '../lib/runtime-option.js';
 
 interface PreviewOptions {
   project: string;
   revision?: string;
+  runtime?: string;
 }
 
 export function createPreviewCommand(): Command {
@@ -17,6 +19,7 @@ export function createPreviewCommand(): Command {
     .description('Preview changes that would be applied to a shadow skill')
     .argument('<skill>', 'Skill ID to preview')
     .option('-r, --revision <rev>', 'Preview changes from specific revision')
+    .option('--runtime <runtime>', 'Runtime scope: codex | claude | opencode')
     .option('-p, --project <path>', 'Project root path', process.cwd())
     .action(async (skillId: string, options: PreviewOptions) => {
       validateSkillIdOrExit(skillId, 'Preview skill', options.project);
@@ -24,9 +27,10 @@ export function createPreviewCommand(): Command {
       const { shadowRegistry, journalManager, projectRoot, close } =
         await initProjectComponents(options.project, 'preview');
       try {
-        getShadowOrExit(shadowRegistry, skillId, 'Preview skill', projectRoot);
+        const runtime = parseRuntimeOption(options.runtime);
+        const shadow = getShadowOrExit(shadowRegistry, skillId, 'Preview skill', projectRoot, runtime);
 
-        const shadowId = buildShadowId(skillId, projectRoot);
+        const shadowId = buildShadowId(skillId, projectRoot, shadow.runtime ?? 'codex');
         const latestRevision = journalManager.getLatestRevision(shadowId);
         const records = journalManager.getJournalRecords(shadowId, { limit: 10 });
 

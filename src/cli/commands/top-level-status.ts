@@ -103,7 +103,8 @@ export function createTopLevelStatusCommand(): Command {
 
             for (const shadow of shadows) {
               const skillId = shadow.skill_id || shadow.skillId || 'unknown';
-              const shadowId = buildShadowId(skillId, projectRoot);
+              const runtime = shadow.runtime ?? 'codex';
+              const shadowId = buildShadowId(skillId, projectRoot, runtime);
               const latestRevision = journalManager.getLatestRevision(shadowId);
               const lastOptimized = shadow.last_optimized_at || shadow.updatedAt
                 ? new Date(shadow.last_optimized_at || shadow.updatedAt).toLocaleDateString()
@@ -112,7 +113,7 @@ export function createTopLevelStatusCommand(): Command {
               const statusIcon = shadow.status === 'active' ? '✅' :
                 shadow.status === 'frozen' ? '❄️' : '⚪';
 
-              log(`     ${statusIcon} ${skillId.padEnd(22)} rev:${String(latestRevision).padStart(3)}  optimized: ${lastOptimized}`);
+              log(`     ${statusIcon} [${runtime}] ${skillId.padEnd(22)} rev:${String(latestRevision).padStart(3)}  optimized: ${lastOptimized}`);
             }
 
             void journalManager.close();

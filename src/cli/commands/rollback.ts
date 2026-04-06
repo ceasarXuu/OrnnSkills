@@ -4,6 +4,7 @@ import { printErrorAndExit } from '../../utils/error-helper.js';
 import { initProjectComponents, validateSkillIdOrExit, getShadowOrExit } from '../lib/cli-setup.js';
 import { buildShadowId } from '../../utils/parse.js';
 import { confirmAction, formatRevision } from '../../utils/cli-formatters.js';
+import { parseRuntimeOption } from '../lib/runtime-option.js';
 
 interface RollbackOptions {
   project: string;
@@ -11,6 +12,7 @@ interface RollbackOptions {
   snapshot?: boolean;
   initial?: boolean;
   force?: boolean;
+  runtime?: string;
 }
 
 function parseRevision(input: string): number {
@@ -36,6 +38,7 @@ export function createRollbackCommand(): Command {
     .option('-t, --to <revision>', 'Rollback to specific revision')
     .option('-s, --snapshot', 'Rollback to latest snapshot')
     .option('-i, --initial', 'Rollback to initial version (revision 0)')
+    .option('--runtime <runtime>', 'Runtime scope: codex | claude | opencode')
     .option('-p, --project <path>', 'Project root path', process.cwd())
     .option('-f, --force', 'Skip confirmation prompt', false)
     .alias('revert')
@@ -46,9 +49,10 @@ export function createRollbackCommand(): Command {
         await initProjectComponents(options.project, 'rollback');
 
       try {
-        const shadow = getShadowOrExit(shadowRegistry, skillId, 'Rollback skill', projectRoot);
+        const runtime = parseRuntimeOption(options.runtime);
+        const shadow = getShadowOrExit(shadowRegistry, skillId, 'Rollback skill', projectRoot, runtime);
 
-        const shadowId = buildShadowId(skillId, projectRoot);
+        const shadowId = buildShadowId(skillId, projectRoot, shadow.runtime ?? 'codex');
 
         // ── 确定回滚目标 ────────────────────────────────────────────────────
         let targetRevision: number | undefined;

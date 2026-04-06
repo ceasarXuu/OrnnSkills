@@ -37,6 +37,14 @@ export class TraceSkillMapper {
   private shadowSkills: Map<string, ProjectSkillShadow> = new Map();
   private dbPath: string;
 
+  private scopedSkillId(runtime: Trace['runtime'], skillId: string): string {
+    return `${runtime}::${skillId}`;
+  }
+
+  private getRuntimeShadow(skillId: string, runtime: Trace['runtime']): ProjectSkillShadow | undefined {
+    return this.shadowSkills.get(this.scopedSkillId(runtime, skillId)) ?? this.shadowSkills.get(skillId);
+  }
+
   constructor(projectRoot: string) {
     this.projectRoot = projectRoot;
     this.dbPath = join(projectRoot, '.ornn', 'state', 'sessions.db');
@@ -85,10 +93,11 @@ export class TraceSkillMapper {
       if (filePath) {
         const skillId = this.extractSkillIdFromPath(filePath);
         if (skillId && this.knownSkills.has(skillId)) {
+          const shadow = this.getRuntimeShadow(skillId, trace.runtime);
           return {
             trace_id: trace.trace_id,
             skill_id: skillId,
-            shadow_id: this.shadowSkills.get(skillId)?.shadow_id ?? null,
+            shadow_id: shadow?.shadow_id ?? null,
             confidence: 0.95,
             reason: `read_file on skill file: ${filePath}`,
           };
@@ -100,10 +109,11 @@ export class TraceSkillMapper {
     if (trace.event_type === 'tool_call') {
       const skillId = this.inferSkillFromToolCall(trace);
       if (skillId) {
+        const shadow = this.getRuntimeShadow(skillId, trace.runtime);
         return {
           trace_id: trace.trace_id,
           skill_id: skillId,
-          shadow_id: this.shadowSkills.get(skillId)?.shadow_id ?? null,
+          shadow_id: shadow?.shadow_id ?? null,
           confidence: 0.85,
           reason: `tool_call "${trace.tool_name}" inferred skill: ${skillId}`,
         };
@@ -115,10 +125,11 @@ export class TraceSkillMapper {
       for (const filePath of trace.files_changed) {
         const skillId = this.extractSkillIdFromPath(filePath);
         if (skillId && this.knownSkills.has(skillId)) {
+          const shadow = this.getRuntimeShadow(skillId, trace.runtime);
           return {
             trace_id: trace.trace_id,
             skill_id: skillId,
-            shadow_id: this.shadowSkills.get(skillId)?.shadow_id ?? null,
+            shadow_id: shadow?.shadow_id ?? null,
             confidence: 0.9,
             reason: `file_change on skill file: ${filePath}`,
           };
@@ -130,10 +141,11 @@ export class TraceSkillMapper {
     if (trace.metadata?.skill_id) {
       const skillId = trace.metadata.skill_id as string;
       if (this.knownSkills.has(skillId)) {
+        const shadow = this.getRuntimeShadow(skillId, trace.runtime);
         return {
           trace_id: trace.trace_id,
           skill_id: skillId,
-          shadow_id: this.shadowSkills.get(skillId)?.shadow_id ?? null,
+          shadow_id: shadow?.shadow_id ?? null,
           confidence: 0.98,
           reason: 'skill_id from trace metadata',
         };
@@ -144,10 +156,11 @@ export class TraceSkillMapper {
     if (trace.event_type === 'assistant_output' && trace.assistant_output) {
       const skillId = this.inferSkillFromOutput(trace.assistant_output);
       if (skillId) {
+        const shadow = this.getRuntimeShadow(skillId, trace.runtime);
         return {
           trace_id: trace.trace_id,
           skill_id: skillId,
-          shadow_id: this.shadowSkills.get(skillId)?.shadow_id ?? null,
+          shadow_id: shadow?.shadow_id ?? null,
           confidence: 0.6,
           reason: `skill reference in assistant output`,
         };
@@ -158,10 +171,11 @@ export class TraceSkillMapper {
     if (trace.event_type === 'user_input' && trace.user_input) {
       const skillId = this.inferSkillFromInput(trace.user_input);
       if (skillId) {
+        const shadow = this.getRuntimeShadow(skillId, trace.runtime);
         return {
           trace_id: trace.trace_id,
           skill_id: skillId,
-          shadow_id: this.shadowSkills.get(skillId)?.shadow_id ?? null,
+          shadow_id: shadow?.shadow_id ?? null,
           confidence: 0.5,
           reason: `skill request in user input`,
         };
@@ -182,19 +196,21 @@ export class TraceSkillMapper {
    * 批量映射 traces 并按 skill 分组
    */
   mapAndGroupTraces(traces: Trace[]): SkillTracesGroup[] {
-    const groups: Map<string, { shadow_id: string; traces: Trace[]; confidence: number }> = new Map();
+    const groups: Map<string, { skill_id: string; shadow_id: string; traces: Trace[]; confidence: number }> = new Map();
     const unmappedTraces: Trace[] = [];
 
     for (const trace of traces) {
       const mapping = this.mapTrace(trace);
 
       if (mapping.skill_id && mapping.shadow_id && mapping.confidence >= 0.5) {
-        const existing = groups.get(mapping.skill_id);
+        const groupKey = mapping.shadow_id;
+        const existing = groups.get(groupKey);
         if (existing) {
           existing.traces.push(trace);
           existing.confidence = Math.max(existing.confidence, mapping.confidence);
         } else {
-          groups.set(mapping.skill_id, {
+          groups.set(groupKey, {
+            skill_id: mapping.skill_id,
             shadow_id: mapping.shadow_id,
             traces: [trace],
             confidence: mapping.confidence,
@@ -210,9 +226,9 @@ export class TraceSkillMapper {
 
     // 转换为数组
     const result: SkillTracesGroup[] = [];
-    for (const [skillId, group] of groups.entries()) {
+    for (const [, group] of groups.entries()) {
       result.push({
-        skill_id: skillId,
+        skill_id: group.skill_id,
         shadow_id: group.shadow_id,
         traces: group.traces,
         confidence: group.confidence,

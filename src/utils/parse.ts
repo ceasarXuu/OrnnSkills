@@ -9,6 +9,7 @@
  */
 export interface ShadowIdParts {
   skillId: string;
+  runtime: 'codex' | 'claude' | 'opencode';
   projectRoot: string;
 }
 
@@ -21,8 +22,20 @@ export function parseShadowId(shadowId: string): ShadowIdParts | null {
   const atIndex = shadowId.indexOf('@');
   // skillId 不能为空，projectRoot 不能为空
   if (atIndex <= 0 || atIndex === shadowId.length - 1) return null;
+
+  const head = shadowId.slice(0, atIndex);
+  const scopedMatch = head.match(/^(codex|claude|opencode)::(.+)$/);
+  if (scopedMatch) {
+    return {
+      runtime: scopedMatch[1] as 'codex' | 'claude' | 'opencode',
+      skillId: scopedMatch[2],
+      projectRoot: shadowId.slice(atIndex + 1),
+    };
+  }
+
   return {
-    skillId: shadowId.slice(0, atIndex),
+    runtime: 'codex',
+    skillId: head,
     projectRoot: shadowId.slice(atIndex + 1),
   };
 }
@@ -35,10 +48,20 @@ export function skillIdFromShadowId(shadowId: string): string | null {
 }
 
 /**
- * 构建 shadow ID。
+ * 从 shadow ID 提取 runtime。格式无效时返回 null。
  */
-export function buildShadowId(skillId: string, projectRoot: string): string {
-  return `${skillId}@${projectRoot}`;
+export function runtimeFromShadowId(shadowId: string): 'codex' | 'claude' | 'opencode' | null {
+  return parseShadowId(shadowId)?.runtime ?? null;
 }
 
+/**
+ * 构建 shadow ID。
+ */
+export function buildShadowId(
+  skillId: string,
+  projectRoot: string,
+  runtime: 'codex' | 'claude' | 'opencode' = 'codex'
+): string {
+  return `${runtime}::${skillId}@${projectRoot}`;
+}
 

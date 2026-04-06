@@ -6,11 +6,13 @@ import { printErrorAndExit } from '../../utils/error-helper.js';
 import { buildShadowId } from '../../utils/parse.js';
 import { initProjectComponents, validateSkillIdOrExit, getShadowOrExit } from '../lib/cli-setup.js';
 import { originRegistry } from '../../core/origin-registry/index.js';
+import { parseRuntimeOption } from '../lib/runtime-option.js';
 
 interface DiffOptions {
   project: string;
   revision?: string;
   origin?: boolean;
+  runtime?: string;
 }
 
 /**
@@ -25,6 +27,7 @@ export function createDiffCommand(): Command {
     .argument('<skill>', 'Skill ID to show diff for')
     .option('-r, --revision <number>', 'Compare with specific revision')
     .option('-o, --origin', 'Compare with origin skill')
+    .option('--runtime <runtime>', 'Runtime scope: codex | claude | opencode')
     .option('-p, --project <path>', 'Project root path', process.cwd())
     .action(async (skillId: string, options: DiffOptions) => {
       validateSkillIdOrExit(skillId, 'Validate skill ID', options.project);
@@ -32,9 +35,10 @@ export function createDiffCommand(): Command {
       const { shadowRegistry, journalManager, projectRoot, close } =
         await initProjectComponents(options.project, 'diff');
       try {
-        const shadow = getShadowOrExit(shadowRegistry, skillId, 'Show diff', projectRoot);
+        const runtime = parseRuntimeOption(options.runtime);
+        const shadow = getShadowOrExit(shadowRegistry, skillId, 'Show diff', projectRoot, runtime);
 
-        const currentContent = shadowRegistry.readContent(skillId);
+        const currentContent = shadowRegistry.readContent(skillId, shadow.runtime);
         if (!currentContent) {
           printErrorAndExit(`Cannot read shadow content for "${skillId}"`, {
             operation: 'Read shadow content',
@@ -43,7 +47,7 @@ export function createDiffCommand(): Command {
           });
         }
 
-        const shadowId = buildShadowId(skillId, projectRoot);
+        const shadowId = buildShadowId(skillId, projectRoot, shadow.runtime ?? 'codex');
 
         if (options.origin) {
           // 与 origin 比较

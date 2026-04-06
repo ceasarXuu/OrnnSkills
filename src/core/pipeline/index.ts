@@ -5,6 +5,7 @@ import { createTraceSkillMapper } from '../trace-skill-mapper/index.js';
 import { evaluator } from '../evaluator/index.js';
 import { createShadowRegistry } from '../shadow-registry/index.js';
 import type { Trace, EvaluationResult, SkillTracesGroup } from '../../types/index.js';
+import { runtimeFromShadowId } from '../../utils/parse.js';
 
 const logger = createChildLogger('pipeline');
 
@@ -178,23 +179,24 @@ export class OptimizationPipeline {
    */
   private async evaluateSkillGroup(group: SkillTracesGroup): Promise<OptimizationTask | null> {
     const { skill_id, shadow_id, traces } = group;
+    const runtime = runtimeFromShadowId(shadow_id) ?? 'codex';
 
     // 检查 shadow skill 是否存在
-    const shadow = this.shadowRegistry.get(skill_id);
+    const shadow = this.shadowRegistry.get(skill_id, runtime);
     if (!shadow) {
-      logger.debug('Shadow skill not found, skipping', { skill_id });
+      logger.debug('Shadow skill not found, skipping', { skill_id, runtime });
       return null;
     }
 
     // 检查是否被冻结
     if (shadow.status === 'frozen') {
-      logger.debug('Shadow skill is frozen, skipping', { skill_id });
+      logger.debug('Shadow skill is frozen, skipping', { skill_id, runtime });
       return null;
     }
 
     // 使用 evaluator 评估 traces（带超时控制）
     const evaluation = await this.evaluateWithTimeout(traces, 10000);
-    if (!evaluation.should_patch) {
+    if (!evaluation || !evaluation.should_patch) {
       logger.debug('No optimization needed for skill', { skill_id });
       return null;
     }
@@ -230,8 +232,8 @@ export class OptimizationPipeline {
   private async evaluateWithTimeout(
     traces: Trace[],
     timeoutMs: number
-  ): Promise<EvaluationResult> {
-    const evaluatePromise = new Promise<EvaluationResult>((resolve, reject) => {
+  ): Promise<EvaluationResult | null> {
+    const evaluatePromise = new Promise<EvaluationResult | null>((resolve, reject) => {
       try {
         resolve(evaluator.evaluate(traces));
       } catch (error) {

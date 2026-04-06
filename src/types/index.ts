@@ -19,6 +19,7 @@ export type ShadowStatus = 'active' | 'frozen' | 'rebasing' | 'needs_attention';
 export interface ProjectSkillShadow {
   project_id: string;
   skill_id: string;
+  runtime?: RuntimeType;
   shadow_id: string; // "A@repo-x"
   origin_skill_id: string;
   origin_version_at_fork: string;

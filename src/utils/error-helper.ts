@@ -7,6 +7,7 @@
 export interface ErrorContext {
   operation: string;
   skillId?: string;
+  runtime?: string;
   projectPath?: string;
 }
 
@@ -468,5 +469,4 @@ export function printErrorAndExit(
   console.error(formatted);
   process.exit(exitCode);
 }
-
 
