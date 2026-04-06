@@ -9,7 +9,7 @@ import { patchGenerator } from '../patch-generator/index.js';
 import { hashString } from '../../utils/hash.js';
 import { buildShadowId, runtimeFromShadowId, skillIdFromShadowId } from '../../utils/parse.js';
 import { createSQLiteStorage } from '../../storage/sqlite.js';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import type {
@@ -98,6 +98,7 @@ export class ShadowManager {
     let discovered = 0;
     let registered = 0;
     let createdShadows = 0;
+    let materializedToProject = 0;
 
     for (const root of candidateRoots) {
       if (!existsSync(root)) continue;
@@ -125,6 +126,7 @@ export class ShadowManager {
 
         discovered++;
         selectedSourceBySkill.set(skillId, root);
+        const isProjectSource = root.startsWith(this.projectRoot);
 
         let content = '';
         try {
@@ -178,6 +180,14 @@ export class ShadowManager {
           this.db.upsertShadowSkill(shadow);
           this.traceSkillMapper.registerSkill(origin, shadow);
           registered++;
+
+          // 当来源是全局 skill 且项目侧尚不存在时，物化到项目目录，
+          // 保证后续由项目副本生效，避免改动全局影响其它项目。
+          if (!isProjectSource) {
+            if (this.materializeSkillToProject(runtime as RuntimeType, skillId, content)) {
+              materializedToProject++;
+            }
+          }
         }
       }
     }
@@ -189,7 +199,30 @@ export class ShadowManager {
       roots: candidateRoots,
       prioritizedProjectRoots: projectRoots,
       selectedSkills: selectedSourceBySkill.size,
+      materializedToProject,
     });
+  }
+
+  private getProjectSkillPath(runtime: RuntimeType, skillId: string): string {
+    switch (runtime) {
+      case 'codex':
+        return join(this.projectRoot, '.codex', 'skills', skillId, 'SKILL.md');
+      case 'claude':
+        return join(this.projectRoot, '.claude', 'skills', skillId, 'SKILL.md');
+      case 'opencode':
+        return join(this.projectRoot, '.opencode', 'skills', skillId, 'SKILL.md');
+      default:
+        return join(this.projectRoot, 'skills', skillId, 'SKILL.md');
+    }
+  }
+
+  private materializeSkillToProject(runtime: RuntimeType, skillId: string, content: string): boolean {
+    const targetPath = this.getProjectSkillPath(runtime, skillId);
+    if (existsSync(targetPath)) return false;
+
+    mkdirSync(join(this.projectRoot, `.${runtime}`, 'skills', skillId), { recursive: true });
+    writeFileSync(targetPath, content, 'utf-8');
+    return true;
   }
 
   /**

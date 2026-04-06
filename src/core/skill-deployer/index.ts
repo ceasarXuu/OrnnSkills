@@ -7,7 +7,6 @@
 
 import { writeFileSync, mkdirSync, existsSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
-import { homedir } from 'node:os';
 import { createChildLogger } from '../../utils/logger.js';
 import type { RuntimeType } from '../../types/index.js';
 import type { SkillVersion } from '../skill-version/index.js';
@@ -83,15 +82,13 @@ export class SkillDeployer {
   private getTargetPath(skillId: string): string {
     switch (this.options.runtime) {
       case 'codex':
-        return join(homedir(), '.codex', 'skills', `${skillId}.md`);
+        return join(this.options.projectPath, '.codex', 'skills', skillId, 'SKILL.md');
 
-      case 'claude': {
-        const projectName = this.options.projectPath.replace(/\//g, '-');
-        return join(homedir(), '.claude', 'projects', projectName, 'skills', `${skillId}.md`);
-      }
+      case 'claude':
+        return join(this.options.projectPath, '.claude', 'skills', skillId, 'SKILL.md');
 
       case 'opencode':
-        return join(homedir(), '.opencode', 'skills', `${skillId}.md`);
+        return join(this.options.projectPath, '.opencode', 'skills', skillId, 'SKILL.md');
 
       default:
         throw new Error(`Unsupported runtime: ${String(this.options.runtime)}`);
