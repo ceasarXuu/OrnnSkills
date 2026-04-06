@@ -5,6 +5,7 @@ import {
   mkdirSync,
   appendFileSync,
   unlinkSync,
+  statSync,
 } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { join, dirname } from 'node:path';
@@ -19,6 +20,7 @@ const logger = createChildLogger('ndjson');
 class FileLock {
   private lockPath: string;
   private locked: boolean = false;
+  private static readonly STALE_LOCK_MS = 30_000;
 
   constructor(filePath: string) {
     this.lockPath = `${filePath}.lock`;
@@ -45,6 +47,8 @@ class FileLock {
         this.locked = true;
         return;
       } catch {
+        this.tryBreakStaleLock();
+
         // 文件已存在，使用指数退避等待后重试
         retries++;
         if (retries >= maxRetries) {
@@ -60,6 +64,31 @@ class FileLock {
           // 短暂等待
         }
       }
+    }
+  }
+
+  /**
+   * 检测并清理过期锁文件，防止崩溃残留导致永远无法写入
+   */
+  private tryBreakStaleLock(): void {
+    try {
+      if (!existsSync(this.lockPath)) {
+        return;
+      }
+
+      const stats = statSync(this.lockPath);
+      const lockAgeMs = Date.now() - stats.mtimeMs;
+      if (lockAgeMs <= FileLock.STALE_LOCK_MS) {
+        return;
+      }
+
+      unlinkSync(this.lockPath);
+      logger.warn('Stale lock file removed', {
+        lockPath: this.lockPath,
+        lockAgeMs,
+      });
+    } catch (error) {
+      logger.debug('Failed to break stale lock file', { error, lockPath: this.lockPath });
     }
   }
 

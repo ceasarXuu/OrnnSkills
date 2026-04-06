@@ -1,7 +1,16 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { mkdirSync, rmSync, existsSync, readFileSync, appendFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  rmSync,
+  existsSync,
+  readFileSync,
+  appendFileSync,
+  closeSync,
+  openSync,
+  utimesSync,
+} from 'node:fs';
 import {
   NDJSONReader,
   NDJSONWriter,
@@ -53,6 +62,23 @@ describe('NDJSONWriter', () => {
     const filePath = join(testDir, 'test.ndjson');
     const writer = new NDJSONWriter<{ id: string }>(filePath);
     expect(writer.getPath()).toBe(filePath);
+  });
+
+  it('should recover from stale lock file', async () => {
+    const filePath = join(testDir, 'test.ndjson');
+    const lockPath = `${filePath}.lock`;
+
+    // 模拟崩溃残留的旧锁文件
+    const fd = openSync(lockPath, 'w');
+    closeSync(fd);
+    const staleAt = new Date(Date.now() - 31_000);
+    utimesSync(lockPath, staleAt, staleAt);
+
+    const writer = new NDJSONWriter<{ id: string }>(filePath);
+    expect(() => writer.append({ id: '1' })).not.toThrow();
+
+    const content = readFileSync(filePath, 'utf-8');
+    expect(content).toContain('"id":"1"');
   });
 });
 

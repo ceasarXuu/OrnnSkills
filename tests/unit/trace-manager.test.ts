@@ -66,6 +66,15 @@ describe('TraceManager', () => {
       const manager = createTraceManager(testProjectPath);
       expect(() => manager.recordTrace(makeTrace('t-1', 'sess-1'))).toThrow('TraceManager not initialized');
     });
+
+    it('should auto-create session when recording first trace without setSession', async () => {
+      const manager = createTraceManager(testProjectPath);
+      await manager.init();
+      expect(() => manager.recordTrace(makeTrace('t-1', 'sess-auto'))).not.toThrow();
+      const traces = await manager.getSessionTraces('sess-auto');
+      expect(traces.length).toBe(1);
+      manager.close();
+    });
   });
 
   describe('recordTraces', () => {

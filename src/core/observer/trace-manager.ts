@@ -29,6 +29,32 @@ export class TraceManager {
   }
 
   /**
+   * 确保 session 已存在，避免 traces_index 外键写入失败
+   */
+  private ensureSessionExists(trace: Trace): void {
+    if (!this.db) throw new Error('TraceManager not initialized');
+
+    const existing = this.db.getSession(trace.session_id);
+    if (existing) {
+      return;
+    }
+
+    this.db.createSession({
+      session_id: trace.session_id,
+      runtime: trace.runtime,
+      project_id: null,
+      started_at: trace.timestamp,
+      ended_at: null,
+      trace_count: 0,
+    });
+
+    logger.info('Auto-created missing session for trace recording', {
+      session_id: trace.session_id,
+      runtime: trace.runtime,
+    });
+  }
+
+  /**
    * 初始化
    */
   async init(): Promise<void> {
@@ -80,6 +106,9 @@ export class TraceManager {
     let ndjsonWritten = false;
     
     try {
+      // 先确保 session 存在，避免数据库外键失败
+      this.ensureSessionExists(trace);
+
       // 先写入 NDJSON（可追加，原子性较好）
       this.traceStore.append(trace);
       ndjsonWritten = true;
