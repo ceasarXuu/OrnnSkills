@@ -886,14 +886,13 @@ function renderSkillCard(skill, projectPath) {
   const versions = skill.versionsAvailable?.length ?? 0;
   const runtime = skill.runtime || 'codex';
   const highlightedName = highlightText(skill.skillId, state.searchQuery);
-  return \`<div class="skill-card">
+  return \`<div class="skill-card" onclick="viewSkill('\${escJsStr(projectPath)}','\${escJsStr(skill.skillId)}','\${escJsStr(runtime)}')">
     <div class="skill-top">
       <div class="skill-name">
         <span class="status-badge \${statusCls}">\${skill.status ?? 'pending'}</span>
         <span>\${highlightedName}</span>
       </div>
       <div class="skill-actions">
-        <button class="btn-sm" onclick="viewSkill('\${escJsStr(projectPath)}','\${escJsStr(skill.skillId)}','\${escJsStr(runtime)}');event.stopPropagation()">\${t('skillView')}</button>
         \${versions > 0 ? \`<button class="btn-sm" onclick="viewSkill('\${escJsStr(projectPath)}','\${escJsStr(skill.skillId)}','\${escJsStr(runtime)}');event.stopPropagation()">\${t('skillHistory')} (\${versions})</button>\` : ''}
       </div>
     </div>
