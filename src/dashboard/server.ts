@@ -95,10 +95,14 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
     return lang === 'zh' ? 'zh' : 'en';
   }
 
-  function detectLangFromAcceptLanguage(acceptLanguageHeader?: string): Language {
+  function detectLangFromAcceptLanguage(acceptLanguageHeader?: string | string[]): Language {
     if (!acceptLanguageHeader) return 'en';
 
-    const candidates = acceptLanguageHeader
+    const headerValue = Array.isArray(acceptLanguageHeader)
+      ? acceptLanguageHeader.join(',')
+      : acceptLanguageHeader;
+
+    const candidates = headerValue
       .split(',')
       .map((part) => {
         const [tagPart, qPart] = part.trim().split(';');

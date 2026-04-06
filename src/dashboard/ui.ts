@@ -503,10 +503,10 @@ function setHeaderStatus(status) {
 
 // ─── Initial Load ────────────────────────────────────────────────────────────
 async function init() {
-  const browserLang = detectBrowserLang();
-  if (browserLang !== currentLang) switchLang(browserLang);
-
   try {
+    const browserLang = detectBrowserLang();
+    if (browserLang !== currentLang) switchLang(browserLang);
+
     const r = await fetch('/api/projects');
     const data = await r.json();
     state.projects = data.projects || [];
