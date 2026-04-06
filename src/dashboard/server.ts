@@ -33,6 +33,7 @@ import { createChildLogger } from '../utils/logger.js';
 import { createShadowRegistry } from '../core/shadow-registry/index.js';
 import { SkillVersionManager } from '../core/skill-version/index.js';
 import type { RuntimeType } from '../types/index.js';
+import { createSkillDeployer } from '../core/skill-deployer/index.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -415,12 +416,39 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
               ? body.reason.trim()
               : 'Manual edit from dashboard';
           const created = versionManager.createVersion(newContent, reason, []);
+          const deployer = createSkillDeployer({
+            runtime,
+            projectPath,
+          });
+          // 自动将最新版本写回 runtime；历史版本继续保留在 .ornn
+          const deployResult = deployer.deploy(skillId, created);
+          if (!deployResult.success) {
+            logger.error('Dashboard save created version but failed to deploy latest', {
+              projectPath,
+              skillId,
+              runtime,
+              version: created.version,
+              error: deployResult.error,
+            });
+            json(
+              res,
+              {
+                ok: false,
+                error: `Version created (v${created.version}) but deploy failed`,
+                detail: deployResult.error,
+                version: created.version,
+              },
+              500
+            );
+            return;
+          }
 
           logger.info('Dashboard saved skill edit and created version', {
             projectPath,
             skillId,
             runtime,
             version: created.version,
+            deployedPath: deployResult.deployedPath,
           });
 
           json(res, {
@@ -429,6 +457,7 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
             runtime,
             version: created.version,
             metadata: created.metadata,
+            deployedPath: deployResult.deployedPath,
           });
           return;
         }
