@@ -138,23 +138,49 @@ export function getDashboardHtml(_port: number, lang: Language = 'en'): string {
   .state-error { background: rgba(248,81,73,.15); color: var(--red); }
 
   /* Skills */
-  .skills-list { display: flex; flex-direction: column; gap: 8px; }
+  .skills-list { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  @media (max-width: 1200px) { .skills-list { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 800px) { .skills-list { grid-template-columns: 1fr; } }
   .skill-card {
     background: var(--bg2); border: 1px solid var(--border); border-radius: 5px;
-    padding: 10px 12px; cursor: pointer; transition: border-color .15s;
+    padding: 12px; cursor: pointer; transition: border-color .15s;
+    display: flex; flex-direction: column; min-height: 100px;
   }
   .skill-card:hover { border-color: var(--blue); }
-  .skill-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
-  .skill-name { font-size: 12px; font-weight: 500; color: var(--text); display: flex; align-items: center; gap: 6px; }
-  .skill-actions { display: flex; gap: 6px; }
+  .skill-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .skill-name { font-size: 12px; font-weight: 500; color: var(--text); display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
+  .skill-name span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .skill-actions { display: flex; gap: 6px; flex-shrink: 0; }
   .btn-sm {
     font-family: var(--font); font-size: 10px; padding: 2px 7px; border-radius: 4px;
     border: 1px solid var(--border); background: var(--bg3); color: var(--text);
     cursor: pointer; transition: border-color .1s, color .1s;
   }
   .btn-sm:hover { border-color: var(--blue); color: var(--blue); }
-  .skill-meta { font-size: 10px; color: var(--muted); display: flex; gap: 12px; flex-wrap: wrap; }
+  .skill-meta { font-size: 10px; color: var(--muted); display: flex; gap: 12px; flex-wrap: wrap; margin-top: auto; }
   .skill-meta span { display: flex; align-items: center; gap: 3px; }
+  .highlight { background: rgba(88,166,255,.3); padding: 0 2px; border-radius: 2px; }
+
+  /* Search and Sort Controls */
+  .skills-controls { display: flex; gap: 12px; margin-bottom: 12px; align-items: center; flex-wrap: wrap; }
+  .search-box { flex: 1; min-width: 200px; position: relative; }
+  .search-input {
+    width: 100%; background: var(--bg0); border: 1px solid var(--border); border-radius: 4px;
+    color: var(--text); font-family: var(--font); font-size: 11px; padding: 6px 10px 6px 28px;
+    outline: none;
+  }
+  .search-input:focus { border-color: var(--blue); }
+  .search-icon { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 12px; pointer-events: none; }
+  .sort-controls { display: flex; gap: 6px; align-items: center; }
+  .sort-label { font-size: 10px; color: var(--muted); }
+  .sort-btn {
+    font-family: var(--font); font-size: 10px; padding: 4px 10px; border-radius: 4px;
+    border: 1px solid var(--border); background: var(--bg2); color: var(--muted);
+    cursor: pointer; transition: all .15s; display: flex; align-items: center; gap: 4px;
+  }
+  .sort-btn:hover { border-color: var(--blue); color: var(--text); }
+  .sort-btn.active { background: var(--blue); color: #fff; border-color: var(--blue); }
+  .sort-btn .arrow { font-size: 8px; }
 
   .status-badge {
     font-size: 9px; padding: 1px 5px; border-radius: 8px; font-weight: 500;
@@ -405,6 +431,9 @@ const state = {
   logFilter: 'ALL',
   currentSkillId: null,
   selectedRuntimeTab: 'all',
+  searchQuery: '',
+  sortBy: 'name',
+  sortOrder: 'asc',
 };
 
 // ─── SSE Connection ──────────────────────────────────────────────────────────
@@ -599,13 +628,30 @@ function renderMainPanel(projectPath) {
             <button class="runtime-tab tab-claude \${state.selectedRuntimeTab === 'claude' ? 'active' : ''}" onclick="selectRuntimeTab('claude')">Claude</button>
             <button class="runtime-tab tab-opencode \${state.selectedRuntimeTab === 'opencode' ? 'active' : ''}" onclick="selectRuntimeTab('opencode')">OpenCode</button>
           </div>
-          <span style="color:var(--muted)">\${getFilteredSkills(skills).length} \${t('skillsCount')}</span>
+          <span style="color:var(--muted)">\${getFilteredAndSortedSkills(skills).length} \${t('skillsCount')}</span>
         </div>
       </div>
       <div class="card-body">
-        \${getFilteredSkills(skills).length === 0
-          ? '<div class="empty-state">' + t('skillsEmpty') + '</div>'
-          : '<div class="skills-list">' + getFilteredSkills(skills).map(s => renderSkillCard(s, projectPath)).join('') + '</div>'
+        <!-- Search and Sort Controls -->
+        <div class="skills-controls">
+          <div class="search-box">
+            <span class="search-icon">🔍</span>
+            <input type="text" class="search-input" id="skillSearchInput" placeholder="Search skills..." value="\${state.searchQuery}" oninput="handleSearch(this.value)" />
+          </div>
+          <div class="sort-controls">
+            <span class="sort-label">Sort:</span>
+            <button class="sort-btn \${state.sortBy === 'name' ? 'active' : ''}" onclick="toggleSort('name')">
+              Name <span class="arrow">\${state.sortBy === 'name' ? (state.sortOrder === 'asc' ? '↑' : '↓') : ''}</span>
+            </button>
+            <button class="sort-btn \${state.sortBy === 'updated' ? 'active' : ''}" onclick="toggleSort('updated')">
+              Updated <span class="arrow">\${state.sortBy === 'updated' ? (state.sortOrder === 'asc' ? '↑' : '↓') : ''}</span>
+            </button>
+          </div>
+        </div>
+        
+        \${getFilteredAndSortedSkills(skills).length === 0
+          ? '<div class="empty-state">' + (state.searchQuery ? 'No skills found matching "' + escHtml(state.searchQuery) + '"' : t('skillsEmpty')) + '</div>'
+          : '<div class="skills-list">' + getFilteredAndSortedSkills(skills).map(s => renderSkillCard(s, projectPath)).join('') + '</div>'
         }
       </div>
     </div>
@@ -641,6 +687,25 @@ function selectRuntimeTab(runtime) {
   }
 }
 
+function handleSearch(query) {
+  state.searchQuery = query.toLowerCase().trim();
+  if (state.selectedProjectId) {
+    renderMainPanel(state.selectedProjectId);
+  }
+}
+
+function toggleSort(sortBy) {
+  if (state.sortBy === sortBy) {
+    state.sortOrder = state.sortOrder === 'asc' ? 'desc' : 'asc';
+  } else {
+    state.sortBy = sortBy;
+    state.sortOrder = 'asc';
+  }
+  if (state.selectedProjectId) {
+    renderMainPanel(state.selectedProjectId);
+  }
+}
+
 function getFilteredSkills(skills) {
   if (state.selectedRuntimeTab === 'all') {
     return skills;
@@ -648,15 +713,57 @@ function getFilteredSkills(skills) {
   return skills.filter(s => (s.runtime || 'codex') === state.selectedRuntimeTab);
 }
 
+function getFilteredAndSortedSkills(skills) {
+  let filtered = getFilteredSkills(skills);
+  
+  if (state.searchQuery) {
+    filtered = filtered.filter(s => {
+      const skillId = (s.skillId || '').toLowerCase();
+      const status = (s.status || '').toLowerCase();
+      const runtime = (s.runtime || 'codex').toLowerCase();
+      return skillId.includes(state.searchQuery) || 
+             status.includes(state.searchQuery) || 
+             runtime.includes(state.searchQuery);
+    });
+  }
+  
+  filtered.sort((a, b) => {
+    let comparison = 0;
+    if (state.sortBy === 'name') {
+      comparison = (a.skillId || '').localeCompare(b.skillId || '');
+    } else if (state.sortBy === 'updated') {
+      const aTime = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+      const bTime = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+      comparison = aTime - bTime;
+    }
+    return state.sortOrder === 'asc' ? comparison : -comparison;
+  });
+  
+  return filtered;
+}
+
+function highlightText(text, query) {
+  if (!query || !text) return escHtml(text || '');
+  const lowerText = text.toLowerCase();
+  const lowerQuery = query.toLowerCase();
+  const index = lowerText.indexOf(lowerQuery);
+  if (index === -1) return escHtml(text);
+  const before = text.slice(0, index);
+  const match = text.slice(index, index + query.length);
+  const after = text.slice(index + query.length);
+  return escHtml(before) + '<span class="highlight">' + escHtml(match) + '</span>' + escHtml(after);
+}
+
 function renderSkillCard(skill, projectPath) {
   const statusCls = 'status-' + (skill.status || 'pending');
   const versions = skill.versionsAvailable?.length ?? 0;
   const runtime = skill.runtime || 'codex';
+  const highlightedName = highlightText(skill.skillId, state.searchQuery);
   return \`<div class="skill-card">
     <div class="skill-top">
       <div class="skill-name">
         <span class="status-badge \${statusCls}">\${skill.status ?? 'pending'}</span>
-        <span>\${escHtml(skill.skillId)}</span>
+        <span>\${highlightedName}</span>
       </div>
       <div class="skill-actions">
         <button class="btn-sm" onclick="viewSkill('\${escHtml(projectPath)}','\${escHtml(skill.skillId)}','\${escHtml(runtime)}');event.stopPropagation()">\${t('skillView')}</button>
