@@ -286,14 +286,29 @@ export class TraceSkillMapper {
    * 从 tool_call 推断 skill
    */
   private inferSkillFromToolCall(trace: Trace): string | null {
+    let normalizedArgs: Record<string, unknown> = {};
+    if (trace.tool_args && typeof trace.tool_args === 'string') {
+      try {
+        normalizedArgs = JSON.parse(trace.tool_args) as Record<string, unknown>;
+      } catch {
+        normalizedArgs = {};
+      }
+    } else if (trace.tool_args && typeof trace.tool_args === 'object') {
+      normalizedArgs = trace.tool_args;
+    }
+
     // 检查 tool_args 中是否包含 skill 相关信息
-    if (trace.tool_args?.skill_id) {
-      return trace.tool_args.skill_id as string;
+    if (normalizedArgs.skill_id) {
+      return normalizedArgs.skill_id as string;
     }
 
     // 检查特定工具的使用模式
-    if (trace.tool_name === 'execute_command') {
-      const command = trace.tool_args?.command as string;
+    if (
+      trace.tool_name === 'execute_command' ||
+      trace.tool_name === 'exec_command' ||
+      trace.tool_name === 'functions.exec_command'
+    ) {
+      const command = (normalizedArgs.command as string) ?? (normalizedArgs.cmd as string);
       if (command) {
         // 检测 skill 相关命令
         const skillId = this.extractSkillFromCommand(command);

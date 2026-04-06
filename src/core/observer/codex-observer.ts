@@ -313,7 +313,18 @@ export class CodexObserver extends BaseObserver {
         const toolName =
           (payload.name as string) ||
           ((payload.function as Record<string, unknown>)?.name as string);
-        const args = payload.arguments as Record<string, unknown>;
+        const rawArgs = payload.arguments ?? (payload.function as Record<string, unknown>)?.arguments;
+        let args: Record<string, unknown> = {};
+
+        if (typeof rawArgs === 'string') {
+          try {
+            args = JSON.parse(rawArgs) as Record<string, unknown>;
+          } catch {
+            args = { raw: rawArgs };
+          }
+        } else if (rawArgs && typeof rawArgs === 'object') {
+          args = rawArgs as Record<string, unknown>;
+        }
 
         return {
           sessionId,

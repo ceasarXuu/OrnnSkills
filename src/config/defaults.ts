@@ -5,7 +5,7 @@ import type { EVOConfig } from '../types/index.js';
  */
 export const DEFAULT_CONFIG: EVOConfig = {
   origin_paths: {
-    paths: ['~/.skills', '~/.claude/skills'],
+    paths: ['~/.skills', '~/.claude/skills', '~/.agents/skills', '~/.codex/skills'],
   },
   observer: {
     enabled_runtimes: ['codex', 'opencode', 'claude'],

@@ -8,7 +8,11 @@ import { evaluator } from '../evaluator/index.js';
 import { patchGenerator } from '../patch-generator/index.js';
 import { hashString } from '../../utils/hash.js';
 import { skillIdFromShadowId } from '../../utils/parse.js';
-import type { Trace, EvaluationResult, AutoOptimizePolicy } from '../../types/index.js';
+import { createSQLiteStorage } from '../../storage/sqlite.js';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { homedir } from 'node:os';
+import type { Trace, EvaluationResult, AutoOptimizePolicy, ShadowStatus } from '../../types/index.js';
 
 const logger = createChildLogger('shadow-manager');
 
@@ -17,19 +21,24 @@ const logger = createChildLogger('shadow-manager');
  * 负责编排整个演化流程
  */
 export class ShadowManager {
+  private projectRoot: string;
   private shadowRegistry;
   private journalManager;
   private traceManager;
   private traceSkillMapper;
+  private db: Awaited<ReturnType<typeof createSQLiteStorage>> | null = null;
+  private dbPath: string;
   private policy: AutoOptimizePolicy;
   private lastPatchTime: Map<string, number> = new Map();
   private patchCountToday: Map<string, number> = new Map();
 
   constructor(projectRoot: string) {
+    this.projectRoot = projectRoot;
     this.shadowRegistry = createShadowRegistry(projectRoot);
     this.journalManager = createJournalManager(projectRoot);
     this.traceManager = createTraceManager(projectRoot);
     this.traceSkillMapper = createTraceSkillMapper(projectRoot);
+    this.dbPath = join(projectRoot, '.ornn', 'state', 'sessions.db');
 
     const patchConfig = configManager.getPatchConfig();
     this.policy = {
@@ -50,7 +59,100 @@ export class ShadowManager {
     await this.journalManager.init();
     await this.traceManager.init();
     await this.traceSkillMapper.init();
+    this.db = await createSQLiteStorage(this.dbPath);
+    await this.db.init();
+    this.bootstrapSkillsForMonitoring();
     logger.debug('Shadow manager initialized');
+  }
+
+  /**
+   * 启动时自动发现并注册 skills，避免“trace 有了但无 skill 监控”
+   */
+  private bootstrapSkillsForMonitoring(): void {
+    if (!this.db) throw new Error('ShadowManager database not initialized');
+
+    const candidateRoots = new Set<string>([
+      ...configManager.getOriginPaths(),
+      join(homedir(), '.agents', 'skills'),
+      join(homedir(), '.codex', 'skills'),
+    ]);
+
+    let discovered = 0;
+    let registered = 0;
+    let createdShadows = 0;
+
+    for (const root of candidateRoots) {
+      if (!existsSync(root)) continue;
+
+      let entries = [] as import('node:fs').Dirent[];
+      try {
+        entries = readdirSync(root, { withFileTypes: true, encoding: 'utf8' });
+      } catch {
+        continue;
+      }
+
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+
+        const skillId = entry.name;
+        const skillDir = join(root, skillId);
+        const skillFileCandidates = [join(skillDir, 'SKILL.md'), join(skillDir, 'skill.md')];
+        const skillPath = skillFileCandidates.find((p) => existsSync(p));
+        if (!skillPath) continue;
+
+        discovered++;
+
+        let content = '';
+        try {
+          content = readFileSync(skillPath, 'utf-8');
+        } catch {
+          continue;
+        }
+
+        const now = new Date().toISOString();
+        const originVersion = hashString(content);
+        const origin = {
+          skill_id: skillId,
+          origin_path: skillPath,
+          origin_version: originVersion,
+          source: 'local' as const,
+          installed_at: now,
+          last_seen_at: now,
+        };
+
+        this.db.upsertOriginSkill(origin);
+
+        if (!this.shadowRegistry.has(skillId)) {
+          this.shadowRegistry.create(skillId, content, originVersion);
+          createdShadows++;
+        }
+
+        const shadowEntry = this.shadowRegistry.get(skillId);
+        const status: ShadowStatus = shadowEntry?.status === 'frozen' ? 'frozen' : 'active';
+        const shadow = {
+          project_id: this.projectRoot,
+          skill_id: skillId,
+          shadow_id: `${skillId}@${this.projectRoot}`,
+          origin_skill_id: skillId,
+          origin_version_at_fork: originVersion,
+          shadow_path: join(this.projectRoot, '.ornn', 'shadows', `${skillId}.md`),
+          current_revision: 0,
+          status,
+          created_at: now,
+          last_optimized_at: now,
+        };
+        this.db.upsertShadowSkill(shadow);
+        this.traceSkillMapper.registerSkill(origin, shadow);
+        registered++;
+      }
+    }
+
+    logger.info('Skill monitoring bootstrap completed', {
+      discovered,
+      registered,
+      createdShadows,
+      roots: Array.from(candidateRoots),
+    });
   }
 
   /**
@@ -64,6 +166,12 @@ export class ShadowManager {
     const shadowId = this.findShadowForTrace(trace);
     if (!shadowId) {
       return;
+    }
+
+    // 记录命中次数，供 dashboard 监控展示
+    const skillId = skillIdFromShadowId(shadowId);
+    if (skillId) {
+      this.shadowRegistry.incrementTraceCount(skillId);
     }
 
     // 获取最近的 traces

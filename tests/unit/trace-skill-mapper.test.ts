@@ -133,6 +133,34 @@ describe('TraceSkillMapper', () => {
       expect(result.skill_id).toBeNull();
       expect(result.confidence).toBe(0);
     });
+
+    it('应该识别exec_command中的skill名称', () => {
+      const trace: Trace = {
+        trace_id: 'test-5',
+        runtime: 'codex',
+        session_id: 'session-1',
+        turn_id: 'turn-1',
+        event_type: 'tool_call',
+        tool_name: 'exec_command',
+        tool_args: { cmd: 'cat /Users/xuzhang/.agents/skills/show-my-repo/SKILL.md' },
+        timestamp: new Date().toISOString(),
+        status: 'success',
+      };
+
+      const origin: OriginSkill = {
+        skill_id: 'show-my-repo',
+        origin_path: '/Users/xuzhang/.agents/skills/show-my-repo/SKILL.md',
+        origin_version: 'hash-show-my-repo',
+        source: 'local',
+        installed_at: new Date().toISOString(),
+        last_seen_at: new Date().toISOString(),
+      };
+      mapper.registerSkill(origin);
+
+      const result = mapper.mapTrace(trace);
+      expect(result.skill_id).toBe('show-my-repo');
+      expect(result.confidence).toBeGreaterThanOrEqual(0.85);
+    });
   });
 
   describe('mapAndGroupTraces', () => {
