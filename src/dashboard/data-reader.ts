@@ -254,8 +254,19 @@ export function readRecentTraces(projectRoot: string, limit = 50): TraceEntry[] 
   const traces: TraceEntry[] = [];
   for (const line of lines) {
     try {
-      const entry = JSON.parse(line) as TraceEntry;
-      if (entry.trace_id) traces.push(entry);
+      const raw = JSON.parse(line) as Partial<TraceEntry> & { skill_refs?: string[] };
+      if (!raw.trace_id) continue;
+      // Dashboard 只保留展示所需字段，避免 user_input / payload 等大字段导致页面卡顿
+      traces.push({
+        trace_id: String(raw.trace_id),
+        runtime: String(raw.runtime ?? 'unknown'),
+        session_id: String(raw.session_id ?? ''),
+        turn_id: String(raw.turn_id ?? ''),
+        event_type: String(raw.event_type ?? 'unknown'),
+        timestamp: String(raw.timestamp ?? ''),
+        skill_refs: Array.isArray(raw.skill_refs) ? raw.skill_refs : [],
+        status: String(raw.status ?? 'unknown'),
+      });
     } catch {
       // skip malformed lines
     }

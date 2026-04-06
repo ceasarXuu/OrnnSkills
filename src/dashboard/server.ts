@@ -178,6 +178,14 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
       projectData,
       logs: newLogs,
     };
+    const payloadBytes = Buffer.byteLength(JSON.stringify(payload), 'utf-8');
+    if (payloadBytes > 128 * 1024) {
+      logger.warn('Dashboard SSE payload is large', {
+        bytes: payloadBytes,
+        clients: clients.size,
+        projectCount: projects.length,
+      });
+    }
 
     for (const client of clients) {
       sendSseEvent(client, 'update', payload);
@@ -294,7 +302,15 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
 
         // GET /api/projects/:id/snapshot
         if (subPath === '/snapshot' && method === 'GET') {
-          json(res, getProjectSnapshot(projectPath));
+          const snapshot = getProjectSnapshot(projectPath);
+          const snapshotBytes = Buffer.byteLength(JSON.stringify(snapshot), 'utf-8');
+          if (snapshotBytes > 128 * 1024) {
+            logger.warn('Dashboard snapshot payload is large', {
+              projectPath,
+              bytes: snapshotBytes,
+            });
+          }
+          json(res, snapshot);
           return;
         }
 
