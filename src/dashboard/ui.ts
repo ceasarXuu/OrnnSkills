@@ -628,7 +628,7 @@ function renderMainPanel(projectPath) {
             <button class="runtime-tab tab-claude \${state.selectedRuntimeTab === 'claude' ? 'active' : ''}" onclick="selectRuntimeTab('claude')">Claude</button>
             <button class="runtime-tab tab-opencode \${state.selectedRuntimeTab === 'opencode' ? 'active' : ''}" onclick="selectRuntimeTab('opencode')">OpenCode</button>
           </div>
-          <span style="color:var(--muted)">\${getFilteredAndSortedSkills(skills).length} \${t('skillsCount')}</span>
+          <span style="color:var(--muted)" id="skillsCount">\${getFilteredAndSortedSkills(skills).length} \${t('skillsCount')}</span>
         </div>
       </div>
       <div class="card-body">
@@ -649,10 +649,12 @@ function renderMainPanel(projectPath) {
           </div>
         </div>
         
-        \${getFilteredAndSortedSkills(skills).length === 0
-          ? '<div class="empty-state">' + (state.searchQuery ? 'No skills found matching "' + escHtml(state.searchQuery) + '"' : t('skillsEmpty')) + '</div>'
-          : '<div class="skills-list">' + getFilteredAndSortedSkills(skills).map(s => renderSkillCard(s, projectPath)).join('') + '</div>'
-        }
+        <div id="skillsListContainer">
+          \${getFilteredAndSortedSkills(skills).length === 0
+            ? '<div class="empty-state">' + (state.searchQuery ? 'No skills found matching "' + escHtml(state.searchQuery) + '"' : t('skillsEmpty')) + '</div>'
+            : '<div class="skills-list">' + getFilteredAndSortedSkills(skills).map(s => renderSkillCard(s, projectPath)).join('') + '</div>'
+          }
+        </div>
       </div>
     </div>
 
@@ -682,16 +684,12 @@ function renderStateBadge(state) {
 
 function selectRuntimeTab(runtime) {
   state.selectedRuntimeTab = runtime;
-  if (state.selectedProjectId) {
-    renderMainPanel(state.selectedProjectId);
-  }
+  updateSkillsList();
 }
 
 function handleSearch(query) {
   state.searchQuery = query.toLowerCase().trim();
-  if (state.selectedProjectId) {
-    renderMainPanel(state.selectedProjectId);
-  }
+  updateSkillsList();
 }
 
 function toggleSort(sortBy) {
@@ -701,9 +699,27 @@ function toggleSort(sortBy) {
     state.sortBy = sortBy;
     state.sortOrder = 'asc';
   }
-  if (state.selectedProjectId) {
-    renderMainPanel(state.selectedProjectId);
+  updateSkillsList();
+}
+
+function updateSkillsList() {
+  const container = document.getElementById('skillsListContainer');
+  const countEl = document.getElementById('skillsCount');
+  if (!container || !state.selectedProjectId) return;
+  
+  const pd = state.projectData[state.selectedProjectId];
+  if (!pd) return;
+  
+  const skills = pd.skills || [];
+  const filtered = getFilteredAndSortedSkills(skills);
+  
+  if (countEl) {
+    countEl.textContent = filtered.length + ' ' + t('skillsCount');
   }
+  
+  container.innerHTML = filtered.length === 0
+    ? '<div class="empty-state">' + (state.searchQuery ? 'No skills found matching "' + escHtml(state.searchQuery) + '"' : t('skillsEmpty')) + '</div>'
+    : '<div class="skills-list">' + filtered.map(s => renderSkillCard(s, state.selectedProjectId)).join('') + '</div>';
 }
 
 function getFilteredSkills(skills) {
