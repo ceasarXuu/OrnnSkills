@@ -1065,11 +1065,8 @@ function escHtml(s) {
 }
 
 function escJsStr(s) {
-  return String(s ?? '')
-    .replace(/\\/g, '\\\\')
-    .replace(/'/g, "\\'")
-    .replace(/\r/g, '\\r')
-    .replace(/\n/g, '\\n');
+  // 使用 JSON.stringify 统一处理引号、反斜杠与换行转义，再去掉外层双引号
+  return JSON.stringify(String(s ?? '')).slice(1, -1);
 }
 
 function formatUptime(startedAt) {
