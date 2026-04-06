@@ -42,6 +42,14 @@ export interface I18nStrings {
   configSaved: string;
   configSaveFailed: string;
   configLoading: string;
+  configIntro: string;
+  configLogLevelHelp: string;
+  configDefaultProviderHelp: string;
+  configAutoOptimizeHelp: string;
+  configUserConfirmHelp: string;
+  configRuntimeSyncHelp: string;
+  configProvidersHelp: string;
+  configProvidersExample: string;
 
   // Stats
   statShadowSkills: string;
@@ -149,6 +157,22 @@ const en: I18nStrings = {
   configSaved: 'Config saved',
   configSaveFailed: 'Failed to save config',
   configLoading: 'Loading config...',
+  configIntro:
+    'These settings are written to .ornn/ornn.toml for the current project and control optimization strategy and model provider behavior.',
+  configLogLevelHelp:
+    'Logging verbosity for Ornn daemon and dashboard. Use info by default; switch to debug only when diagnosing issues.',
+  configDefaultProviderHelp:
+    'Default provider name used for optimization calls. It should match one of the provider names configured below.',
+  configAutoOptimizeHelp:
+    'When enabled, Ornn automatically analyzes traces and proposes or applies skill optimization.',
+  configUserConfirmHelp:
+    'When enabled, optimization changes require manual confirmation before write-back; disable for fully automatic flow.',
+  configRuntimeSyncHelp:
+    'When enabled, latest skill content is synced back to project skills so all runtimes share the same optimized version.',
+  configProvidersHelp:
+    'Provider list in JSON array format. Each provider usually includes name, type, base_url and auth fields (depends on provider type).',
+  configProvidersExample:
+    'Example: [{"name":"openai","type":"openai","base_url":"https://api.openai.com/v1","api_key":"${OPENAI_API_KEY}"}]',
 
   // Stats
   statShadowSkills: 'Shadow Skills',
@@ -256,6 +280,22 @@ const zh: I18nStrings = {
   configSaved: '配置已保存',
   configSaveFailed: '配置保存失败',
   configLoading: '配置加载中...',
+  configIntro:
+    '这些配置会写入当前项目的 .ornn/ornn.toml，用于控制 Ornn 的优化策略与模型供应商行为。',
+  configLogLevelHelp:
+    '控制 Ornn daemon 与 dashboard 的日志详细程度。默认建议 info，排查问题时再切到 debug。',
+  configDefaultProviderHelp:
+    '优化调用默认使用的 provider 名称。这里填写的值需要与下方 providers 中某个 name 一致。',
+  configAutoOptimizeHelp:
+    '开启后，Ornn 会自动分析 trace 并触发技能优化建议或写回流程。',
+  configUserConfirmHelp:
+    '开启后，优化变更在写回前需要人工确认；关闭后按自动流程直接落盘。',
+  configRuntimeSyncHelp:
+    '开启后，会把最新技能内容同步回项目 skills，保证不同 runtime 使用同一份优化结果。',
+  configProvidersHelp:
+    'provider 列表，JSON 数组格式。每个 provider 通常包含 name、type、base_url、鉴权字段（随 type 不同）。',
+  configProvidersExample:
+    '示例：[{"name":"openai","type":"openai","base_url":"https://api.openai.com/v1","api_key":"${OPENAI_API_KEY}"}]',
 
   // Stats
   statShadowSkills: 'Shadow 技能',

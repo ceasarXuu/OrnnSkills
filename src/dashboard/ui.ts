@@ -346,6 +346,14 @@ export function getDashboardHtml(_port: number, lang: Language = 'en'): string {
   @media (max-width: 900px) { .config-grid { grid-template-columns: 1fr; } }
   .config-field { display: flex; flex-direction: column; gap: 6px; }
   .config-label { font-size: 11px; color: var(--muted); }
+  .config-intro, .config-help { font-size: 11px; color: var(--muted); line-height: 1.45; }
+  .config-intro { margin-bottom: 12px; }
+  .config-help code { color: var(--text); background: var(--bg3); padding: 1px 5px; border-radius: 4px; }
+  .config-example {
+    margin-top: 6px; background: var(--bg0); border: 1px dashed var(--border); border-radius: 6px;
+    padding: 8px; white-space: pre-wrap; word-break: break-all;
+    font-family: var(--font); font-size: 10px; color: var(--muted);
+  }
   .config-input, .config-select, .config-textarea {
     width: 100%; background: var(--bg0); border: 1px solid var(--border); border-radius: 6px;
     color: var(--text); font-family: var(--font); font-size: 11px; padding: 8px;
@@ -842,6 +850,7 @@ function renderConfigPanel(projectPath) {
   const defaultProvider = escHtml(config.defaultProvider || '');
 
   return \`
+    <div class="config-intro">\${t('configIntro')}</div>
     <div class="config-grid">
       <div class="config-field">
         <label class="config-label">log_level</label>
@@ -851,20 +860,33 @@ function renderConfigPanel(projectPath) {
           <option value="warn" \${logLevel === 'warn' ? 'selected' : ''}>warn</option>
           <option value="error" \${logLevel === 'error' ? 'selected' : ''}>error</option>
         </select>
+        <div class="config-help">\${t('configLogLevelHelp')}</div>
       </div>
       <div class="config-field">
         <label class="config-label">default_provider</label>
         <input id="cfg_default_provider" class="config-input" value="\${defaultProvider}" />
+        <div class="config-help">\${t('configDefaultProviderHelp')}</div>
       </div>
     </div>
     <div style="margin-top:10px" class="config-grid">
-      <label class="config-check"><input type="checkbox" id="cfg_auto_optimize" \${config.autoOptimize ? 'checked' : ''}/> tracking.auto_optimize</label>
-      <label class="config-check"><input type="checkbox" id="cfg_user_confirm" \${config.userConfirm ? 'checked' : ''}/> tracking.user_confirm</label>
-      <label class="config-check"><input type="checkbox" id="cfg_runtime_sync" \${config.runtimeSync ? 'checked' : ''}/> tracking.runtime_sync</label>
+      <div class="config-field">
+        <label class="config-check"><input type="checkbox" id="cfg_auto_optimize" \${config.autoOptimize ? 'checked' : ''}/> tracking.auto_optimize</label>
+        <div class="config-help">\${t('configAutoOptimizeHelp')}</div>
+      </div>
+      <div class="config-field">
+        <label class="config-check"><input type="checkbox" id="cfg_user_confirm" \${config.userConfirm ? 'checked' : ''}/> tracking.user_confirm</label>
+        <div class="config-help">\${t('configUserConfirmHelp')}</div>
+      </div>
+      <div class="config-field">
+        <label class="config-check"><input type="checkbox" id="cfg_runtime_sync" \${config.runtimeSync ? 'checked' : ''}/> tracking.runtime_sync</label>
+        <div class="config-help">\${t('configRuntimeSyncHelp')}</div>
+      </div>
     </div>
     <div class="config-field" style="margin-top:10px">
       <label class="config-label">providers (JSON array)</label>
       <textarea id="cfg_providers" class="config-textarea">\${providersJson}</textarea>
+      <div class="config-help">\${t('configProvidersHelp')}</div>
+      <div class="config-example">\${t('configProvidersExample')}</div>
     </div>
     <div class="config-actions">
       <span id="cfg_save_hint" class="config-label"></span>
