@@ -5,7 +5,7 @@
 
 import { join } from "node:path";
 import { readFile, writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { parse } from "smol-toml";
 import { logger } from "../utils/logger.js";
 
@@ -28,6 +28,7 @@ export interface OrnnConfig {
   tracking?: {
     auto_optimize?: boolean;
     user_confirm?: boolean;
+    runtime_sync?: boolean;
   };
 }
 
@@ -59,7 +60,8 @@ export function generateConfigContent(
   projectPath: string,
   providers: ProviderConfig[],
   defaultProvider?: string,
-  logLevel: string = DEFAULT_LOG_LEVEL
+  logLevel: string = DEFAULT_LOG_LEVEL,
+  tracking: { autoOptimize?: boolean; userConfirm?: boolean; runtimeSync?: boolean } = {}
 ): string {
   let config = `[ornn]
 version = "0.1.9"
@@ -87,8 +89,9 @@ api_key_env_var = "${provider.apiKeyEnvVar}"
 
   config += `
 [tracking]
-auto_optimize = true
-user_confirm = false
+auto_optimize = ${tracking.autoOptimize ?? true}
+user_confirm = ${tracking.userConfirm ?? false}
+runtime_sync = ${tracking.runtimeSync ?? true}
 `;
 
   return config.trim();
@@ -127,7 +130,12 @@ export async function writeConfig(
     projectPath,
     providersArray,
     defaultProvider,
-    existingConfig?.ornn?.log_level || DEFAULT_LOG_LEVEL
+    existingConfig?.ornn?.log_level || DEFAULT_LOG_LEVEL,
+    {
+      autoOptimize: existingConfig?.tracking?.auto_optimize ?? true,
+      userConfirm: existingConfig?.tracking?.user_confirm ?? false,
+      runtimeSync: existingConfig?.tracking?.runtime_sync ?? true,
+    }
   );
 
   await writeFile(configPath, content);
@@ -256,11 +264,71 @@ export async function setDefaultProvider(
     projectPath,
     providersArray,
     providerId,
-    config.ornn?.log_level || DEFAULT_LOG_LEVEL
+    config.ornn?.log_level || DEFAULT_LOG_LEVEL,
+    {
+      autoOptimize: config.tracking?.auto_optimize ?? true,
+      userConfirm: config.tracking?.user_confirm ?? false,
+      runtimeSync: config.tracking?.runtime_sync ?? true,
+    }
   );
 
   const configPath = join(projectPath, ".ornn", "config", "settings.toml");
   await writeFile(configPath, content);
   
   return true;
+}
+
+export interface DashboardProviderConfig {
+  provider: string;
+  modelName: string;
+  apiKeyEnvVar: string;
+}
+
+export interface DashboardConfig {
+  logLevel: string;
+  defaultProvider: string;
+  autoOptimize: boolean;
+  userConfirm: boolean;
+  runtimeSync: boolean;
+  providers: DashboardProviderConfig[];
+}
+
+export async function readDashboardConfig(projectPath: string): Promise<DashboardConfig> {
+  const config = await readConfig(projectPath);
+  const providers = await listConfiguredProviders(projectPath);
+  const defaultProvider = config?.llm?.default_provider || providers[0]?.provider || "";
+  return {
+    logLevel: config?.ornn?.log_level || DEFAULT_LOG_LEVEL,
+    defaultProvider,
+    autoOptimize: config?.tracking?.auto_optimize ?? true,
+    userConfirm: config?.tracking?.user_confirm ?? false,
+    runtimeSync: config?.tracking?.runtime_sync ?? true,
+    providers,
+  };
+}
+
+export async function writeDashboardConfig(
+  projectPath: string,
+  payload: DashboardConfig
+): Promise<void> {
+  const configDir = join(projectPath, ".ornn", "config");
+  if (!existsSync(configDir)) {
+    mkdirSync(configDir, { recursive: true });
+  }
+  const content = generateConfigContent(
+    projectPath,
+    payload.providers.map((p) => ({
+      provider: p.provider,
+      modelName: p.modelName,
+      apiKeyEnvVar: p.apiKeyEnvVar,
+    })),
+    payload.defaultProvider,
+    payload.logLevel || DEFAULT_LOG_LEVEL,
+    {
+      autoOptimize: payload.autoOptimize,
+      userConfirm: payload.userConfirm,
+      runtimeSync: payload.runtimeSync,
+    }
+  );
+  await writeFile(join(configDir, "settings.toml"), content, "utf-8");
 }

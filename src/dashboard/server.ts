@@ -34,6 +34,7 @@ import { createShadowRegistry } from '../core/shadow-registry/index.js';
 import { SkillVersionManager } from '../core/skill-version/index.js';
 import type { RuntimeType } from '../types/index.js';
 import { createSkillDeployer } from '../core/skill-deployer/index.js';
+import { readDashboardConfig, writeDashboardConfig } from '../config/manager.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -485,6 +486,45 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
         if (subPath === '/traces' && method === 'GET') {
           const traces = readRecentTraces(projectPath, 50);
           json(res, { traces, stats: computeTraceStats(traces) });
+          return;
+        }
+
+        // GET /api/projects/:id/config
+        if (subPath === '/config' && method === 'GET') {
+          const config = await readDashboardConfig(projectPath);
+          json(res, { config });
+          return;
+        }
+
+        // POST /api/projects/:id/config
+        if (subPath === '/config' && method === 'POST') {
+          const body = (await parseBody(req)) as {
+            config?: {
+              logLevel?: string;
+              defaultProvider?: string;
+              autoOptimize?: boolean;
+              userConfirm?: boolean;
+              runtimeSync?: boolean;
+              providers?: Array<{
+                provider: string;
+                modelName: string;
+                apiKeyEnvVar: string;
+              }>;
+            };
+          };
+          if (!body.config) {
+            json(res, { ok: false, error: 'config is required' }, 400);
+            return;
+          }
+          await writeDashboardConfig(projectPath, {
+            logLevel: body.config.logLevel ?? 'info',
+            defaultProvider: body.config.defaultProvider ?? '',
+            autoOptimize: body.config.autoOptimize ?? true,
+            userConfirm: body.config.userConfirm ?? false,
+            runtimeSync: body.config.runtimeSync ?? true,
+            providers: body.config.providers ?? [],
+          });
+          json(res, { ok: true });
           return;
         }
       }

@@ -34,8 +34,14 @@ export interface I18nStrings {
   mainTabSkills: string;
   mainTabActivity: string;
   mainTabLogs: string;
+  mainTabConfig: string;
   activityEmpty: string;
   logsEmpty: string;
+  configTitle: string;
+  configSave: string;
+  configSaved: string;
+  configSaveFailed: string;
+  configLoading: string;
 
   // Stats
   statShadowSkills: string;
@@ -135,8 +141,14 @@ const en: I18nStrings = {
   mainTabSkills: 'Skills',
   mainTabActivity: 'Activity',
   mainTabLogs: 'Logs',
+  mainTabConfig: 'Config',
   activityEmpty: 'No trace activity yet.',
   logsEmpty: 'No logs yet.',
+  configTitle: 'Ornn Config',
+  configSave: 'Save Config',
+  configSaved: 'Config saved',
+  configSaveFailed: 'Failed to save config',
+  configLoading: 'Loading config...',
 
   // Stats
   statShadowSkills: 'Shadow Skills',
@@ -236,8 +248,14 @@ const zh: I18nStrings = {
   mainTabSkills: '技能列表',
   mainTabActivity: '实时追踪',
   mainTabLogs: '日志',
+  mainTabConfig: '配置',
   activityEmpty: '暂无追踪活动。',
   logsEmpty: '暂无日志。',
+  configTitle: 'Ornn 配置',
+  configSave: '保存配置',
+  configSaved: '配置已保存',
+  configSaveFailed: '配置保存失败',
+  configLoading: '配置加载中...',
 
   // Stats
   statShadowSkills: 'Shadow 技能',

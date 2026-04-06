@@ -340,6 +340,21 @@ export function getDashboardHtml(_port: number, lang: Language = 'en'): string {
   .runtime-tab.tab-codex.active { background: var(--blue); border-color: var(--blue); }
   .runtime-tab.tab-claude.active { background: var(--purple); border-color: var(--purple); }
   .runtime-tab.tab-opencode.active { background: var(--orange); border-color: var(--orange); }
+
+  /* Config */
+  .config-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 900px) { .config-grid { grid-template-columns: 1fr; } }
+  .config-field { display: flex; flex-direction: column; gap: 6px; }
+  .config-label { font-size: 11px; color: var(--muted); }
+  .config-input, .config-select, .config-textarea {
+    width: 100%; background: var(--bg0); border: 1px solid var(--border); border-radius: 6px;
+    color: var(--text); font-family: var(--font); font-size: 11px; padding: 8px;
+    outline: none;
+  }
+  .config-input:focus, .config-select:focus, .config-textarea:focus { border-color: var(--blue); }
+  .config-textarea { min-height: 220px; resize: vertical; }
+  .config-check { display: flex; align-items: center; gap: 8px; font-size: 11px; }
+  .config-actions { margin-top: 12px; display: flex; align-items: center; justify-content: space-between; }
 </style>
 </head>
 <body>
@@ -461,6 +476,7 @@ const state = {
   projectData: {},
   allLogs: [],
   logFilter: 'ALL',
+  configByProject: {},
   currentSkillId: null,
   selectedRuntimeTab: 'all',
   searchQuery: '',
@@ -648,6 +664,7 @@ function renderMainPanel(projectPath) {
       <button class="main-tab \${state.selectedMainTab === 'skills' ? 'active' : ''}" onclick="selectMainTab('skills')">\${t('mainTabSkills')}</button>
       <button class="main-tab \${state.selectedMainTab === 'activity' ? 'active' : ''}" onclick="selectMainTab('activity')">\${t('mainTabActivity')}</button>
       <button class="main-tab \${state.selectedMainTab === 'logs' ? 'active' : ''}" onclick="selectMainTab('logs')">\${t('mainTabLogs')}</button>
+      <button class="main-tab \${state.selectedMainTab === 'config' ? 'active' : ''}" onclick="selectMainTab('config')">\${t('mainTabConfig')}</button>
     </div>
 
     \${state.selectedMainTab === 'overview' ? \`
@@ -776,6 +793,15 @@ function renderMainPanel(projectPath) {
     </div>
     \` : ''}
 
+    \${state.selectedMainTab === 'config' ? \`
+    <div class="card">
+      <div class="card-header"><span>\${t('configTitle')}</span></div>
+      <div class="card-body">
+        \${renderConfigPanel(projectPath)}
+      </div>
+    </div>
+    \` : ''}
+
   </div>\`;
 
   if (shouldRestoreSearchFocus) {
@@ -791,6 +817,9 @@ function renderMainPanel(projectPath) {
   if (state.selectedMainTab === 'logs') {
     renderLogs();
   }
+  if (state.selectedMainTab === 'config') {
+    void ensureProjectConfig(projectPath);
+  }
 }
 
 function selectMainTab(tab) {
@@ -800,6 +829,91 @@ function selectMainTab(tab) {
   }
   // 前端日志：记录 dashboard 主 tab 切换
   console.debug('[dashboard] switched main tab', { tab });
+}
+
+function renderConfigPanel(projectPath) {
+  const config = state.configByProject[projectPath];
+  if (!config) {
+    return \`<div class="empty-state">\${t('configLoading')}</div>\`;
+  }
+
+  const providersJson = escHtml(JSON.stringify(config.providers || [], null, 2));
+  const logLevel = escHtml(config.logLevel || 'info');
+  const defaultProvider = escHtml(config.defaultProvider || '');
+
+  return \`
+    <div class="config-grid">
+      <div class="config-field">
+        <label class="config-label">log_level</label>
+        <select id="cfg_log_level" class="config-select">
+          <option value="debug" \${logLevel === 'debug' ? 'selected' : ''}>debug</option>
+          <option value="info" \${logLevel === 'info' ? 'selected' : ''}>info</option>
+          <option value="warn" \${logLevel === 'warn' ? 'selected' : ''}>warn</option>
+          <option value="error" \${logLevel === 'error' ? 'selected' : ''}>error</option>
+        </select>
+      </div>
+      <div class="config-field">
+        <label class="config-label">default_provider</label>
+        <input id="cfg_default_provider" class="config-input" value="\${defaultProvider}" />
+      </div>
+    </div>
+    <div style="margin-top:10px" class="config-grid">
+      <label class="config-check"><input type="checkbox" id="cfg_auto_optimize" \${config.autoOptimize ? 'checked' : ''}/> tracking.auto_optimize</label>
+      <label class="config-check"><input type="checkbox" id="cfg_user_confirm" \${config.userConfirm ? 'checked' : ''}/> tracking.user_confirm</label>
+      <label class="config-check"><input type="checkbox" id="cfg_runtime_sync" \${config.runtimeSync ? 'checked' : ''}/> tracking.runtime_sync</label>
+    </div>
+    <div class="config-field" style="margin-top:10px">
+      <label class="config-label">providers (JSON array)</label>
+      <textarea id="cfg_providers" class="config-textarea">\${providersJson}</textarea>
+    </div>
+    <div class="config-actions">
+      <span id="cfg_save_hint" class="config-label"></span>
+      <button class="btn-primary" onclick="saveProjectConfig()">\${t('configSave')}</button>
+    </div>
+  \`;
+}
+
+async function ensureProjectConfig(projectPath) {
+  if (state.configByProject[projectPath]) return;
+  try {
+    const enc = encodeURIComponent(projectPath);
+    const data = await fetchJsonWithTimeout(\`/api/projects/\${enc}/config\`, 6000);
+    state.configByProject[projectPath] = data.config || {};
+    if (state.selectedMainTab === 'config' && state.selectedProjectId === projectPath) {
+      renderMainPanel(projectPath);
+    }
+  } catch (e) {
+    console.error('[dashboard] failed to load config', { projectPath, error: String(e) });
+  }
+}
+
+async function saveProjectConfig() {
+  if (!state.selectedProjectId) return;
+  const hintEl = document.getElementById('cfg_save_hint');
+  try {
+    const providers = JSON.parse(document.getElementById('cfg_providers').value || '[]');
+    const payload = {
+      config: {
+        logLevel: document.getElementById('cfg_log_level').value,
+        defaultProvider: document.getElementById('cfg_default_provider').value.trim(),
+        autoOptimize: document.getElementById('cfg_auto_optimize').checked,
+        userConfirm: document.getElementById('cfg_user_confirm').checked,
+        runtimeSync: document.getElementById('cfg_runtime_sync').checked,
+        providers,
+      },
+    };
+    const enc = encodeURIComponent(state.selectedProjectId);
+    await fetchJsonWithTimeout(\`/api/projects/\${enc}/config\`, 8000, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    state.configByProject[state.selectedProjectId] = payload.config;
+    hintEl.textContent = t('configSaved');
+  } catch (e) {
+    console.error('[dashboard] failed to save config', { error: String(e) });
+    hintEl.textContent = t('configSaveFailed');
+  }
 }
 
 function renderStateBadge(state) {
