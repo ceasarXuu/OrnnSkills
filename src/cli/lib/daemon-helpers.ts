@@ -1,5 +1,6 @@
-import { join } from 'node:path';
+import { dirname, join, resolve, win32, posix } from 'node:path';
 import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'node:fs';
+import type { Language } from '../../dashboard/i18n.js';
 
 export const PID_FILE = '.ornn/daemon.pid';
 export const LOG_DIR = join(process.env.HOME || '', '.ornn', 'logs');
@@ -74,4 +75,26 @@ export function getLogStats(): { errorCount: number; warningCount: number } {
   } catch {
     return { errorCount: 0, warningCount: 0 };
   }
+}
+
+/**
+ * Resolve CLI entry path in a cross-platform way.
+ * Example: ".../cli/commands/daemon.js" -> ".../cli/index.js"
+ */
+export function resolveCliEntryPath(currentFile: string): string {
+  if (currentFile.includes('\\')) {
+    return win32.resolve(win32.dirname(currentFile), '..', 'index.js');
+  }
+  if (currentFile.includes('/')) {
+    return posix.resolve(posix.dirname(currentFile), '..', 'index.js');
+  }
+  return resolve(dirname(currentFile), '..', 'index.js');
+}
+
+/**
+ * Normalize dashboard language input.
+ * Fallback to English for unknown values.
+ */
+export function normalizeDashboardLang(lang: string | undefined): Language {
+  return lang === 'zh' ? 'zh' : 'en';
 }

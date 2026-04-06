@@ -2,7 +2,11 @@ import { Command } from 'commander';
 import { cliInfo } from '../../utils/cli-output.js';
 import { join } from 'node:path';
 import { existsSync, readFileSync } from 'node:fs';
+import { exec, spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { Daemon } from '../../daemon/index.js';
+import { createDashboardServer } from '../../dashboard/server.js';
+import { registerProject } from '../../dashboard/projects-registry.js';
 import { printErrorAndExit } from '../../utils/error-helper.js';
 import { validateProjectRootOrExit } from '../lib/cli-setup.js';
 import {
@@ -12,11 +16,59 @@ import {
   isProcessRunning,
   formatUptime,
   getLogStats,
+  resolveCliEntryPath,
+  normalizeDashboardLang,
 } from '../lib/daemon-helpers.js';
 import ora from 'ora';
 
+const __filename = fileURLToPath(import.meta.url);
+
 interface DaemonOptions {
   project: string;
+  dashboard: boolean;
+  port: string;
+  lang: string;
+  background: boolean;
+  open: boolean;
+}
+
+const DEFAULT_DASHBOARD_PORT = 47432;
+const MAX_PORT_ATTEMPTS = 10;
+
+function openBrowser(url: string): void {
+  const platform = process.platform;
+  const cmd =
+    platform === 'darwin'
+      ? `open "${url}"`
+      : platform === 'win32'
+        ? `start "" "${url}"`
+        : `xdg-open "${url}"`;
+  exec(cmd, (err) => {
+    if (err) {
+      cliInfo(`Could not open browser automatically. Visit: ${url}`);
+    }
+  });
+}
+
+async function startDashboardServerOnAvailablePort(
+  startPort: number,
+  lang: 'en' | 'zh'
+): Promise<{ server: ReturnType<typeof createDashboardServer>; port: number }> {
+  for (let attempt = 0; attempt < MAX_PORT_ATTEMPTS; attempt++) {
+    const port = startPort + attempt;
+    if (port > 65535) break;
+
+    const server = createDashboardServer(port, lang);
+    try {
+      await server.start();
+      return { server, port };
+    } catch {
+      // Port in use, try next
+    }
+  }
+  throw new Error(
+    `Could not find an available port in range ${startPort}–${startPort + MAX_PORT_ATTEMPTS - 1}`
+  );
 }
 
 /**
@@ -28,71 +80,137 @@ export function createStartCommand(): Command {
   start
     .description('Start the OrnnSkills daemon')
     .option('-p, --project <path>', 'Project root path', process.cwd())
+    .option('--dashboard', 'Start the dashboard alongside the daemon', true)
+    .option('--port <number>', 'Dashboard port (default: 47432)', String(DEFAULT_DASHBOARD_PORT))
+    .option('--lang <en|zh>', 'Dashboard language', 'en')
+    .option('--no-open', 'Do not automatically open the browser')
+    .option('--background', 'Run in background and release terminal', false)
     .action(async (options: DaemonOptions): Promise<void> => {
       try {
-          const projectRoot = validateProjectRootOrExit(options.project, 'daemon start');
+        const projectRoot = validateProjectRootOrExit(options.project, 'daemon start');
 
-          // 检查是否已经在运行
-          const existingPid = readPidFile(projectRoot);
-          if (existingPid && isProcessRunning(existingPid)) {
-            cliInfo(`Daemon is already running (PID: ${existingPid})`);
-            cliInfo(`Use "ornn daemon status" to check status.`);
-            process.exit(0);
+        // 检查是否已经在运行
+        const existingPid = readPidFile(projectRoot);
+        if (existingPid && isProcessRunning(existingPid)) {
+          cliInfo(`Daemon is already running (PID: ${existingPid})`);
+          cliInfo(`Use "ornn daemon status" to check status.`);
+          process.exit(0);
+        }
+
+        // 注册项目到 dashboard 注册表
+        registerProject(projectRoot);
+
+        // 如果指定了 --background，则 spawn 一个 detached 子进程
+        if (options.background) {
+          const dashboardLang = normalizeDashboardLang(options.lang);
+          const args = ['start', '--project', projectRoot];
+          if (options.dashboard === false) args.push('--no-dashboard');
+          if (options.port) args.push('--port', options.port);
+          if (options.lang) args.push('--lang', dashboardLang);
+          if (options.open === false) args.push('--no-open');
+
+          const child = spawn(
+            process.execPath,
+            [resolveCliEntryPath(__filename), ...args],
+            {
+              detached: true,
+              stdio: 'ignore',
+            }
+          );
+          child.unref();
+
+          cliInfo('Daemon starting in background...');
+          cliInfo('Use "ornn daemon status" to check status.');
+          process.exit(0);
+          return;
+        }
+
+        // 如果 PID 文件存在但进程不在运行，清理旧文件
+        if (existingPid) {
+          removePidFile(projectRoot);
+        }
+
+        // 使用进度指示器
+        const spinner = ora('Starting OrnnSkills daemon...').start();
+
+        try {
+          // 创建并启动 daemon
+          const daemon = new Daemon(projectRoot);
+
+          spinner.text = 'Initializing daemon components...';
+          await daemon.start();
+
+          // 写入 PID 文件
+          writePidFile(projectRoot, process.pid);
+
+          spinner.succeed('Daemon started');
+
+          // 启动 dashboard
+          let dashboardServer: ReturnType<typeof createDashboardServer> | null = null;
+          let dashboardPort: number | null = null;
+
+          if (options.dashboard !== false) {
+            const dashboardSpinner = ora('Starting dashboard...').start();
+            try {
+              const dashboardPortNum = parseInt(options.port, 10);
+              const dashboardLang = normalizeDashboardLang(options.lang);
+              ({ server: dashboardServer, port: dashboardPort } =
+                await startDashboardServerOnAvailablePort(dashboardPortNum, dashboardLang));
+              dashboardSpinner.succeed('Dashboard started');
+
+              const url = `http://localhost:${dashboardPort}`;
+              cliInfo(`Dashboard URL: ${url}`);
+
+              if (options.open !== false) {
+                openBrowser(url);
+              }
+            } catch (dashboardError) {
+              dashboardSpinner.warn('Failed to start dashboard');
+              cliInfo(
+                `Dashboard error: ${dashboardError instanceof Error ? dashboardError.message : String(dashboardError)}`
+              );
+            }
           }
 
-          // 如果 PID 文件存在但进程不在运行，清理旧文件
-          if (existingPid) {
-            removePidFile(projectRoot);
-          }
-
-          // 使用进度指示器
-          const spinner = ora('Starting OrnnSkills daemon...').start();
-
-          try {
-            // 创建并启动 daemon
-            const daemon = new Daemon(projectRoot);
-
-            spinner.text = 'Initializing daemon components...';
-            await daemon.start();
-
-            // 写入 PID 文件
-            writePidFile(projectRoot, process.pid);
-
-            spinner.succeed('Daemon started');
-
-            // 设置信号处理以支持 Ctrl+C 退出
-            const handleShutdown = (): void => {
-              void daemon
-                .stop()
-                .then(() => {
-                  removePidFile(projectRoot);
-                  process.exit(0);
-                })
-                .catch(() => {
-                  removePidFile(projectRoot);
-                  process.exit(1);
-                });
+          // 设置信号处理以支持 Ctrl+C 退出
+          const handleShutdown = (): void => {
+            const cleanup = async () => {
+              if (dashboardServer) {
+                await dashboardServer.stop();
+              }
+              await daemon.stop();
+              removePidFile(projectRoot);
             };
 
-            process.on('SIGINT', handleShutdown);
-            process.on('SIGTERM', handleShutdown);
+            void cleanup()
+              .then(() => {
+                process.exit(0);
+              })
+              .catch(() => {
+                removePidFile(projectRoot);
+                process.exit(1);
+              });
+          };
 
-            // 保持进程运行 - 使用 setInterval 代替 stdin.resume() 以避免阻塞 SIGINT
-            const keepAlive = setInterval(() => {}, 1000);
+          process.on('SIGINT', handleShutdown);
+          process.on('SIGTERM', handleShutdown);
 
-            // 清理定时器当收到退出信号时
-            process.on('exit', () => {
-              clearInterval(keepAlive);
-            });
-          } catch (startError) {
-            spinner.fail('Failed to start daemon');
-            throw startError;
-          }
+          // 保持进程运行 - 使用 setInterval 代替 stdin.resume() 以避免阻塞 SIGINT
+          const keepAlive = setInterval(() => {}, 1000);
+
+          // 清理定时器当收到退出信号时
+          process.on('exit', () => {
+            clearInterval(keepAlive);
+          });
+        } catch (startError) {
+          spinner.fail('Failed to start daemon');
+          throw startError;
+        }
       } catch (error) {
-        printErrorAndExit(
-          error instanceof Error ? error.message : String(error),
-          { operation: 'Start daemon', projectPath: options.project }
-        );
+        printErrorAndExit(error instanceof Error ? error.message : String(error), {
+          operation: 'Start daemon',
+          projectPath: options.project,
+        });
       }
     });
 
@@ -154,14 +272,101 @@ export function createStopCommand(): Command {
           }
         }, 1000);
       } catch (error) {
-        printErrorAndExit(
-          error instanceof Error ? error.message : String(error),
-          { operation: 'Stop daemon', projectPath: options.project }
-        );
+        printErrorAndExit(error instanceof Error ? error.message : String(error), {
+          operation: 'Stop daemon',
+          projectPath: options.project,
+        });
       }
     });
 
   return stop;
+}
+
+/**
+ * 创建 restart 命令
+ */
+export function createRestartCommand(): Command {
+  const restart = new Command('restart');
+
+  restart
+    .description('Restart the OrnnSkills daemon')
+    .option('-p, --project <path>', 'Project root path', process.cwd())
+    .option('--dashboard', 'Start the dashboard alongside the daemon', true)
+    .option('--port <number>', 'Dashboard port (default: 47432)', String(DEFAULT_DASHBOARD_PORT))
+    .option('--lang <en|zh>', 'Dashboard language', 'en')
+    .option('--no-open', 'Do not automatically open the browser')
+    .option('--background', 'Run in background and release terminal', false)
+    .action(async (options: DaemonOptions): Promise<void> => {
+      try {
+        const projectRoot = validateProjectRootOrExit(options.project, 'daemon restart');
+
+        // 停止现有 daemon
+        const existingPid = readPidFile(projectRoot);
+        if (existingPid && isProcessRunning(existingPid)) {
+          const spinner = ora(`Stopping daemon (PID: ${existingPid})...`).start();
+          process.kill(existingPid, 'SIGTERM');
+
+          let attempts = 0;
+          const maxAttempts = 5;
+          await new Promise<void>((resolve) => {
+            const interval = setInterval(() => {
+              attempts++;
+              if (!isProcessRunning(existingPid) || attempts >= maxAttempts) {
+                clearInterval(interval);
+                if (isProcessRunning(existingPid)) {
+                  try {
+                    process.kill(existingPid, 'SIGKILL');
+                  } catch {
+                    // ignore
+                  }
+                }
+                removePidFile(projectRoot);
+                spinner.succeed('Daemon stopped');
+                resolve();
+              }
+            }, 1000);
+          });
+        } else if (existingPid) {
+          removePidFile(projectRoot);
+        }
+
+        // 等待端口释放
+        await new Promise((resolve) => setTimeout(resolve, 500));
+
+        // 启动新 daemon
+        cliInfo('Starting new daemon instance...');
+        const startOptions = {
+          project: projectRoot,
+          dashboard: options.dashboard,
+          port: options.port,
+          lang: options.lang,
+          open: options.open,
+          background: options.background,
+        };
+
+        const startCmd = createStartCommand();
+        await startCmd.parseAsync(['start', ...buildArgs(startOptions)], { from: 'user' });
+      } catch (error) {
+        printErrorAndExit(error instanceof Error ? error.message : String(error), {
+          operation: 'Restart daemon',
+          projectPath: options.project,
+        });
+      }
+    });
+
+  return restart;
+}
+
+function buildArgs(options: DaemonOptions): string[] {
+  const args: string[] = [];
+  const dashboardLang = normalizeDashboardLang(options.lang);
+  if (options.project) args.push('--project', options.project);
+  if (options.dashboard === false) args.push('--no-dashboard');
+  if (options.port) args.push('--port', options.port);
+  if (options.lang) args.push('--lang', dashboardLang);
+  if (options.open === false) args.push('--no-open');
+  if (options.background) args.push('--background');
+  return args;
 }
 
 /**
@@ -345,6 +550,7 @@ export function createDaemonCommand(): Command {
     .description('Manage the OrnnSkills background daemon')
     .addCommand(createStartCommand())
     .addCommand(createStopCommand())
+    .addCommand(createRestartCommand())
     .addCommand(createDaemonStatusCommand());
 
   return daemon;
