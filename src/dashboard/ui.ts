@@ -221,6 +221,20 @@ export function getDashboardHtml(_port: number, lang: Language = 'en'): string {
   .trace-table tr:last-child td { border-bottom: none; }
   .badge { display: inline-flex; align-items: center; gap: 3px; }
   .trace-table-wrap { max-height: 520px; overflow: auto; border: 1px solid var(--border); border-radius: 6px; }
+  .activity-controls { display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-bottom: 10px; }
+  .activity-left { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .activity-tab {
+    font-family: var(--font); font-size: 10px; padding: 3px 10px; border-radius: 4px;
+    border: 1px solid var(--border); background: var(--bg2); color: var(--muted);
+    cursor: pointer; transition: all .15s;
+  }
+  .activity-tab.active { background: var(--blue); color: #fff; border-color: var(--blue); }
+  .tag-chip {
+    font-family: var(--font); font-size: 10px; padding: 2px 8px; border-radius: 999px;
+    border: 1px solid var(--border); background: var(--bg0); color: var(--muted);
+    cursor: pointer;
+  }
+  .tag-chip.active { color: #fff; border-color: var(--blue); background: var(--blue); }
 
   /* ─── Skill Detail Modal ─────────────────────────── */
   .modal-overlay {
@@ -501,6 +515,10 @@ const state = {
   sortOrder: 'asc',
   selectedMainTab: 'overview',
   currentSkillRuntime: 'codex',
+  activityLayer: 'business',
+  activityTagFilter: 'all',
+  businessEventsByProject: {},
+  seenTraceIdsByProject: {},
 };
 
 // ─── SSE Connection ──────────────────────────────────────────────────────────
@@ -525,6 +543,10 @@ function handleUpdate(data) {
     renderSidebar();
   }
   if (data.projectData) {
+    for (const [projectPath, nextPd] of Object.entries(data.projectData)) {
+      const prevPd = state.projectData[projectPath];
+      updateBusinessEvents(projectPath, prevPd, nextPd);
+    }
     state.projectData = { ...state.projectData, ...data.projectData };
     if (state.selectedProjectId && Object.prototype.hasOwnProperty.call(data.projectData, state.selectedProjectId)) {
       shouldRerenderMain = true;
@@ -645,6 +667,7 @@ async function selectProject(path) {
     try {
       const enc = encodeURIComponent(path);
       const data = await fetchJsonWithTimeout(\`/api/projects/\${enc}/snapshot\`, 8000);
+      updateBusinessEvents(path, state.projectData[path], data);
       state.projectData[path] = data;
     } catch (e) {
       console.error('Failed to load project', e);
@@ -654,6 +677,213 @@ async function selectProject(path) {
   }
   renderMainPanel(path);
   renderSidebar();
+}
+
+function skillKey(skill) {
+  return (skill.skillId || '') + '@' + (skill.runtime || 'codex');
+}
+
+function maxVersion(skill) {
+  const versions = Array.isArray(skill.versionsAvailable) ? skill.versionsAvailable : [];
+  return versions.length > 0 ? Math.max(...versions) : (skill.current_revision || skill.version || 1);
+}
+
+function pushBusinessEvent(projectPath, event) {
+  const list = state.businessEventsByProject[projectPath] || [];
+  const id = event.id || (event.timestamp + ':' + event.tag + ':' + (event.skillId || '') + ':' + Math.random().toString(36).slice(2, 8));
+  list.unshift({ ...event, id });
+  state.businessEventsByProject[projectPath] = list.slice(0, 300);
+  console.debug('[dashboard] ornn business event', {
+    projectPath,
+    tag: event.tag,
+    skillId: event.skillId || null,
+    runtime: event.runtime || null,
+    status: event.status || null,
+  });
+}
+
+function updateBusinessEvents(projectPath, prevPd, nextPd) {
+  if (!nextPd) return;
+  const nowIso = new Date().toISOString();
+
+  const prevDaemon = prevPd?.daemon || null;
+  const nextDaemon = nextPd.daemon || null;
+  if (prevDaemon && nextDaemon) {
+    if (!!prevDaemon.isRunning !== !!nextDaemon.isRunning) {
+      pushBusinessEvent(projectPath, {
+        timestamp: nowIso,
+        tag: 'daemon_state',
+        status: nextDaemon.isRunning ? 'started' : 'stopped',
+      });
+    }
+    if (
+      (prevDaemon.optimizationStatus?.currentState || 'idle') !==
+      (nextDaemon.optimizationStatus?.currentState || 'idle')
+    ) {
+      pushBusinessEvent(projectPath, {
+        timestamp: nowIso,
+        tag: 'optimization_state',
+        status: nextDaemon.optimizationStatus?.currentState || 'idle',
+        skillId: nextDaemon.optimizationStatus?.currentSkillId || null,
+      });
+    }
+    if (
+      prevDaemon.optimizationStatus?.lastOptimizationAt &&
+      nextDaemon.optimizationStatus?.lastOptimizationAt &&
+      prevDaemon.optimizationStatus.lastOptimizationAt !== nextDaemon.optimizationStatus.lastOptimizationAt
+    ) {
+      pushBusinessEvent(projectPath, {
+        timestamp: nextDaemon.optimizationStatus.lastOptimizationAt,
+        tag: 'skill_version_iterated',
+        skillId: nextDaemon.optimizationStatus?.currentSkillId || null,
+      });
+    }
+  }
+
+  const prevSkills = Array.isArray(prevPd?.skills) ? prevPd.skills : [];
+  const nextSkills = Array.isArray(nextPd.skills) ? nextPd.skills : [];
+  const prevMap = new Map(prevSkills.map((s) => [skillKey(s), s]));
+  const nextMap = new Map(nextSkills.map((s) => [skillKey(s), s]));
+
+  for (const [key, skill] of nextMap.entries()) {
+    if (!prevMap.has(key)) {
+      pushBusinessEvent(projectPath, {
+        timestamp: nowIso,
+        tag: 'skill_monitoring_started',
+        skillId: skill.skillId,
+        runtime: skill.runtime || 'codex',
+      });
+      continue;
+    }
+    const prev = prevMap.get(key);
+    const prevMaxV = maxVersion(prev);
+    const nextMaxV = maxVersion(skill);
+    if (nextMaxV > prevMaxV) {
+      pushBusinessEvent(projectPath, {
+        timestamp: nowIso,
+        tag: 'skill_version_iterated',
+        skillId: skill.skillId,
+        runtime: skill.runtime || 'codex',
+        detail: 'v' + prevMaxV + ' -> v' + nextMaxV,
+      });
+    }
+    const prevRev = prev.current_revision || prev.version || 1;
+    const nextRev = skill.current_revision || skill.version || 1;
+    if (nextRev !== prevRev) {
+      pushBusinessEvent(projectPath, {
+        timestamp: nowIso,
+        tag: 'skill_edited',
+        skillId: skill.skillId,
+        runtime: skill.runtime || 'codex',
+        detail: 'rev ' + prevRev + ' -> ' + nextRev,
+      });
+    }
+  }
+  for (const [key, skill] of prevMap.entries()) {
+    if (!nextMap.has(key)) {
+      pushBusinessEvent(projectPath, {
+        timestamp: nowIso,
+        tag: 'skill_removed',
+        skillId: skill.skillId,
+        runtime: skill.runtime || 'codex',
+      });
+    }
+  }
+
+  const seen = state.seenTraceIdsByProject[projectPath] || {};
+  const recentTraces = Array.isArray(nextPd.recentTraces) ? nextPd.recentTraces : [];
+  for (const trace of recentTraces) {
+    const traceId = trace.trace_id;
+    if (!traceId || seen[traceId]) continue;
+    seen[traceId] = true;
+    if (Array.isArray(trace.skill_refs) && trace.skill_refs.length > 0) {
+      for (const skillRef of trace.skill_refs) {
+        pushBusinessEvent(projectPath, {
+          id: 'trace:' + traceId + ':' + skillRef,
+          timestamp: trace.timestamp || nowIso,
+          tag: 'skill_called',
+          skillId: skillRef,
+          runtime: trace.runtime || 'unknown',
+          status: trace.status || 'success',
+          detail: trace.event_type || '',
+        });
+      }
+    }
+  }
+  state.seenTraceIdsByProject[projectPath] = seen;
+}
+
+function businessEventLabel(tag) {
+  const map = {
+    all: t('activityTagAll'),
+    skill_called: t('activityTagSkillCalled'),
+    skill_monitoring_started: t('activityTagSkillAdded'),
+    skill_removed: t('activityTagSkillRemoved'),
+    skill_edited: t('activityTagSkillEdited'),
+    skill_version_iterated: t('activityTagSkillVersion'),
+    daemon_state: t('activityTagDaemon'),
+    optimization_state: t('activityTagOptimization'),
+  };
+  return map[tag] || tag;
+}
+
+function formatBusinessEvent(e) {
+  switch (e.tag) {
+    case 'skill_called':
+      return (currentLang === 'zh' ? '调用技能' : 'Skill called') + ': ' + (e.skillId || 'unknown');
+    case 'skill_monitoring_started':
+      return (currentLang === 'zh' ? '开始监控技能' : 'Started monitoring skill') + ': ' + (e.skillId || 'unknown');
+    case 'skill_removed':
+      return (currentLang === 'zh' ? '移除技能监控' : 'Stopped monitoring skill') + ': ' + (e.skillId || 'unknown');
+    case 'skill_edited':
+      return (currentLang === 'zh' ? '技能被编辑' : 'Skill edited') + ': ' + (e.skillId || 'unknown');
+    case 'skill_version_iterated':
+      return (currentLang === 'zh' ? '技能版本迭代' : 'Skill version iterated') + (e.skillId ? ': ' + e.skillId : '');
+    case 'daemon_state':
+      return currentLang === 'zh'
+        ? ('守护进程' + (e.status === 'started' ? '已启动' : '已停止'))
+        : ('Daemon ' + (e.status === 'started' ? 'started' : 'stopped'));
+    case 'optimization_state':
+      return (currentLang === 'zh' ? '优化状态变化' : 'Optimization state changed') + ': ' + (e.status || 'idle');
+    default:
+      return e.tag;
+  }
+}
+
+function renderBusinessEvents(projectPath) {
+  const events = (state.businessEventsByProject[projectPath] || []).slice(0, 150);
+  const allTags = ['all', ...Array.from(new Set(events.map((e) => e.tag)))];
+  const filtered = state.activityTagFilter === 'all'
+    ? events
+    : events.filter((e) => e.tag === state.activityTagFilter);
+
+  if (events.length === 0) return '<div class="empty-state">' + t('activityEmpty') + '</div>';
+
+  return \`
+    <div class="activity-controls">
+      <div class="activity-left">
+        \${allTags.map((tag) =>
+          \`<button class="tag-chip \${state.activityTagFilter === tag ? 'active' : ''}" onclick="setActivityTagFilter('\${escJsStr(tag)}')">\${businessEventLabel(tag)}</button>\`
+        ).join('')}
+      </div>
+      <div style="font-size:10px;color:var(--muted)">\${filtered.length} / \${events.length}</div>
+    </div>
+    <div class="trace-table-wrap">
+      <table class="trace-table">
+        <thead><tr><th>\${t('traceTime')}</th><th>\${t('traceRuntime')}</th><th>\${t('traceEvent')}</th><th>Skill</th><th>\${t('traceStatus')}</th><th>Detail</th></tr></thead>
+        <tbody>
+          \${filtered.slice(0, 80).map((e) => \`<tr>
+            <td style="color:var(--muted)">\${e.timestamp ? e.timestamp.slice(11,19) : '—'}</td>
+            <td>\${escHtml(e.runtime || '—')}</td>
+            <td>\${escHtml(businessEventLabel(e.tag))}</td>
+            <td>\${escHtml(e.skillId || '—')}</td>
+            <td style="color:var(--muted)">\${escHtml(e.status || '—')}</td>
+            <td style="color:var(--muted)">\${escHtml(e.detail || formatBusinessEvent(e))}</td>
+          </tr>\`).join('')}
+        </tbody>
+      </table>
+    </div>
+  \`;
 }
 
 // ─── Main Panel ───────────────────────────────────────────────────────────────
@@ -784,12 +1014,20 @@ function renderMainPanel(projectPath) {
     <div class="card">
       <div class="card-header"><span>\${t('traceTitle')}</span><span style="color:var(--muted)">\${traceStats.total} \${t('traceTotal')}</span></div>
       <div class="card-body">
-        \${traceStats.total > 0 ? \`
-        \${renderTraceBars(t('traceRuntime'), traceStats.byRuntime, ['codex','claude','opencode'])}
-        \${renderTraceBars(t('traceStatus'), traceStats.byStatus, ['success','failure','retry','interrupted'])}
-        <div style="margin-top:10px" class="trace-table-wrap">
-          \${renderRecentTraces(recentTraces.slice(0,50))}
+        <div class="activity-controls">
+          <div class="activity-left">
+            <button class="activity-tab \${state.activityLayer === 'business' ? 'active' : ''}" onclick="setActivityLayer('business')">\${t('activityLayerBusiness')}</button>
+            <button class="activity-tab \${state.activityLayer === 'raw' ? 'active' : ''}" onclick="setActivityLayer('raw')">\${t('activityLayerRaw')}</button>
+          </div>
         </div>
+        \${state.activityLayer === 'business' ? \`
+          \${renderBusinessEvents(projectPath)}
+        \` : traceStats.total > 0 ? \`
+          \${renderTraceBars(t('traceRuntime'), traceStats.byRuntime, ['codex','claude','opencode'])}
+          \${renderTraceBars(t('traceStatus'), traceStats.byStatus, ['success','failure','retry','interrupted'])}
+          <div style="margin-top:10px" class="trace-table-wrap">
+            \${renderRecentTraces(recentTraces.slice(0,50))}
+          </div>
         \` : \`<div class="empty-state">\${t('activityEmpty')}</div>\`}
       </div>
     </div>
@@ -846,6 +1084,16 @@ function selectMainTab(tab) {
   }
   // 前端日志：记录 dashboard 主 tab 切换
   console.debug('[dashboard] switched main tab', { tab });
+}
+
+function setActivityLayer(layer) {
+  state.activityLayer = layer === 'raw' ? 'raw' : 'business';
+  if (state.selectedProjectId) renderMainPanel(state.selectedProjectId);
+}
+
+function setActivityTagFilter(tag) {
+  state.activityTagFilter = tag || 'all';
+  if (state.selectedProjectId) renderMainPanel(state.selectedProjectId);
 }
 
 function renderConfigPanel(projectPath) {

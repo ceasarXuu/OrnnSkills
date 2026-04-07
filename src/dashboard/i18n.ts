@@ -98,6 +98,16 @@ export interface I18nStrings {
   traceTime: string;
   traceEvent: string;
   traceSession: string;
+  activityLayerBusiness: string;
+  activityLayerRaw: string;
+  activityTagAll: string;
+  activityTagSkillCalled: string;
+  activityTagSkillAdded: string;
+  activityTagSkillRemoved: string;
+  activityTagSkillEdited: string;
+  activityTagSkillVersion: string;
+  activityTagDaemon: string;
+  activityTagOptimization: string;
 
   // Log Panel
   logTitle: string;
@@ -224,6 +234,16 @@ const en: I18nStrings = {
   traceTime: 'Time',
   traceEvent: 'Event',
   traceSession: 'Session',
+  activityLayerBusiness: 'Ornn Events',
+  activityLayerRaw: 'Raw Traces',
+  activityTagAll: 'All',
+  activityTagSkillCalled: 'Skill Called',
+  activityTagSkillAdded: 'Skill Added',
+  activityTagSkillRemoved: 'Skill Removed',
+  activityTagSkillEdited: 'Skill Edited',
+  activityTagSkillVersion: 'Version Iterated',
+  activityTagDaemon: 'Daemon',
+  activityTagOptimization: 'Optimization',
 
   // Log Panel
   logTitle: 'Logs',
@@ -350,6 +370,16 @@ const zh: I18nStrings = {
   traceTime: '时间',
   traceEvent: '事件',
   traceSession: '会话',
+  activityLayerBusiness: 'Ornn 业务事件',
+  activityLayerRaw: '原始 Trace',
+  activityTagAll: '全部',
+  activityTagSkillCalled: '技能调用',
+  activityTagSkillAdded: '新增监控',
+  activityTagSkillRemoved: '移除监控',
+  activityTagSkillEdited: '技能编辑',
+  activityTagSkillVersion: '版本迭代',
+  activityTagDaemon: '守护进程',
+  activityTagOptimization: '优化状态',
 
   // Log Panel
   logTitle: '日志',
