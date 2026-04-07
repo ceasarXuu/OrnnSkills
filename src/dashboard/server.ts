@@ -35,7 +35,7 @@ import { SkillVersionManager } from '../core/skill-version/index.js';
 import type { RuntimeType } from '../types/index.js';
 import { createSkillDeployer } from '../core/skill-deployer/index.js';
 import { readDashboardConfig, writeDashboardConfig, checkProvidersConnectivity } from '../config/manager.js';
-import { getAllProviders } from '../config/providers.js';
+import { getLiteLLMCatalog } from '../config/litellm-catalog.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -327,14 +327,14 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
 
       // ── API: Provider catalog ──
       if (path === '/api/providers/catalog' && method === 'GET') {
-        const providers = getAllProviders().map((item) => ({
-          id: item.id,
-          name: item.name,
-          models: item.models,
-          defaultModel: item.defaultModel,
-          apiKeyEnvVar: item.apiKeyEnvVar || `${item.id.toUpperCase()}_API_KEY`,
-        }));
-        json(res, { providers });
+        try {
+          const providers = await getLiteLLMCatalog();
+          json(res, { providers, source: 'litellm' });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          logger.error('Failed to load LiteLLM catalog', { error: message });
+          json(res, { error: message }, 503);
+        }
         return;
       }
 

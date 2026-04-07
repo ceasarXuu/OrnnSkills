@@ -666,7 +666,7 @@ async function init() {
         }
       })
       .catch((e) => {
-        console.warn('[dashboard] provider catalog fetch skipped', { error: String(e) });
+        console.error('[dashboard] provider catalog fetch failed', { error: String(e) });
       });
 
     // 日志异步加载，不阻塞主页面渲染，避免 dashboard 卡在 loading
@@ -1276,9 +1276,9 @@ function renderProviderRow(row, index) {
   const normalizedProvider = String(row.provider || '');
   const knownProvider = isKnownProvider(normalizedProvider);
   const providerOptions = getProviderOptionsHtml(knownProvider ? normalizedProvider : '__custom__');
-  const modelDatalistId = 'cfg_models_' + index;
-  const models = getModelsByProvider(normalizedProvider);
-  const modelOptions = models.map((m) => '<option value="' + escHtml(m) + '"></option>').join('');
+  const normalizedModel = String(row.modelName || '');
+  const modelOptions = getModelOptionsHtml(normalizedProvider, normalizedModel);
+  const modelIsCustom = !isKnownModel(normalizedProvider, normalizedModel);
   return \`
     <div class="provider-row" data-row-index="\${index}">
       <select class="config-select cfg_provider" onchange="handleProviderChange(this)">
@@ -1286,8 +1286,10 @@ function renderProviderRow(row, index) {
       </select>
       <input class="config-input cfg_provider_custom" value="\${knownProvider ? '' : escHtml(normalizedProvider)}" placeholder="\${currentLang === 'zh' ? '自定义 provider id（例如：xai）' : 'Custom provider id (e.g. xai)'}" style="\${knownProvider ? 'display:none;' : ''}" />
       <div>
-        <input class="config-input cfg_model" list="\${modelDatalistId}" value="\${escHtml(row.modelName || '')}" placeholder="\${currentLang === 'zh' ? '输入或选择模型' : 'Select or input model'}" />
-        <datalist id="\${modelDatalistId}">\${modelOptions}</datalist>
+        <select class="config-select cfg_model" onchange="handleModelChange(this)">
+          \${modelOptions}
+        </select>
+        <input class="config-input cfg_model_custom" value="\${modelIsCustom ? escHtml(normalizedModel) : ''}" placeholder="\${currentLang === 'zh' ? '自定义 model（例如：grok-3）' : 'Custom model (e.g. grok-3)'}" style="margin-top:6px;\${modelIsCustom ? '' : 'display:none;'}" />
       </div>
       <input class="config-input cfg_env" value="\${escHtml(row.apiKeyEnvVar || '')}" placeholder="OPENAI_API_KEY" />
       <button class="btn-danger" type="button" onclick="removeProviderRow(this)">\${currentLang === 'zh' ? '删除' : 'Remove'}</button>
@@ -1321,6 +1323,23 @@ function getModelsByProvider(providerId) {
   return Array.isArray(item?.models) ? item.models : [];
 }
 
+function getModelOptionsHtml(providerId, selectedModel) {
+  const models = getModelsByProvider(providerId);
+  const options = models
+    .map((model) => {
+      const selected = model === selectedModel ? 'selected' : '';
+      return '<option value="' + escHtml(model) + '" ' + selected + '>' + escHtml(model) + '</option>';
+    })
+    .join('');
+  const customSelected = isKnownModel(providerId, selectedModel) ? '' : 'selected';
+  return options + '<option value="__custom__" ' + customSelected + '>' + escHtml(currentLang === 'zh' ? '自定义' : 'Custom...') + '</option>';
+}
+
+function isKnownModel(providerId, modelName) {
+  if (!modelName) return false;
+  return getModelsByProvider(providerId).includes(modelName);
+}
+
 function guessApiKeyEnvVar(providerId) {
   const catalog = Array.isArray(state.providerCatalog) ? state.providerCatalog : [];
   const item = catalog.find((p) => p.id === providerId);
@@ -1335,7 +1354,9 @@ function collectProvidersFromConfigEditor() {
     const providerSelect = row.querySelector('.cfg_provider')?.value?.trim() || '';
     const providerCustom = row.querySelector('.cfg_provider_custom')?.value?.trim() || '';
     const provider = providerSelect === '__custom__' ? providerCustom : providerSelect;
-    const modelName = row.querySelector('.cfg_model')?.value?.trim() || '';
+    const modelSelect = row.querySelector('.cfg_model')?.value?.trim() || '';
+    const modelCustom = row.querySelector('.cfg_model_custom')?.value?.trim() || '';
+    const modelName = modelSelect === '__custom__' ? modelCustom : modelSelect;
     const apiKeyEnvVar = row.querySelector('.cfg_env')?.value?.trim() || '';
     return { provider, modelName, apiKeyEnvVar };
   }).filter((item) => item.provider || item.modelName || item.apiKeyEnvVar);
@@ -1355,20 +1376,42 @@ function handleProviderChange(selectEl) {
   const providerId = selectEl.value;
   const customInput = row.querySelector('.cfg_provider_custom');
   const envInput = row.querySelector('.cfg_env');
-  const modelInput = row.querySelector('.cfg_model');
+  const modelSelect = row.querySelector('.cfg_model');
+  const modelCustomInput = row.querySelector('.cfg_model_custom');
   if (customInput) {
     customInput.style.display = providerId === '__custom__' ? '' : 'none';
   }
   if (providerId === '__custom__') {
+    if (modelSelect) {
+      modelSelect.innerHTML = '<option value="__custom__" selected>' + escHtml(currentLang === 'zh' ? '自定义' : 'Custom...') + '</option>';
+    }
+    if (modelCustomInput) {
+      modelCustomInput.style.display = '';
+    }
     return;
   }
   if (envInput && !envInput.value.trim()) {
     envInput.value = guessApiKeyEnvVar(providerId);
   }
-  const models = getModelsByProvider(providerId);
-  if (modelInput && models.length > 0 && !modelInput.value.trim()) {
-    modelInput.value = models[0];
+  if (modelSelect) {
+    const prevValue = modelSelect.value || '';
+    modelSelect.innerHTML = getModelOptionsHtml(providerId, prevValue);
+    if (modelSelect.value === '__custom__' || !modelSelect.value) {
+      const models = getModelsByProvider(providerId);
+      if (models.length > 0) modelSelect.value = models[0];
+    }
   }
+  if (modelCustomInput) {
+    modelCustomInput.style.display = 'none';
+  }
+}
+
+function handleModelChange(selectEl) {
+  const row = selectEl.closest('.provider-row');
+  if (!row) return;
+  const customInput = row.querySelector('.cfg_model_custom');
+  if (!customInput) return;
+  customInput.style.display = selectEl.value === '__custom__' ? '' : 'none';
 }
 
 function addProviderRow() {
