@@ -652,6 +652,7 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
                 provider: string;
                 modelName: string;
                 apiKeyEnvVar: string;
+                apiKey?: string;
               }>;
             };
           };
@@ -685,6 +686,7 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
               provider: string;
               modelName: string;
               apiKeyEnvVar: string;
+              apiKey?: string;
             }>;
           };
           const results = await checkProvidersConnectivity(projectPath, body.providers);

@@ -183,7 +183,7 @@ const en: I18nStrings = {
   configRuntimeSyncHelp:
     'When enabled, latest skill content is synced back to project skills so all runtimes share the same optimized version.',
   configProvidersHelp:
-    'Configure providers with dropdown + inputs. Pick provider, choose or type model, and set API key env var.',
+    'Configure providers with dropdown + inputs. Pick provider, choose or type model, paste API Key, and keep or adjust the env var name used in .env.local.',
   configProvidersExample:
     '',
   configCheckConnectivity: 'Check Connectivity',
@@ -319,7 +319,7 @@ const zh: I18nStrings = {
   configRuntimeSyncHelp:
     '开启后，会把最新技能内容同步回项目 skills，保证不同 runtime 使用同一份优化结果。',
   configProvidersHelp:
-    '通过下拉和输入框配置 provider：选择 provider，选择或输入 model，并填写 API key 环境变量名。',
+    '通过下拉和输入框配置 provider：选择 provider，选择或输入 model，直接粘贴 API Key，并保留或调整写入 .env.local 的环境变量名。',
   configProvidersExample:
     '',
   configCheckConnectivity: '检查连通性',

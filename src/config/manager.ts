@@ -283,6 +283,8 @@ export interface DashboardProviderConfig {
   provider: string;
   modelName: string;
   apiKeyEnvVar: string;
+  apiKey?: string;
+  hasApiKey?: boolean;
 }
 
 export interface DashboardConfig {
@@ -303,12 +305,39 @@ export interface ProviderConnectivityResult {
 export async function readDashboardConfig(projectPath: string): Promise<DashboardConfig> {
   const config = await readConfig(projectPath);
   const providers = await listConfiguredProviders(projectPath);
+  const envVars = await readProjectEnv(projectPath);
   return {
     autoOptimize: config?.tracking?.auto_optimize ?? true,
     userConfirm: config?.tracking?.user_confirm ?? false,
     runtimeSync: config?.tracking?.runtime_sync ?? true,
-    providers,
+    providers: providers.map((provider) => ({
+      ...provider,
+      hasApiKey: Boolean(envVars[provider.apiKeyEnvVar] || process.env[provider.apiKeyEnvVar]),
+    })),
   };
+}
+
+async function writeProjectEnvVar(
+  projectPath: string,
+  envVarName: string,
+  value: string
+): Promise<void> {
+  const envPath = join(projectPath, ".env.local");
+  const existingContent = existsSync(envPath) ? await readFile(envPath, "utf-8") : "";
+  const providerRegex = new RegExp(`^${envVarName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}=.*$`, "m");
+  const newLine = `${envVarName}=${value}`;
+  let nextContent = existingContent;
+
+  if (providerRegex.test(existingContent)) {
+    nextContent = existingContent.replace(providerRegex, newLine);
+  } else {
+    nextContent =
+      existingContent +
+      (existingContent && !existingContent.endsWith("\n") ? "\n" : "") +
+      `${newLine}\n`;
+  }
+
+  await writeFile(envPath, nextContent, "utf-8");
 }
 
 export async function writeDashboardConfig(
@@ -343,6 +372,12 @@ export async function writeDashboardConfig(
     }
   );
   await writeFile(join(configDir, "settings.toml"), content, "utf-8");
+
+  for (const provider of payload.providers) {
+    if (provider.apiKey && provider.apiKey.trim()) {
+      await writeProjectEnvVar(projectPath, provider.apiKeyEnvVar, provider.apiKey.trim());
+    }
+  }
 }
 
 function parseEnvFile(content: string): Record<string, string> {
@@ -382,7 +417,11 @@ export async function checkProvidersConnectivity(
   const results: ProviderConnectivityResult[] = [];
   for (const providerConfig of providers) {
     const start = Date.now();
-    const apiKey = envVars[providerConfig.apiKeyEnvVar] || process.env[providerConfig.apiKeyEnvVar] || "";
+    const apiKey =
+      providerConfig.apiKey?.trim() ||
+      envVars[providerConfig.apiKeyEnvVar] ||
+      process.env[providerConfig.apiKeyEnvVar] ||
+      "";
     if (!apiKey) {
       results.push({
         provider: providerConfig.provider,

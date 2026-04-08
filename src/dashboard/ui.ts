@@ -794,6 +794,16 @@ function getErrorStack(error) {
   return '';
 }
 
+function sanitizeProvidersForState(providers) {
+  return (Array.isArray(providers) ? providers : []).map((provider) => ({
+    provider: provider.provider,
+    modelName: provider.modelName,
+    apiKeyEnvVar: provider.apiKeyEnvVar,
+    apiKey: '',
+    hasApiKey: Boolean(provider.hasApiKey || (provider.apiKey && provider.apiKey.trim())),
+  }));
+}
+
 function scheduleBootstrapRecovery() {
   if (bootstrapRecoveryTimer !== null) {
     clearTimeout(bootstrapRecoveryTimer);
@@ -1591,8 +1601,9 @@ function renderProviderRow(row, index) {
   const normalizedModel = String(row.modelName || '');
   const modelOptions = getModelOptionsHtml(normalizedProvider, normalizedModel);
   const modelIsCustom = !isKnownModel(normalizedProvider, normalizedModel);
+  const hasApiKey = !!row.hasApiKey;
   return \`
-    <div class="provider-row" data-row-index="\${index}">
+    <div class="provider-row" data-row-index="\${index}" data-has-api-key="\${hasApiKey ? 'true' : 'false'}">
       <select class="config-select cfg_provider" onchange="handleProviderChange(this)">
         \${providerOptions}
       </select>
@@ -1603,7 +1614,10 @@ function renderProviderRow(row, index) {
         </select>
         <input class="config-input cfg_model_custom" value="\${modelIsCustom ? escHtml(normalizedModel) : ''}" placeholder="\${currentLang === 'zh' ? '自定义 model（例如：grok-3）' : 'Custom model (e.g. grok-3)'}" style="margin-top:6px;\${modelIsCustom ? '' : 'display:none;'}" />
       </div>
-      <input class="config-input cfg_env" value="\${escHtml(row.apiKeyEnvVar || '')}" placeholder="OPENAI_API_KEY" />
+      <div>
+        <input class="config-input cfg_api_key" type="password" value="" placeholder="\${hasApiKey ? (currentLang === 'zh' ? 'API Key 已保存；留空表示不修改' : 'API key stored; leave blank to keep') : (currentLang === 'zh' ? '直接粘贴 API Key' : 'Paste API key')}" />
+        <input class="config-input cfg_env" value="\${escHtml(row.apiKeyEnvVar || '')}" placeholder="OPENAI_API_KEY" style="margin-top:6px" />
+      </div>
       <button class="btn-danger" type="button" onclick="removeProviderRow(this)">\${currentLang === 'zh' ? '删除' : 'Remove'}</button>
     </div>
   \`;
@@ -1668,14 +1682,19 @@ function collectProvidersFromConfigEditor() {
     const modelSelect = row.querySelector('.cfg_model')?.value?.trim() || '';
     const modelCustom = row.querySelector('.cfg_model_custom')?.value?.trim() || '';
     const modelName = modelSelect === '__custom__' ? modelCustom : modelSelect;
+    const apiKey = row.querySelector('.cfg_api_key')?.value || '';
     const apiKeyEnvVar = row.querySelector('.cfg_env')?.value?.trim() || '';
-    return { provider, modelName, apiKeyEnvVar };
-  }).filter((item) => item.provider || item.modelName || item.apiKeyEnvVar);
+    const hasApiKey = row.getAttribute('data-has-api-key') === 'true';
+    return { provider, modelName, apiKeyEnvVar, apiKey, hasApiKey };
+  }).filter((item) => item.provider || item.modelName || item.apiKeyEnvVar || item.apiKey);
 
   for (let i = 0; i < providers.length; i++) {
     const item = providers[i];
     if (!item.provider || !item.modelName || !item.apiKeyEnvVar) {
       throw new Error(\`providers[\${i}] must include non-empty provider/modelName/apiKeyEnvVar\`);
+    }
+    if (!item.apiKey && !item.hasApiKey) {
+      throw new Error(\`providers[\${i}] must include API key or keep an existing saved key\`);
     }
   }
   return providers;
@@ -1736,6 +1755,8 @@ function addProviderRow() {
     provider: firstCatalog?.id || '',
     modelName: firstCatalog?.defaultModel || '',
     apiKeyEnvVar: firstCatalog?.apiKeyEnvVar || guessApiKeyEnvVar(firstCatalog?.id || ''),
+    apiKey: '',
+    hasApiKey: false,
   });
   state.configByProject[state.selectedProjectId] = { ...config, providers: rows };
   renderMainPanel(state.selectedProjectId);
@@ -1807,7 +1828,10 @@ async function saveProjectConfig() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
-    state.configByProject[projectPath] = payload.config;
+    state.configByProject[projectPath] = {
+      ...payload.config,
+      providers: sanitizeProvidersForState(payload.config.providers),
+    };
     setConfigUi(projectPath, { saveHint: t('configSaved') });
     await ensureProviderHealth(projectPath, true);
     renderMainPanel(projectPath);
@@ -1856,6 +1880,10 @@ async function checkProvidersConnectivity() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ providers }),
     });
+    state.configByProject[projectPath] = {
+      ...(state.configByProject[projectPath] || {}),
+      providers: sanitizeProvidersForState(providers),
+    };
     setConfigUi(projectPath, {
       connectivityResults: data.results || [],
       saveHint: currentLang === 'zh' ? '连通性检查完成' : 'Connectivity check completed',
