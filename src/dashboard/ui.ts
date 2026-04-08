@@ -535,15 +535,22 @@ function switchLang(lang) {
     btn.classList.toggle('active', btn.textContent.trim() === (currentLang === 'en' ? 'EN' : '中文'));
   });
   // Update static text
-  document.getElementById('appVersion').textContent = t('headerVersion');
-  document.querySelector('.sidebar-title').textContent = t('sidebarProjects');
-  document.querySelector('.sidebar-add span:last-child').textContent = t('sidebarAddProject');
-  document.getElementById('addPathInput').placeholder = t('sidebarAddPlaceholder');
-  document.querySelector('.add-form-hint').textContent = t('sidebarAddHint');
+  const appVersionEl = document.getElementById('appVersion');
+  if (appVersionEl) appVersionEl.textContent = t('headerVersion');
+  const sidebarTitleEl = document.querySelector('.sidebar-title');
+  if (sidebarTitleEl) sidebarTitleEl.textContent = t('sidebarProjects');
+  const sidebarAddTextEl = document.querySelector('.sidebar-add span:last-child');
+  if (sidebarAddTextEl) sidebarAddTextEl.textContent = t('sidebarAddProject');
+  const addPathInputEl = document.getElementById('addPathInput');
+  if (addPathInputEl) addPathInputEl.placeholder = t('sidebarAddPlaceholder');
+  const addFormHintEl = document.querySelector('.add-form-hint');
+  if (addFormHintEl) addFormHintEl.textContent = t('sidebarAddHint');
   const logTitleEl = document.querySelector('.log-title');
   if (logTitleEl) logTitleEl.textContent = t('logTitle');
-  document.querySelector('.modal-close').textContent = '✕ ' + t('modalClose');
-  document.querySelector('.modal-history h4').textContent = t('modalVersionHistory');
+  const modalCloseEl = document.querySelector('.modal-close');
+  if (modalCloseEl) modalCloseEl.textContent = '✕ ' + t('modalClose');
+  const modalHistoryTitleEl = document.querySelector('.modal-history h4');
+  if (modalHistoryTitleEl) modalHistoryTitleEl.textContent = t('modalVersionHistory');
   // Re-render dynamic content
   renderSidebar();
   if (state.selectedProjectId) renderMainPanel(state.selectedProjectId);
@@ -707,6 +714,15 @@ function handleUpdate(data) {
   if (data.projects) {
     state.projects = data.projects;
     renderSidebar();
+    if (!state.selectedProjectId && state.projects.length > 0) {
+      void selectProject(state.projects[0].path);
+    } else if (
+      state.selectedProjectId &&
+      !state.projects.some((project) => project.path === state.selectedProjectId) &&
+      state.projects.length > 0
+    ) {
+      void selectProject(state.projects[0].path);
+    }
   }
   if (data.projectData) {
     for (const [projectPath, nextPd] of Object.entries(data.projectData)) {
@@ -761,14 +777,49 @@ async function fetchJsonWithTimeout(url, timeoutMs = 8000, options = {}) {
   }
 }
 
+function getErrorStack(error) {
+  if (error && typeof error === 'object' && 'stack' in error) {
+    return String(error.stack || '');
+  }
+  return '';
+}
+
 // ─── Initial Load ────────────────────────────────────────────────────────────
 async function init() {
   try {
     const browserLang = detectBrowserLang();
-    if (browserLang !== currentLang) switchLang(browserLang);
+    if (browserLang !== currentLang) {
+      try {
+        switchLang(browserLang);
+      } catch (switchErr) {
+        console.error('[dashboard] language switch failed', { error: String(switchErr) });
+        enqueueClientError({
+          message: 'language switch failed: ' + String(switchErr),
+          source: 'init.switchLang',
+          stack: getErrorStack(switchErr),
+        });
+      }
+    }
 
-    const data = await fetchJsonWithTimeout('/api/projects', 6000);
-    state.projects = data.projects || [];
+    let data = null;
+    const timeouts = [5000, 9000, 14000];
+    for (let i = 0; i < timeouts.length; i++) {
+      try {
+        data = await fetchJsonWithTimeout('/api/projects', timeouts[i]);
+        break;
+      } catch (fetchErr) {
+        console.warn('[dashboard] init projects fetch failed', {
+          attempt: i + 1,
+          totalAttempts: timeouts.length,
+          error: String(fetchErr),
+        });
+        if (i === timeouts.length - 1) {
+          throw fetchErr;
+        }
+      }
+    }
+
+    state.projects = data?.projects || [];
     renderSidebar();
     void loadRuntimeInfo();
 
@@ -795,9 +846,24 @@ async function init() {
     }
   } catch (e) {
     console.error('Init failed', e);
+    enqueueClientError({
+      message: 'init failed: ' + String(e),
+      source: 'init',
+      stack: getErrorStack(e),
+    });
     // Show error state in sidebar and main panel
-    document.getElementById('projectList').innerHTML = '<div class="empty-state" style="color:var(--red)">Failed to load projects</div>';
-    document.getElementById('mainPanel').innerHTML = '<div class="panel-inner"><div class="no-project" style="color:var(--red)">Failed to initialize dashboard. Please refresh.</div></div>';
+    const projectListEl = document.getElementById('projectList');
+    if (projectListEl) {
+      projectListEl.innerHTML = '<div class="empty-state" style="color:var(--red)">Failed to load projects</div>';
+    }
+    const mainPanelEl = document.getElementById('mainPanel');
+    if (mainPanelEl) {
+      mainPanelEl.innerHTML = '<div class="panel-inner"><div class="no-project" style="color:var(--yellow)">' +
+        (currentLang === 'zh'
+          ? '初始化失败，正在等待后台数据自动恢复...'
+          : 'Initialization failed. Waiting for backend data to recover...') +
+        '</div></div>';
+    }
   }
   connectSSE();
 }
