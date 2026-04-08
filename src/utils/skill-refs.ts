@@ -25,6 +25,27 @@ const CODE_KEYWORDS = new Set([
 // Minimum skill name length
 const MIN_SKILL_LENGTH = 2;
 
+function extractSkillRefsFromPathText(text: string): string[] {
+  const refs: string[] = [];
+  const pathPatterns = [
+    /(?:^|[/\\])\.agents[/\\]skills[/\\]([\w-]+)[/\\]SKILL\.md\b/gi,
+    /(?:^|[/\\])\.codex[/\\]skills[/\\](?:[^/\\]+[/\\])?([\w-]+)[/\\]SKILL\.md\b/gi,
+    /(?:^|[/\\])\.claude[/\\]skills[/\\]([\w-]+)[/\\](?:SKILL\.md|skill\.md)\b/gi,
+    /(?:^|[/\\])\.skills[/\\]([\w-]+)[/\\](?:current\.md|SKILL\.md|skill\.md)\b/gi,
+  ];
+
+  for (const pattern of pathPatterns) {
+    for (const match of text.matchAll(pattern)) {
+      const skillId = match[1];
+      if (skillId) {
+        refs.push(skillId);
+      }
+    }
+  }
+
+  return refs;
+}
+
 /**
  * Extract skill references from text
  * Supports: [$skill-name] and @skill-name formats
@@ -49,6 +70,8 @@ export function extractSkillRefs(text: string): string[] {
       .filter((m) => !CODE_KEYWORDS.has(m.toLowerCase()) && m.length > MIN_SKILL_LENGTH);
     refs.push(...filteredMatches);
   }
+
+  refs.push(...extractSkillRefsFromPathText(text));
 
   return [...new Set(refs)]; // Remove duplicates
 }

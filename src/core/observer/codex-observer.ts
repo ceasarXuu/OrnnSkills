@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import { BaseObserver } from './base-observer.js';
 import { createChildLogger } from '../../utils/logger.js';
+import { extractSkillRefsFromSources } from '../../utils/skill-refs.js';
 import type { Trace, TraceStatus, PreprocessedTrace } from '../../types/index.js';
 
 const logger = createChildLogger('codex-observer');
@@ -337,11 +338,22 @@ export class CodexObserver extends BaseObserver {
           args = rawArgs as Record<string, unknown>;
         }
 
+        const skillRefs = extractSkillRefsFromSources([toolName, args]);
+        if (skillRefs.length > 0) {
+          logger.debug('Extracted skill refs from Codex tool call', {
+            sessionId,
+            turnId,
+            toolName,
+            skillRefs,
+          });
+        }
+
         return {
           sessionId,
           turnId,
           timestamp: event.timestamp,
           eventType: 'tool_call',
+          skillRefs,
           content: {
             tool: toolName,
             args,

@@ -46,6 +46,12 @@ describe('Skill Refs Utils', () => {
       const refs = extractSkillRefs(content);
       expect(refs.filter((r) => r === 'skill-a').length).toBe(1);
     });
+
+    it('should extract skill refs from skill file paths', () => {
+      const content = 'cat /Users/xuzhang/.agents/skills/show-my-repo/SKILL.md';
+      const refs = extractSkillRefs(content);
+      expect(refs).toContain('show-my-repo');
+    });
   });
 
   describe('extractSkillRefsFromSources', () => {
