@@ -44,16 +44,29 @@ export interface I18nStrings {
   configSaveFailed: string;
   configLoading: string;
   configIntro: string;
+  configLogLevelLabel: string;
   configLogLevelHelp: string;
+  configDefaultProviderLabel: string;
   configDefaultProviderHelp: string;
   configAutoOptimizeHelp: string;
   configUserConfirmHelp: string;
   configRuntimeSyncHelp: string;
+  configProvidersLabel: string;
   configProvidersHelp: string;
   configProvidersExample: string;
   configCheckConnectivity: string;
   configConnectivityChecking: string;
   configConnectivityTitle: string;
+  configConnectivityEmpty: string;
+  configAddProvider: string;
+  configNoProviders: string;
+  configCatalogLoading: string;
+  configCatalogErrorPrefix: string;
+  configLoadErrorPrefix: string;
+  configRetry: string;
+  configConnectivityCheckingHint: string;
+  configConnectivityDone: string;
+  configConnectivityFailed: string;
 
   // Stats
   statShadowSkills: string;
@@ -273,16 +286,19 @@ const en: I18nStrings = {
   configLoading: 'Loading config...',
   configIntro:
     'These settings are written to .ornn/ornn.toml for the current project and control optimization strategy and model provider behavior.',
+  configLogLevelLabel: 'Log Level',
   configLogLevelHelp:
-    '',
+    'Controls Ornn host-side log verbosity written into settings.toml.',
+  configDefaultProviderLabel: 'Default Provider',
   configDefaultProviderHelp:
-    '',
+    'Sets llm.default_provider. New analyzer calls use this provider first unless a task overrides it.',
   configAutoOptimizeHelp:
     'When enabled, Ornn automatically analyzes traces and proposes or applies skill optimization.',
   configUserConfirmHelp:
     'When enabled, optimization changes require manual confirmation before write-back; disable for fully automatic flow.',
   configRuntimeSyncHelp:
     'When enabled, latest skill content is synced back to project skills so all runtimes share the same optimized version.',
+  configProvidersLabel: 'Providers',
   configProvidersHelp:
     'Configure providers with dropdown + inputs. Pick provider, choose or type model, paste API Key, and keep or adjust the env var name used in .env.local.',
   configProvidersExample:
@@ -290,6 +306,16 @@ const en: I18nStrings = {
   configCheckConnectivity: 'Check Connectivity',
   configConnectivityChecking: 'Checking...',
   configConnectivityTitle: 'Provider Connectivity',
+  configConnectivityEmpty: 'No providers',
+  configAddProvider: 'Add Provider',
+  configNoProviders: 'No provider yet. Use the button below to add one.',
+  configCatalogLoading: 'Loading LiteLLM catalog...',
+  configCatalogErrorPrefix: 'LiteLLM catalog error:',
+  configLoadErrorPrefix: 'Failed to load remote config:',
+  configRetry: 'Retry',
+  configConnectivityCheckingHint: 'Checking connectivity...',
+  configConnectivityDone: 'Connectivity check completed',
+  configConnectivityFailed: 'Connectivity check failed',
 
   // Stats
   statShadowSkills: 'Shadow Skills',
@@ -509,16 +535,19 @@ const zh: I18nStrings = {
   configLoading: '配置加载中...',
   configIntro:
     '这些配置会写入当前项目的 .ornn/ornn.toml，用于控制 Ornn 的优化策略与模型供应商行为。',
+  configLogLevelLabel: '日志级别',
   configLogLevelHelp:
-    '',
+    '控制写入 settings.toml 的宿主日志详细程度。',
+  configDefaultProviderLabel: '默认 Provider',
   configDefaultProviderHelp:
-    '',
+    '设置 llm.default_provider。后续分析调用默认优先走这个 provider，除非任务显式覆盖。',
   configAutoOptimizeHelp:
     '开启后，Ornn 会自动分析 trace 并触发技能优化建议或写回流程。',
   configUserConfirmHelp:
     '开启后，优化变更在写回前需要人工确认；关闭后按自动流程直接落盘。',
   configRuntimeSyncHelp:
     '开启后，会把最新技能内容同步回项目 skills，保证不同 runtime 使用同一份优化结果。',
+  configProvidersLabel: 'Providers',
   configProvidersHelp:
     '通过下拉和输入框配置 provider：选择 provider，选择或输入 model，直接粘贴 API Key，并保留或调整写入 .env.local 的环境变量名。',
   configProvidersExample:
@@ -526,6 +555,16 @@ const zh: I18nStrings = {
   configCheckConnectivity: '检查连通性',
   configConnectivityChecking: '检查中...',
   configConnectivityTitle: 'Provider 连通性',
+  configConnectivityEmpty: '暂无 providers',
+  configAddProvider: '新增 Provider',
+  configNoProviders: '暂无 provider，请点击下方按钮添加。',
+  configCatalogLoading: 'LiteLLM 列表加载中...',
+  configCatalogErrorPrefix: 'LiteLLM 列表错误：',
+  configLoadErrorPrefix: '远端配置加载失败：',
+  configRetry: '重试',
+  configConnectivityCheckingHint: '连通性检查中...',
+  configConnectivityDone: '连通性检查完成',
+  configConnectivityFailed: '连通性检查失败',
 
   // Stats
   statShadowSkills: 'Shadow 技能',

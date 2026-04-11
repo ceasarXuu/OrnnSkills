@@ -206,4 +206,59 @@ describe('Config File Operations', () => {
     expect(result[0].ok).toBe(false);
     expect(result[0].message).toContain('Missing API key env var');
   });
+
+  it('should read dashboard config with default provider and log level', async () => {
+    const { readDashboardConfig } = await import('../../src/config/manager.js');
+    writeFileSync(
+      join(testDir, '.ornn', 'config', 'settings.toml'),
+      `[ornn]
+version = "0.1.9"
+log_level = "debug"
+project_path = "${testDir}"
+
+[llm]
+default_provider = "openai"
+
+[providers.openai]
+provider = "openai"
+model_name = "openai/gpt-4o-mini"
+api_key_env_var = "OPENAI_API_KEY"
+
+[providers.deepseek]
+provider = "deepseek"
+model_name = "deepseek/deepseek-chat"
+api_key_env_var = "DEEPSEEK_API_KEY"
+
+[tracking]
+auto_optimize = true
+user_confirm = false
+runtime_sync = true
+`,
+      'utf-8'
+    );
+
+    const config = await readDashboardConfig(testDir);
+    expect(config.defaultProvider).toBe('openai');
+    expect(config.logLevel).toBe('debug');
+    expect(config.providers).toHaveLength(2);
+  });
+
+  it('should persist dashboard default provider and log level when writing config', async () => {
+    const { writeDashboardConfig, readConfig } = await import('../../src/config/manager.js');
+    await writeDashboardConfig(testDir, {
+      autoOptimize: true,
+      userConfirm: false,
+      runtimeSync: true,
+      defaultProvider: 'deepseek',
+      logLevel: 'warn',
+      providers: [
+        { provider: 'openai', modelName: 'openai/gpt-4o-mini', apiKeyEnvVar: 'OPENAI_API_KEY' },
+        { provider: 'deepseek', modelName: 'deepseek/deepseek-chat', apiKeyEnvVar: 'DEEPSEEK_API_KEY' },
+      ],
+    });
+
+    const config = await readConfig(testDir);
+    expect(config?.llm?.default_provider).toBe('deepseek');
+    expect(config?.ornn?.log_level).toBe('warn');
+  });
 });

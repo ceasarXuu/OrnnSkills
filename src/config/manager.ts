@@ -291,6 +291,8 @@ export interface DashboardConfig {
   autoOptimize: boolean;
   userConfirm: boolean;
   runtimeSync: boolean;
+  defaultProvider: string;
+  logLevel: string;
   providers: DashboardProviderConfig[];
 }
 
@@ -310,6 +312,8 @@ export async function readDashboardConfig(projectPath: string): Promise<Dashboar
     autoOptimize: config?.tracking?.auto_optimize ?? true,
     userConfirm: config?.tracking?.user_confirm ?? false,
     runtimeSync: config?.tracking?.runtime_sync ?? true,
+    defaultProvider: config?.llm?.default_provider ?? '',
+    logLevel: config?.ornn?.log_level ?? DEFAULT_LOG_LEVEL,
     providers: providers.map((provider) => ({
       ...provider,
       hasApiKey: Boolean(envVars[provider.apiKeyEnvVar] || process.env[provider.apiKeyEnvVar]),
@@ -356,6 +360,7 @@ export async function writeDashboardConfig(
     apiKeyEnvVar: p.apiKeyEnvVar,
   }));
   const defaultProvider =
+    providers.find((p) => p.provider === payload.defaultProvider)?.provider ||
     providers.find((p) => p.provider === existingDefaultProvider)?.provider ||
     providers[0]?.provider ||
     existingDefaultProvider;
@@ -364,7 +369,7 @@ export async function writeDashboardConfig(
     projectPath,
     providers,
     defaultProvider,
-    existing?.ornn?.log_level || DEFAULT_LOG_LEVEL,
+    payload.logLevel || existing?.ornn?.log_level || DEFAULT_LOG_LEVEL,
     {
       autoOptimize: payload.autoOptimize,
       userConfirm: payload.userConfirm,

@@ -2243,6 +2243,8 @@ function renderConfigPanel(projectPath) {
     autoOptimize: true,
     userConfirm: false,
     runtimeSync: true,
+    defaultProvider: '',
+    logLevel: 'info',
     providers: [],
   };
   const loading = !!state.configLoadingByProject[projectPath];
@@ -2252,15 +2254,32 @@ function renderConfigPanel(projectPath) {
   const providers = Array.isArray(config.providers) ? config.providers : [];
   const rowsHtml = providers.length > 0
     ? providers.map((row, index) => renderProviderRow(row, index)).join('')
-    : \`<div class="config-help">\${currentLang === 'zh' ? '暂无 provider，请点击下方按钮添加。' : 'No provider yet. Use the button below to add one.'}</div>\`;
+    : \`<div class="config-help">\${t('configNoProviders')}</div>\`;
+  const defaultProvider = providers.some((row) => row.provider === config.defaultProvider)
+    ? config.defaultProvider
+    : (providers[0]?.provider || '');
 
   return \`
-    \${state.providerCatalogLoading ? \`<div class="config-help" style="margin-bottom:8px">\${currentLang === 'zh' ? 'LiteLLM 列表加载中...' : 'Loading LiteLLM catalog...'}</div>\` : ''}
-    \${state.providerCatalogError ? \`<div class="config-help" style="margin-bottom:8px;color:var(--red)">LiteLLM catalog error: \${escHtml(state.providerCatalogError)} <button class="btn-secondary" type="button" onclick="reloadProviderCatalog()">\${currentLang === 'zh' ? '重试' : 'Retry'}</button></div>\` : ''}
+    \${state.providerCatalogLoading ? \`<div class="config-help" style="margin-bottom:8px">\${t('configCatalogLoading')}</div>\` : ''}
+    \${state.providerCatalogError ? \`<div class="config-help" style="margin-bottom:8px;color:var(--red)">\${t('configCatalogErrorPrefix')} \${escHtml(state.providerCatalogError)} <button class="btn-secondary" type="button" onclick="reloadProviderCatalog()">\${t('configRetry')}</button></div>\` : ''}
     \${loading ? \`<div class="config-help" style="margin-bottom:8px">\${t('configLoading')}</div>\` : ''}
-    \${loadError ? \`<div class="config-help" style="margin-bottom:8px;color:var(--red)">Failed to load remote config: \${escHtml(loadError)}</div>\` : ''}
+    \${loadError ? \`<div class="config-help" style="margin-bottom:8px;color:var(--red)">\${t('configLoadErrorPrefix')} \${escHtml(loadError)}</div>\` : ''}
     <div class="config-intro">\${t('configIntro')}</div>
     <div class="config-grid">
+      <div class="config-field">
+        <label class="config-label" for="cfg_default_provider">\${t('configDefaultProviderLabel')}</label>
+        <select class="config-select" id="cfg_default_provider">
+          \${getDefaultProviderOptionsHtml(providers, defaultProvider)}
+        </select>
+        <div class="config-help">\${t('configDefaultProviderHelp')}</div>
+      </div>
+      <div class="config-field">
+        <label class="config-label" for="cfg_log_level">\${t('configLogLevelLabel')}</label>
+        <select class="config-select" id="cfg_log_level">
+          \${getLogLevelOptionsHtml(config.logLevel || 'info')}
+        </select>
+        <div class="config-help">\${t('configLogLevelHelp')}</div>
+      </div>
       <div class="config-field">
         <label class="config-check"><input type="checkbox" id="cfg_auto_optimize" \${config.autoOptimize ? 'checked' : ''}/> tracking.auto_optimize</label>
         <div class="config-help">\${t('configAutoOptimizeHelp')}</div>
@@ -2275,10 +2294,10 @@ function renderConfigPanel(projectPath) {
       </div>
     </div>
     <div class="config-field" style="margin-top:10px">
-      <label class="config-label">providers</label>
+      <label class="config-label">\${t('configProvidersLabel')}</label>
       <div class="providers-editor" id="cfg_providers_rows">\${rowsHtml}</div>
       <div style="margin-top:8px;display:flex;gap:8px">
-        <button class="btn-secondary" type="button" onclick="addProviderRow()">\${currentLang === 'zh' ? '新增 Provider' : 'Add Provider'}</button>
+        <button class="btn-secondary" type="button" onclick="addProviderRow()">\${t('configAddProvider')}</button>
       </div>
       <div class="config-help">\${t('configProvidersHelp')}</div>
       <div class="config-connectivity" id="cfg_connectivity">
@@ -2293,6 +2312,25 @@ function renderConfigPanel(projectPath) {
       </div>
     </div>
   \`;
+}
+
+function getDefaultProviderOptionsHtml(providers, selectedProvider) {
+  const rows = Array.isArray(providers) ? providers : [];
+  if (rows.length === 0) {
+    return '<option value="">' + escHtml(t('configConnectivityEmpty')) + '</option>';
+  }
+  return rows.map((row) => {
+    const providerId = String(row.provider || '');
+    const selected = providerId === selectedProvider ? 'selected' : '';
+    return '<option value="' + escHtml(providerId) + '" ' + selected + '>' + escHtml(providerId) + '</option>';
+  }).join('');
+}
+
+function getLogLevelOptionsHtml(selectedLevel) {
+  return ['debug', 'info', 'warn', 'error'].map((level) => {
+    const selected = level === selectedLevel ? 'selected' : '';
+    return '<option value="' + level + '" ' + selected + '>' + level + '</option>';
+  }).join('');
 }
 
 function retryLoadConfig() {
@@ -2565,11 +2603,15 @@ async function saveProjectConfig() {
   const projectPath = state.selectedProjectId;
   try {
     const providers = collectProvidersFromConfigEditor();
+    const defaultProviderEl = document.getElementById('cfg_default_provider');
+    const logLevelEl = document.getElementById('cfg_log_level');
     const payload = {
       config: {
         autoOptimize: document.getElementById('cfg_auto_optimize').checked,
         userConfirm: document.getElementById('cfg_user_confirm').checked,
         runtimeSync: document.getElementById('cfg_runtime_sync').checked,
+        defaultProvider: defaultProviderEl ? defaultProviderEl.value : '',
+        logLevel: logLevelEl ? logLevelEl.value : 'info',
         providers,
       },
     };
@@ -2596,7 +2638,7 @@ async function saveProjectConfig() {
 function renderConnectivityResultsHtml(results) {
   const title = '<div class="config-connectivity-title">' + t('configConnectivityTitle') + '</div>';
   if (!Array.isArray(results) || results.length === 0) {
-    return title + '<div class="config-help">No providers</div>';
+    return title + '<div class="config-help">' + t('configConnectivityEmpty') + '</div>';
   }
   const rows = results.map((r) => {
     const statusClass = r.ok ? 'conn-ok' : 'conn-fail';
@@ -2620,7 +2662,7 @@ async function checkProvidersConnectivity() {
     btn.textContent = t('configConnectivityChecking');
   }
   setConfigUi(projectPath, {
-    saveHint: currentLang === 'zh' ? '连通性检查中...' : 'Checking connectivity...',
+    saveHint: t('configConnectivityCheckingHint'),
   });
   renderMainPanel(projectPath);
   try {
@@ -2637,14 +2679,14 @@ async function checkProvidersConnectivity() {
     };
     setConfigUi(projectPath, {
       connectivityResults: data.results || [],
-      saveHint: currentLang === 'zh' ? '连通性检查完成' : 'Connectivity check completed',
+      saveHint: t('configConnectivityDone'),
     });
     await ensureProviderHealth(projectPath, true);
     renderMainPanel(projectPath);
   } catch (e) {
     setConfigUi(projectPath, {
       connectivityResults: [{ ok: false, provider: 'n/a', modelName: 'n/a', durationMs: 0, message: String(e) }],
-      saveHint: currentLang === 'zh' ? ('连通性检查失败: ' + String(e)) : ('Connectivity check failed: ' + String(e)),
+      saveHint: t('configConnectivityFailed') + ': ' + String(e),
     });
     renderMainPanel(projectPath);
   } finally {

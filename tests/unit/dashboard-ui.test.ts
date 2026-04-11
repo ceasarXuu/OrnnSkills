@@ -769,4 +769,76 @@ describe('dashboard ui recovery', () => {
     dashboard.renderMainPanel(projectPath);
     expect(getElement('mainPanel').innerHTML).toContain('width:640px');
   });
+
+  it('renders config controls for default provider and log level with localized English copy', () => {
+    const { dashboard, getElement } = loadDashboardTestHarness({}, { lang: 'en' });
+    const projectPath = '/tmp/ornn-project';
+
+    getElement('mainPanel');
+    dashboard.state.selectedMainTab = 'config';
+    dashboard.state.selectedProjectId = projectPath;
+    dashboard.state.providerCatalog = [
+      {
+        id: 'openai',
+        name: 'openai',
+        models: ['openai/gpt-4o-mini'],
+        defaultModel: 'openai/gpt-4o-mini',
+        apiKeyEnvVar: 'OPENAI_API_KEY',
+        modelDetails: [],
+      },
+      {
+        id: 'deepseek',
+        name: 'deepseek',
+        models: ['deepseek/deepseek-chat'],
+        defaultModel: 'deepseek/deepseek-chat',
+        apiKeyEnvVar: 'DEEPSEEK_API_KEY',
+        modelDetails: [],
+      },
+    ];
+    dashboard.state.configByProject = {
+      [projectPath]: {
+        autoOptimize: true,
+        userConfirm: false,
+        runtimeSync: true,
+        defaultProvider: 'deepseek',
+        logLevel: 'debug',
+        providers: [
+          { provider: 'openai', modelName: 'openai/gpt-4o-mini', apiKeyEnvVar: 'OPENAI_API_KEY', hasApiKey: true },
+          { provider: 'deepseek', modelName: 'deepseek/deepseek-chat', apiKeyEnvVar: 'DEEPSEEK_API_KEY', hasApiKey: false },
+        ],
+      },
+    };
+    dashboard.state.projectData = {
+      [projectPath]: {
+        daemon: {},
+        skills: [],
+        traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
+        recentTraces: [],
+        decisionEvents: [],
+        agentUsage: {
+          callCount: 0,
+          promptTokens: 0,
+          completionTokens: 0,
+          totalTokens: 0,
+          durationMsTotal: 0,
+          avgDurationMs: 0,
+          lastCallAt: null,
+          byModel: {},
+          byScope: {},
+          bySkill: {},
+        },
+      },
+    };
+
+    dashboard.renderMainPanel(projectPath);
+    const html = getElement('mainPanel').innerHTML;
+    expect(html).toContain('Default Provider');
+    expect(html).toContain('Log Level');
+    expect(html).toContain('Add Provider');
+    expect(html).toContain('Provider Connectivity');
+    expect(html).toContain('id="cfg_default_provider"');
+    expect(html).toContain('id="cfg_log_level"');
+    expect(html).toContain('value="deepseek" selected');
+    expect(html).toContain('value="debug" selected');
+  });
 });

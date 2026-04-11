@@ -643,6 +643,8 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
               autoOptimize?: boolean;
               userConfirm?: boolean;
               runtimeSync?: boolean;
+              defaultProvider?: string;
+              logLevel?: string;
               providers?: Array<{
                 provider: string;
                 modelName: string;
@@ -659,6 +661,8 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
             autoOptimize: body.config.autoOptimize ?? true,
             userConfirm: body.config.userConfirm ?? false,
             runtimeSync: body.config.runtimeSync ?? true,
+            defaultProvider: body.config.defaultProvider ?? '',
+            logLevel: body.config.logLevel ?? 'info',
             providers: body.config.providers ?? [],
           });
           logger.info('Dashboard config saved', {
@@ -667,6 +671,8 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
             autoOptimize: body.config.autoOptimize ?? true,
             userConfirm: body.config.userConfirm ?? false,
             runtimeSync: body.config.runtimeSync ?? true,
+            defaultProvider: body.config.defaultProvider ?? '',
+            logLevel: body.config.logLevel ?? 'info',
             durationMs: Date.now() - started,
           });
           json(res, { ok: true });
