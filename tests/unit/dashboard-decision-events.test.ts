@@ -403,4 +403,80 @@ describe('dashboard decision event reader', () => {
       lastError: 'llm unavailable',
     });
   });
+
+  it('backfills processed trace count from default trace store when checkpoint is stale', () => {
+    const projectRoot = join(tmpdir(), `ornn-dashboard-daemon-trace-count-${Date.now()}`);
+    testRoots.push(projectRoot);
+    mkdirSync(join(projectRoot, '.ornn', 'state'), { recursive: true });
+
+    writeFileSync(
+      join(projectRoot, '.ornn', 'state', 'daemon-checkpoint.json'),
+      JSON.stringify({
+        isRunning: true,
+        startedAt: '2026-04-10T22:00:00.000Z',
+        processedTraces: 0,
+        lastCheckpointAt: '2026-04-10T22:39:24.975Z',
+        retryQueueSize: 0,
+        optimizationStatus: {
+          currentState: 'idle',
+          currentSkillId: null,
+          lastOptimizationAt: null,
+          lastError: null,
+          queueSize: 0,
+        },
+      }),
+      'utf-8'
+    );
+
+    writeFileSync(
+      join(projectRoot, '.ornn', 'state', 'default.ndjson'),
+      [
+        JSON.stringify({ trace_id: 'trace-1', runtime: 'codex', session_id: 'session-1', turn_id: 'turn-1', event_type: 'tool_call', timestamp: '2026-04-10T22:00:01.000Z', status: 'success' }),
+        JSON.stringify({ trace_id: 'trace-2', runtime: 'codex', session_id: 'session-1', turn_id: 'turn-2', event_type: 'assistant_output', timestamp: '2026-04-10T22:00:02.000Z', status: 'success' }),
+      ].join('\n') + '\n',
+      'utf-8'
+    );
+
+    const daemon = readDaemonStatus(projectRoot);
+    expect(daemon.processedTraces).toBe(2);
+  });
+
+  it('backfills processed trace count from session-scoped trace stores when checkpoint is stale', () => {
+    const projectRoot = join(tmpdir(), `ornn-dashboard-daemon-session-trace-count-${Date.now()}`);
+    testRoots.push(projectRoot);
+    mkdirSync(join(projectRoot, '.ornn', 'state'), { recursive: true });
+
+    writeFileSync(
+      join(projectRoot, '.ornn', 'state', 'daemon-checkpoint.json'),
+      JSON.stringify({
+        isRunning: true,
+        startedAt: '2026-04-10T22:00:00.000Z',
+        processedTraces: 0,
+        lastCheckpointAt: '2026-04-10T22:39:24.975Z',
+        retryQueueSize: 0,
+        optimizationStatus: {
+          currentState: 'idle',
+          currentSkillId: null,
+          lastOptimizationAt: null,
+          lastError: null,
+          queueSize: 0,
+        },
+      }),
+      'utf-8'
+    );
+
+    writeFileSync(
+      join(projectRoot, '.ornn', 'state', 'session-a.ndjson'),
+      JSON.stringify({ trace_id: 'trace-a', runtime: 'codex', session_id: 'session-a', turn_id: 'turn-1', event_type: 'tool_call', timestamp: '2026-04-10T22:00:01.000Z', status: 'success' }) + '\n',
+      'utf-8'
+    );
+    writeFileSync(
+      join(projectRoot, '.ornn', 'state', 'session-b.ndjson'),
+      JSON.stringify({ trace_id: 'trace-b', runtime: 'codex', session_id: 'session-b', turn_id: 'turn-1', event_type: 'assistant_output', timestamp: '2026-04-10T22:00:02.000Z', status: 'success' }) + '\n',
+      'utf-8'
+    );
+
+    const daemon = readDaemonStatus(projectRoot);
+    expect(daemon.processedTraces).toBe(2);
+  });
 });

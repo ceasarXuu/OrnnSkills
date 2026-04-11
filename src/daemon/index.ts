@@ -61,6 +61,7 @@ export class Daemon {
   private maxQueueSize = 1000; // 最大队列大小
   private processedTraces: number = 0;
   private checkpointInterval: NodeJS.Timeout | null = null;
+  private checkpointFlushTimer: NodeJS.Timeout | null = null;
   private startedAt: string = '';
   private lastCheckpointAt: string | null = null;
   private optimizationStatus: OptimizationStatus = {
@@ -250,6 +251,16 @@ export class Daemon {
     }
   }
 
+  private scheduleCheckpointSave(delayMs = 250): void {
+    if (this.checkpointFlushTimer) {
+      clearTimeout(this.checkpointFlushTimer);
+    }
+    this.checkpointFlushTimer = setTimeout(() => {
+      this.checkpointFlushTimer = null;
+      void this.saveCheckpoint();
+    }, delayMs);
+  }
+
   /**
    * 更新优化状态
    */
@@ -323,6 +334,7 @@ export class Daemon {
       // 将 unknown 类型转换为 Trace 类型
       await this.shadowManager.processTrace(trace as import('../types/index.js').Trace);
       this.processedTraces++;
+      this.scheduleCheckpointSave();
     } catch (error) {
       logger.warn('Failed to process trace, adding to retry queue', { error });
       this.addToRetryQueue(trace, error as Error);
@@ -479,6 +491,11 @@ export class Daemon {
         clearInterval(this.checkpointInterval);
         this.checkpointInterval = null;
         logger.debug('Checkpoint task stopped');
+      }
+      if (this.checkpointFlushTimer) {
+        clearTimeout(this.checkpointFlushTimer);
+        this.checkpointFlushTimer = null;
+        logger.debug('Checkpoint flush timer stopped');
       }
     } catch (error) {
       logger.error('Failed to stop cleanup task', { error });

@@ -124,6 +124,30 @@ function listTraceNdjsonPaths(projectRoot: string): string[] {
   }
 }
 
+function countProcessedTraceIds(projectRoot: string): number {
+  const traceIds = new Set<string>();
+  for (const filePath of listTraceNdjsonPaths(projectRoot)) {
+    let content = '';
+    try {
+      content = readFileSync(filePath, 'utf-8');
+    } catch {
+      continue;
+    }
+    for (const line of content.split(/\r?\n/)) {
+      if (!line.trim()) continue;
+      try {
+        const raw = JSON.parse(line) as { trace_id?: unknown };
+        if (typeof raw.trace_id === 'string' && raw.trace_id) {
+          traceIds.add(raw.trace_id);
+        }
+      } catch {
+        // ignore malformed rows
+      }
+    }
+  }
+  return traceIds.size;
+}
+
 // ─── Daemon Status ────────────────────────────────────────────────────────────
 
 function isProcessRunning(pid: number): boolean {
@@ -174,6 +198,9 @@ export function readDaemonStatus(projectRoot: string): DaemonStatus {
   }
 
   const isRunning = pid !== null && isProcessRunning(pid);
+  if ((checkpoint.processedTraces ?? 0) <= 0) {
+    checkpoint.processedTraces = countProcessedTraceIds(projectRoot);
+  }
 
   const backfilled = backfillOptimizationStatus(projectRoot, checkpoint.optimizationStatus);
 

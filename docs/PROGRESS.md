@@ -3,6 +3,8 @@
 ## 📊 总体进度：Phase 1 ✅ 完成
 
 ### 2026-04-12
+- ✅ 修复 daemon `Traces processed` 状态滞后：trace 成功处理后现在会快速刷新 checkpoint；同时 dashboard 读侧在 checkpoint 仍为 0 时会从 trace 文件集合回填已处理 trace 数，不再出现“实时追踪已有事件，但状态栏长期显示 0”的错觉
+- 📝 记录恢复经验：daemon 的统计指标如果只靠低频 checkpoint 定时落盘，UI 很容易出现“核心链路已恢复，但状态值还停在旧快照”的假故障；这类指标至少要做到“写侧快速刷新 + 读侧必要时回填”双保险
 - ✅ 补齐实时追踪 Raw Traces 子层交互：原始 trace 表现在支持 `scope` 回填、详情预览、复制/查看详情动作，并与业务事件层共享列宽拖拽记忆；排查底层 trace 时不再只能看 `event_type + session/trace id` 的极简表格
 - 📝 记录恢复经验：实时追踪如果分成“业务事件 / 原始 Trace”两层，就不能只把交互能力堆在业务层；否则一旦要排查 observer、trace store 或 provider 原始返回，用户还是得回到日志里，tab 切换本身就失去价值
 - ✅ 修复实时追踪“长期无事件统计”的链路断层：`CodexObserver` 启动时现在会回放最近活跃的 session 文件尾部，不再只依赖新文件创建或偶发文件变更；daemon 重启后也能立刻重新接上正在进行中的 Codex 会话
