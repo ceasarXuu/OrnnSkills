@@ -7,6 +7,7 @@ import { createTraceSkillMapper } from '../trace-skill-mapper/index.js';
 import { evaluator } from '../evaluator/index.js';
 import { patchGenerator } from '../patch-generator/index.js';
 import { createSkillVersionManager } from '../skill-version/index.js';
+import { createDecisionEventRecorder } from '../decision-events/index.js';
 import { hashString } from '../../utils/hash.js';
 import { buildShadowId, runtimeFromShadowId, skillIdFromShadowId } from '../../utils/parse.js';
 import { createSQLiteStorage } from '../../storage/sqlite.js';
@@ -36,6 +37,7 @@ export class ShadowManager {
   private db: Awaited<ReturnType<typeof createSQLiteStorage>> | null = null;
   private dbPath: string;
   private policy: AutoOptimizePolicy;
+  private decisionEvents;
   private lastPatchTime: Map<string, number> = new Map();
   private patchCountToday: Map<string, number> = new Map();
 
@@ -45,6 +47,7 @@ export class ShadowManager {
     this.journalManager = createJournalManager(projectRoot);
     this.traceManager = createTraceManager(projectRoot);
     this.traceSkillMapper = createTraceSkillMapper(projectRoot);
+    this.decisionEvents = createDecisionEventRecorder(projectRoot);
     this.dbPath = join(projectRoot, '.ornn', 'state', 'sessions.db');
 
     const patchConfig = configManager.getPatchConfig();
@@ -295,13 +298,150 @@ export class ShadowManager {
 
     // 获取最近的 traces
     const recentTraces = await this.traceManager.getSessionTraces(trace.session_id);
+    const eventContext = this.buildDecisionEventContext(shadowId, trace, recentTraces);
 
     // 评估是否需要优化
     const evaluation = evaluator.evaluate(recentTraces);
 
-    if (evaluation && evaluation.should_patch) {
-      await this.handleEvaluation(shadowId, evaluation, recentTraces);
+    if (!evaluation) {
+      this.recordEvaluationResult(
+        shadowId,
+        eventContext,
+        'continue_collecting',
+        '当前证据不足，继续观察。',
+        null
+      );
+      return;
     }
+
+    if (!evaluation.should_patch) {
+      this.recordEvaluationResult(
+        shadowId,
+        eventContext,
+        'no_patch_needed',
+        evaluation.reason ? `当前暂无修改必要：${evaluation.reason}` : '当前暂无修改必要。',
+        evaluation
+      );
+      return;
+    }
+
+    await this.handleEvaluation(shadowId, evaluation, recentTraces, eventContext);
+  }
+
+  private buildDecisionEventContext(
+    shadowId: string,
+    trace: Trace,
+    traces: Trace[]
+  ): {
+    skillId: string;
+    runtime: RuntimeType;
+    windowId: string;
+    traceId: string;
+    sessionId: string;
+    traceCount: number;
+    sessionCount: number;
+  } {
+    const skillId = skillIdFromShadowId(shadowId) ?? trace.metadata?.skill_id?.toString() ?? shadowId.split('@')[0];
+    const runtime = (runtimeFromShadowId(shadowId) ?? trace.runtime ?? 'codex') as RuntimeType;
+    const sessionIds = [...new Set(traces.map((item) => item.session_id).filter(Boolean))];
+    const sessionId = trace.session_id || sessionIds[0] || 'unknown-session';
+    const traceCount = traces.length;
+    const sessionCount = sessionIds.length || 1;
+
+    return {
+      skillId,
+      runtime,
+      windowId: `${sessionId}::${skillId}`,
+      traceId: trace.trace_id,
+      sessionId,
+      traceCount,
+      sessionCount,
+    };
+  }
+
+  private recordEvaluationResult(
+    shadowId: string,
+    context: ReturnType<ShadowManager['buildDecisionEventContext']>,
+    status: string,
+    detail: string,
+    evaluation: EvaluationResult | null
+  ): void {
+    this.decisionEvents.record({
+      tag: 'evaluation_result',
+      skillId: context.skillId,
+      runtime: context.runtime,
+      windowId: context.windowId,
+      traceId: context.traceId,
+      sessionId: context.sessionId,
+      status,
+      detail,
+      confidence: evaluation?.confidence ?? null,
+      changeType: evaluation?.change_type ?? null,
+      reason: evaluation?.reason ?? null,
+      traceCount: context.traceCount,
+      sessionCount: context.sessionCount,
+      ruleName: evaluation?.rule_name ?? null,
+      evidence: {
+        directEvidence: [`shadow=${shadowId}`],
+      },
+    });
+  }
+
+  private recordAnalysisRequested(
+    context: ReturnType<ShadowManager['buildDecisionEventContext']>,
+    evaluation: EvaluationResult
+  ): void {
+    this.decisionEvents.record({
+      tag: 'analysis_requested',
+      skillId: context.skillId,
+      runtime: context.runtime,
+      windowId: context.windowId,
+      traceId: context.traceId,
+      sessionId: context.sessionId,
+      status: 'ready',
+      detail: '已满足优化条件，开始生成改进方案。',
+      confidence: evaluation.confidence,
+      changeType: evaluation.change_type ?? null,
+      reason: evaluation.reason ?? null,
+      traceCount: context.traceCount,
+      sessionCount: context.sessionCount,
+      ruleName: evaluation.rule_name ?? null,
+    });
+  }
+
+  private recordAnalysisFailure(
+    context: ReturnType<ShadowManager['buildDecisionEventContext']>,
+    evaluation: EvaluationResult,
+    detail: string
+  ): void {
+    this.decisionEvents.record({
+      tag: 'analysis_failed',
+      skillId: context.skillId,
+      runtime: context.runtime,
+      windowId: context.windowId,
+      traceId: context.traceId,
+      sessionId: context.sessionId,
+      status: 'failed',
+      detail,
+      confidence: evaluation.confidence,
+      changeType: evaluation.change_type ?? null,
+      reason: evaluation.reason ?? null,
+      traceCount: context.traceCount,
+      sessionCount: context.sessionCount,
+      ruleName: evaluation.rule_name ?? null,
+    });
+  }
+
+  private countPatchLines(patch: string): { linesAdded: number; linesRemoved: number } {
+    let linesAdded = 0;
+    let linesRemoved = 0;
+    for (const line of patch.split('\n')) {
+      if (!line) continue;
+      if (line.startsWith('+++') || line.startsWith('---') || line.startsWith('@@')) continue;
+      if (line.startsWith('+')) linesAdded += 1;
+      if (line.startsWith('-')) linesRemoved += 1;
+    }
+    return { linesAdded, linesRemoved };
   }
 
   /**
@@ -348,17 +488,32 @@ export class ShadowManager {
   private async handleEvaluation(
     shadowId: string,
     evaluation: EvaluationResult,
-    _traces: Trace[]
+    _traces: Trace[],
+    context: ReturnType<ShadowManager['buildDecisionEventContext']>
   ): Promise<void> {
     // 检查是否在冷却期
     if (this.isInCooldown(shadowId)) {
       logger.debug(`Shadow ${shadowId} is in cooldown, skipping patch`);
+      this.recordEvaluationResult(
+        shadowId,
+        context,
+        'cooldown',
+        '当前技能仍在冷却期，暂不重复优化。',
+        evaluation
+      );
       return;
     }
 
     // 检查是否超过每日限制
     if (this.exceedsDailyLimit(shadowId)) {
       logger.debug(`Shadow ${shadowId} exceeds daily patch limit, skipping`);
+      this.recordEvaluationResult(
+        shadowId,
+        context,
+        'daily_limit_reached',
+        '当前技能今天的自动优化次数已达上限。',
+        evaluation
+      );
       return;
     }
 
@@ -368,23 +523,75 @@ export class ShadowManager {
     const shadow = this.shadowRegistry.get(skillId, runtime);
     if (shadow?.status === 'frozen') {
       logger.debug(`Shadow ${shadowId} is frozen, skipping patch`);
+      this.recordEvaluationResult(
+        shadowId,
+        context,
+        'frozen',
+        '当前技能已被冻结，暂不执行自动优化。',
+        evaluation
+      );
       return;
     }
 
     // 检查置信度
     if (evaluation.confidence < this.policy.min_confidence) {
       logger.debug(`Confidence ${evaluation.confidence} below threshold, skipping patch`);
+      this.recordEvaluationResult(
+        shadowId,
+        context,
+        'confidence_too_low',
+        '当前信号可信度不足，继续观察更多调用。',
+        evaluation
+      );
       return;
     }
 
+    this.recordAnalysisRequested(context, evaluation);
+
     // 执行 patch
-    await this.executePatch(shadowId, evaluation);
+    const patchResult = await this.executePatch(shadowId, evaluation);
+    if (!patchResult.ok) {
+      this.recordAnalysisFailure(
+        context,
+        evaluation,
+        patchResult.error ?? '本轮优化未完成，但系统没有返回更具体的原因。'
+      );
+      return;
+    }
+
+    this.decisionEvents.record({
+      tag: 'patch_applied',
+      skillId: context.skillId,
+      runtime: context.runtime,
+      windowId: context.windowId,
+      traceId: context.traceId,
+      sessionId: context.sessionId,
+      status: 'success',
+      detail: `已完成本轮优化并写回 shadow skill。revision=${patchResult.revision ?? 0}`,
+      confidence: evaluation.confidence,
+      changeType: evaluation.change_type ?? null,
+      reason: evaluation.reason ?? null,
+      traceCount: context.traceCount,
+      sessionCount: context.sessionCount,
+      ruleName: evaluation.rule_name ?? null,
+      linesAdded: patchResult.linesAdded ?? null,
+      linesRemoved: patchResult.linesRemoved ?? null,
+    });
   }
 
   /**
    * 执行 patch
    */
-  private async executePatch(shadowId: string, evaluation: EvaluationResult): Promise<void> {
+  private async executePatch(
+    shadowId: string,
+    evaluation: EvaluationResult
+  ): Promise<{
+    ok: boolean;
+    error?: string;
+    revision?: number;
+    linesAdded?: number;
+    linesRemoved?: number;
+  }> {
     const skillId = skillIdFromShadowId(shadowId) ?? shadowId.split('@')[0];
     const runtime = runtimeFromShadowId(shadowId) ?? 'codex';
 
@@ -393,7 +600,10 @@ export class ShadowManager {
       const currentContent = this.shadowRegistry.readContent(skillId, runtime);
       if (!currentContent) {
         logger.warn(`Cannot read shadow content: ${skillId}`);
-        return;
+        return {
+          ok: false,
+          error: '当前技能内容为空，无法生成优化结果。',
+        };
       }
 
       // 生成 patch
@@ -411,7 +621,10 @@ export class ShadowManager {
 
       if (!patchResult.success) {
         logger.warn(`Patch generation failed: ${patchResult.error}`);
-        return;
+        return {
+          ok: false,
+          error: patchResult.error ?? 'Patch 生成失败。',
+        };
       }
 
       // 获取当前 revision
@@ -446,13 +659,25 @@ export class ShadowManager {
         this.journalManager.createSnapshot(shadowId, currentRevision + 1);
       }
 
+      const patchStats = this.countPatchLines(patchResult.patch);
+
       logger.info(`Patch executed successfully`, {
         shadow_id: shadowId,
         change_type: evaluation.change_type,
         revision: currentRevision + 1,
       });
+      return {
+        ok: true,
+        revision: currentRevision + 1,
+        linesAdded: patchStats.linesAdded,
+        linesRemoved: patchStats.linesRemoved,
+      };
     } catch (error) {
       logger.error(`Patch execution failed`, { shadow_id: shadowId, error });
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
     }
   }
 
@@ -485,13 +710,45 @@ export class ShadowManager {
   async triggerOptimize(shadowId: string): Promise<EvaluationResult | null> {
     // 获取最近的 traces
     const traces = await this.traceManager.getRecentTraces(100);
+    const runtime = (runtimeFromShadowId(shadowId) ?? 'codex') as RuntimeType;
+    const fallbackTrace: Trace = traces[traces.length - 1] ?? {
+      trace_id: `manual-optimize:${Date.now()}`,
+      session_id: `manual-optimize:${Date.now()}`,
+      turn_id: 'manual',
+      runtime,
+      event_type: 'status',
+      status: 'success',
+      timestamp: new Date().toISOString(),
+      metadata: { skill_id: skillIdFromShadowId(shadowId) ?? shadowId.split('@')[0] },
+    };
+    const eventContext = this.buildDecisionEventContext(shadowId, fallbackTrace, traces);
 
     // 评估
     const evaluation = evaluator.evaluate(traces);
 
-    if (evaluation && evaluation.should_patch) {
-      void this.handleEvaluation(shadowId, evaluation, traces);
+    if (!evaluation) {
+      this.recordEvaluationResult(
+        shadowId,
+        eventContext,
+        'continue_collecting',
+        '当前证据不足，继续观察。',
+        null
+      );
+      return evaluation;
     }
+
+    if (!evaluation.should_patch) {
+      this.recordEvaluationResult(
+        shadowId,
+        eventContext,
+        'no_patch_needed',
+        evaluation.reason ? `当前暂无修改必要：${evaluation.reason}` : '当前暂无修改必要。',
+        evaluation
+      );
+      return evaluation;
+    }
+
+    void this.handleEvaluation(shadowId, evaluation, traces, eventContext);
 
     return evaluation;
   }
