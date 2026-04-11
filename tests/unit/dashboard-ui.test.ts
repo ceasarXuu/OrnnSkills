@@ -153,7 +153,7 @@ function loadDashboardTestHarness(
   const script = scriptMatch[1]
     .replace(/\binit\(\);\s*$/, '')
     .concat(
-      '\n;globalThis.__dashboardTest = { state, renderMainPanel, buildActivityRows, copyActivityDetail, openActivityDetail, renderCostPanel };'
+      '\n;globalThis.__dashboardTest = { state, renderMainPanel, safeRenderMainPanel, buildActivityRows, copyActivityDetail, openActivityDetail, renderCostPanel };'
     );
 
   vm.runInNewContext(script, runtime);
@@ -163,6 +163,7 @@ function loadDashboardTestHarness(
       __dashboardTest: {
         state: Record<string, any>;
         renderMainPanel: (projectPath: string) => void;
+        safeRenderMainPanel: (projectPath: string, source?: string) => boolean;
         buildActivityRows: (projectPath: string) => Array<Record<string, any>>;
         copyActivityDetail: (projectPath: string, rowId: string) => Promise<void>;
         openActivityDetail: (projectPath: string, rowId: string) => Promise<void>;
@@ -791,6 +792,58 @@ describe('dashboard ui recovery', () => {
     expect(html).toContain('修改已应用');
     expect(html).toContain('add_fallback');
     expect(html).not.toContain('>patch_applied<');
+  });
+
+  it('degrades to a project-level fallback when main panel rendering throws', () => {
+    const { dashboard, getElement } = loadDashboardTestHarness({}, { lang: 'zh' });
+    const projectPath = '/tmp/ornn-project';
+    const badScope = new Proxy({}, {
+      ownKeys() {
+        throw new Error('scope breakdown exploded');
+      },
+      getOwnPropertyDescriptor() {
+        return { enumerable: true, configurable: true };
+      },
+    });
+
+    getElement('mainPanel');
+    dashboard.state.selectedProjectId = projectPath;
+    dashboard.state.selectedMainTab = 'overview';
+    dashboard.state.projectData = {
+      [projectPath]: {
+        daemon: {
+          isRunning: true,
+          startedAt: '2026-04-10T00:00:00.000Z',
+          processedTraces: 42,
+          lastCheckpointAt: null,
+          retryQueueSize: 0,
+          optimizationStatus: { currentState: 'idle', currentSkillId: null, lastOptimizationAt: null, lastError: null, queueSize: 0 },
+        },
+        skills: [],
+        traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
+        recentTraces: [],
+        decisionEvents: [],
+        agentUsage: {
+          callCount: 1,
+          promptTokens: 10,
+          completionTokens: 2,
+          totalTokens: 12,
+          durationMsTotal: 100,
+          avgDurationMs: 100,
+          lastCallAt: null,
+          byModel: {},
+          byScope: badScope,
+          bySkill: {},
+        },
+      },
+    };
+
+    const ok = dashboard.safeRenderMainPanel(projectPath, 'test');
+    expect(ok).toBe(false);
+    const html = getElement('mainPanel').innerHTML;
+    expect(html).toContain('项目数据已加载，但仪表板面板渲染失败');
+    expect(html).toContain('/tmp/ornn-project');
+    expect(html).toContain('test');
   });
 
   it('deduplicates repeated decision conclusions within the same short window', () => {

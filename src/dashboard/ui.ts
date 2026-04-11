@@ -722,7 +722,7 @@ function switchLang(lang) {
   if (eventModalTitleEl) eventModalTitleEl.textContent = t('activityDetailTitle');
   // Re-render dynamic content
   renderSidebar();
-  if (state.selectedProjectId) renderMainPanel(state.selectedProjectId);
+  if (state.selectedProjectId) safeRenderMainPanel(state.selectedProjectId, 'updateLanguageUI');
   renderLogs();
 }
 
@@ -777,13 +777,17 @@ function toErrorMessage(value) {
 }
 
 function enqueueClientError(event) {
+  const href =
+    (typeof location !== 'undefined' && location && location.href) ||
+    (typeof window !== 'undefined' && window.location && window.location.href) ||
+    '';
   const item = {
     message: String(event.message || '').slice(0, 1000),
     stack: String(event.stack || '').slice(0, 4000),
     source: String(event.source || '').slice(0, 1000),
     lineno: Number(event.lineno || 0) || undefined,
     colno: Number(event.colno || 0) || undefined,
-    href: String(location.href || '').slice(0, 1000),
+    href: String(href).slice(0, 1000),
     ua: String(navigator.userAgent || '').slice(0, 500),
     timestamp: new Date().toISOString(),
     buildId: DASHBOARD_BUILD_ID,
@@ -927,7 +931,7 @@ function handleUpdate(data) {
     } else if (state.selectedMainTab === 'config') {
       // Config 页由用户操作驱动刷新，避免 SSE 覆盖用户输入/操作反馈
     } else {
-      renderMainPanel(state.selectedProjectId);
+      safeRenderMainPanel(state.selectedProjectId, 'handleUpdate');
     }
   }
 }
@@ -1163,12 +1167,12 @@ async function selectProject(path) {
       };
     }
   }
-  renderMainPanel(path);
+  safeRenderMainPanel(path, 'selectProject');
   renderSidebar();
   void ensureProviderHealth(path)
     .then(() => {
       if (state.selectedProjectId === path) {
-        renderMainPanel(path);
+        safeRenderMainPanel(path, 'ensureProviderHealth');
       }
     })
     .catch(() => {
@@ -1459,7 +1463,7 @@ function startActivityColumnResize(event, columnKey) {
   function handleMove(moveEvent) {
     const delta = (moveEvent.clientX || 0) - startX;
     state.activityColumnWidths[columnKey] = Math.max(72, startWidth + delta);
-    if (state.selectedProjectId) renderMainPanel(state.selectedProjectId);
+    if (state.selectedProjectId) safeRenderMainPanel(state.selectedProjectId, 'startActivityColumnResize');
   }
 
   function handleUp() {
@@ -2453,13 +2457,49 @@ function renderMainPanel(projectPath) {
   }
 }
 
+function showProjectRenderFailure(projectPath, source, error) {
+  const el = document.getElementById('mainPanel');
+  if (!el) return;
+  el.innerHTML =
+    '<div class="panel-inner"><div class="card"><div class="card-header"><span>' +
+    escHtml(t('mainSelectProject')) +
+    '</span></div><div class="card-body"><div class="empty-state" style="color:var(--yellow)">' +
+    escHtml(t('projectRenderFailed')) +
+    '</div><div class="config-help" style="margin-top:8px">' +
+    escHtml(t('projectRenderHint')) +
+    '</div><div class="config-help" style="margin-top:8px">' +
+    escHtml(projectPath || '—') +
+    (source ? ' · ' + escHtml(source) : '') +
+    '</div></div></div></div>';
+  console.error('[dashboard] main panel render failed', {
+    projectPath,
+    source,
+    error: String(error),
+  });
+  enqueueClientError({
+    message: 'main panel render failed: ' + String(error),
+    source: source || 'renderMainPanel',
+    stack: getErrorStack(error),
+  });
+}
+
+function safeRenderMainPanel(projectPath, source = 'renderMainPanel') {
+  try {
+    renderMainPanel(projectPath);
+    return true;
+  } catch (error) {
+    showProjectRenderFailure(projectPath, source, error);
+    return false;
+  }
+}
+
 function selectMainTab(tab) {
   state.selectedMainTab = tab;
   if ((tab === 'config' || tab === 'cost') && state.providerCatalog.length === 0) {
     void loadProviderCatalog(true);
   }
   if (state.selectedProjectId) {
-    renderMainPanel(state.selectedProjectId);
+    safeRenderMainPanel(state.selectedProjectId, 'selectMainTab:' + tab);
   }
   // 前端日志：记录 dashboard 主 tab 切换
   console.debug('[dashboard] switched main tab', { tab });
@@ -2467,12 +2507,12 @@ function selectMainTab(tab) {
 
 function setActivityLayer(layer) {
   state.activityLayer = layer === 'raw' ? 'raw' : 'business';
-  if (state.selectedProjectId) renderMainPanel(state.selectedProjectId);
+  if (state.selectedProjectId) safeRenderMainPanel(state.selectedProjectId, 'setActivityLayer');
 }
 
 function setActivityTagFilter(tag) {
   state.activityTagFilter = tag || 'all';
-  if (state.selectedProjectId) renderMainPanel(state.selectedProjectId);
+  if (state.selectedProjectId) safeRenderMainPanel(state.selectedProjectId, 'setActivityTagFilter');
 }
 
 function renderConfigPanel(projectPath) {
@@ -2522,7 +2562,7 @@ function retryLoadConfig() {
   delete state.configByProject[state.selectedProjectId];
   state.configLoadErrorByProject[state.selectedProjectId] = '';
   void ensureProjectConfig(state.selectedProjectId);
-  renderMainPanel(state.selectedProjectId);
+  safeRenderMainPanel(state.selectedProjectId, 'reloadProjectConfig');
 }
 
 async function loadProviderCatalog(force = false) {
@@ -2531,7 +2571,7 @@ async function loadProviderCatalog(force = false) {
   state.providerCatalogLoading = true;
   state.providerCatalogError = '';
   if (state.selectedMainTab === 'config' && state.selectedProjectId) {
-    renderMainPanel(state.selectedProjectId);
+    safeRenderMainPanel(state.selectedProjectId, 'scheduleProjectConfigSave.flush');
   }
   try {
     let data = null;
@@ -2553,7 +2593,7 @@ async function loadProviderCatalog(force = false) {
   } finally {
     state.providerCatalogLoading = false;
     if (state.selectedMainTab === 'config' && state.selectedProjectId) {
-      renderMainPanel(state.selectedProjectId);
+      safeRenderMainPanel(state.selectedProjectId, 'scheduleProjectConfigSave.complete');
     }
   }
 }
@@ -2804,7 +2844,7 @@ function addProviderRow() {
   });
   const nextDefaultProvider = config.defaultProvider || rows[0]?.provider || '';
   state.configByProject[state.selectedProjectId] = { ...config, defaultProvider: nextDefaultProvider, providers: rows };
-  renderMainPanel(state.selectedProjectId);
+  safeRenderMainPanel(state.selectedProjectId, 'addProviderRow');
   scheduleProjectConfigSave(150);
 }
 
@@ -2824,7 +2864,7 @@ function removeProviderRow(btn) {
     ? config.defaultProvider
     : (rows[0]?.provider || '');
   state.configByProject[state.selectedProjectId] = { ...config, defaultProvider: nextDefaultProvider, providers: rows };
-  renderMainPanel(state.selectedProjectId);
+  safeRenderMainPanel(state.selectedProjectId, 'removeProviderRow');
   scheduleProjectConfigSave(150);
 }
 
@@ -2854,14 +2894,14 @@ async function ensureProjectConfig(projectPath) {
     state.configByProject[projectPath] = data.config || {};
     state.configLoadErrorByProject[projectPath] = '';
     if (state.selectedMainTab === 'config' && state.selectedProjectId === projectPath) {
-      renderMainPanel(projectPath);
+      safeRenderMainPanel(projectPath, 'checkProvidersConnectivity.start');
     }
   } catch (e) {
     const message = String(e);
     console.error('[dashboard] failed to load config', { projectPath, error: message });
     state.configLoadErrorByProject[projectPath] = message;
     if (state.selectedMainTab === 'config' && state.selectedProjectId === projectPath) {
-      renderMainPanel(projectPath);
+      safeRenderMainPanel(projectPath, 'checkProvidersConnectivity.end');
     }
   } finally {
     state.configLoadingByProject[projectPath] = false;
@@ -2910,13 +2950,13 @@ async function saveProjectConfig(options = {}) {
     updateConfigSaveHint(projectPath, auto ? t('configAutoSaved') : t('configSaved'));
     await ensureProviderHealth(projectPath, true);
     if (!auto) {
-      renderMainPanel(projectPath);
+      safeRenderMainPanel(projectPath, 'saveProjectConfig.start');
     }
   } catch (e) {
     console.error('[dashboard] failed to save config', { error: String(e) });
     updateConfigSaveHint(projectPath, t('configSaveFailed') + ': ' + String(e));
     if (!auto) {
-      renderMainPanel(projectPath);
+      safeRenderMainPanel(projectPath, 'saveProjectConfig.end');
     }
   } finally {
     if (auto) {
@@ -2984,13 +3024,13 @@ async function checkProvidersConnectivity(targetRowIndex = null, btnEl = null) {
       saveHint: t('configConnectivityDone'),
     });
     await ensureProviderHealth(projectPath, true);
-    renderMainPanel(projectPath);
+    safeRenderMainPanel(projectPath, 'checkProviderHealth.start');
   } catch (e) {
     setConfigUi(projectPath, {
       connectivityResults: [{ ok: false, provider: 'n/a', modelName: 'n/a', durationMs: 0, message: String(e) }],
       saveHint: t('configConnectivityFailed') + ': ' + String(e),
     });
-    renderMainPanel(projectPath);
+    safeRenderMainPanel(projectPath, 'checkProviderHealth.end');
   } finally {
     if (btn) {
       btn.disabled = false;

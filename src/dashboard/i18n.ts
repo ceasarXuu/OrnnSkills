@@ -275,6 +275,8 @@ export interface I18nStrings {
   logFilterAll: string;
   initProjectsLoadFailed: string;
   initRecoveryWaiting: string;
+  projectRenderFailed: string;
+  projectRenderHint: string;
   runtimeBuildMismatchPrefix: string;
   runtimeHostUnavailable: string;
 
@@ -582,6 +584,8 @@ const en: I18nStrings = {
   logFilterAll: 'ALL',
   initProjectsLoadFailed: 'Failed to load projects',
   initRecoveryWaiting: 'Initialization failed. Waiting for backend data to recover...',
+  projectRenderFailed: 'Project data loaded, but the dashboard panel failed to render.',
+  projectRenderHint: 'Refresh the page. If it still reproduces, client runtime errors have been queued for reporting.',
   runtimeBuildMismatchPrefix: 'build mismatch',
   runtimeHostUnavailable: 'host unavailable',
 
@@ -889,6 +893,8 @@ const zh: I18nStrings = {
   logFilterAll: '全部',
   initProjectsLoadFailed: '加载项目失败',
   initRecoveryWaiting: '初始化失败，正在等待后台数据自动恢复...',
+  projectRenderFailed: '项目数据已加载，但仪表板面板渲染失败。',
+  projectRenderHint: '请先刷新页面；如果仍能复现，客户端运行时错误已经进入上报队列。',
   runtimeBuildMismatchPrefix: '版本不一致',
   runtimeHostUnavailable: '宿主信息不可用',
 
