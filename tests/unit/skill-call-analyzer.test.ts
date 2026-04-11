@@ -1,9 +1,35 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+
+const { readDashboardConfigMock } = vi.hoisted(() => ({
+  readDashboardConfigMock: vi.fn(),
+}));
+
+vi.mock('../../src/config/manager.js', () => ({
+  readDashboardConfig: readDashboardConfigMock,
+}));
+
 import { createSkillCallAnalyzer } from '../../src/core/skill-call-analyzer/index.js';
 
 describe('SkillCallAnalyzer', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    readDashboardConfigMock.mockReset();
+    readDashboardConfigMock.mockResolvedValue({
+      autoOptimize: true,
+      userConfirm: false,
+      runtimeSync: true,
+      defaultProvider: 'openai',
+      logLevel: 'info',
+      providers: [
+        {
+          provider: 'openai',
+          modelName: 'gpt-4o-mini',
+          apiKeyEnvVar: 'OPENAI_API_KEY',
+          apiKey: 'test-key',
+          hasApiKey: true,
+        },
+      ],
+    });
   });
 
   afterEach(() => {
@@ -13,10 +39,14 @@ describe('SkillCallAnalyzer', () => {
 
   it('returns provider_not_configured when no active provider has an api key', async () => {
     const analyzer = createSkillCallAnalyzer();
-
-    vi.mock('../../src/config/manager.js', async () => ({
-      readDashboardConfig: vi.fn().mockResolvedValue({ providers: [], activeProviderKey: null }),
-    }));
+    readDashboardConfigMock.mockResolvedValue({
+      autoOptimize: true,
+      userConfirm: false,
+      runtimeSync: true,
+      defaultProvider: '',
+      logLevel: 'info',
+      providers: [],
+    });
 
     const result = await analyzer.analyzeWindow('/tmp/project', {
       windowId: 'window-1',
