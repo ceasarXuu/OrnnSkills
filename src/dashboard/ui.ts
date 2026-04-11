@@ -307,6 +307,19 @@ export function getDashboardHtml(_port: number, lang: Language = 'en', buildId =
     align-items: center;
     flex-wrap: wrap;
   }
+  .activity-skill-link {
+    border: none;
+    background: transparent;
+    color: var(--blue);
+    cursor: pointer;
+    font-family: var(--font);
+    font-size: 10px;
+    padding: 0;
+    text-align: left;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .activity-skill-link:hover { color: #7bb7ff; }
   .detail-copy-btn, .detail-view-btn {
     border: none;
     background: transparent;
@@ -1738,6 +1751,41 @@ function closeEventModal() {
   document.getElementById('eventModal').classList.remove('visible');
 }
 
+function resolveActivitySkillTarget(projectPath, row) {
+  const skillId = row && typeof row.skillId === 'string' ? row.skillId.trim() : '';
+  if (!skillId || skillId === '—' || skillId.includes(',')) return null;
+
+  const skills = Array.isArray(state.projectData[projectPath]?.skills)
+    ? state.projectData[projectPath].skills
+    : [];
+  const preferredRuntime = row && typeof row.runtime === 'string' ? row.runtime.trim() : '';
+
+  const exact = skills.find((skill) => skill.skillId === skillId && (skill.runtime || 'codex') === preferredRuntime);
+  if (exact) {
+    return { skillId, runtime: exact.runtime || 'codex' };
+  }
+
+  const fallback = skills.find((skill) => skill.skillId === skillId);
+  if (!fallback) return null;
+  return { skillId, runtime: fallback.runtime || 'codex' };
+}
+
+function renderActivitySkillCell(projectPath, row) {
+  const skillId = row && typeof row.skillId === 'string' ? row.skillId : '';
+  if (!skillId) return '—';
+
+  const target = resolveActivitySkillTarget(projectPath, row);
+  if (!target) return escHtml(skillId);
+
+  return '<button class="activity-skill-link" onclick="viewSkill(\\'' +
+    escJsStr(projectPath) + '\\',\\'' +
+    escJsStr(target.skillId) + '\\',\\'' +
+    escJsStr(target.runtime) +
+    '\\');event.stopPropagation()">' +
+    escHtml(skillId) +
+    '</button>';
+}
+
 function renderBusinessEvents(projectPath) {
   const events = buildActivityRows(projectPath);
   const allTags = ['all', ...Array.from(new Set(events.map((e) => e.tag)))];
@@ -1772,7 +1820,7 @@ function renderBusinessEvents(projectPath) {
             <td style="color:var(--muted);\${getActivityColumnStyle('time', 92)}">\${formatEventTimestamp(e.timestamp)}</td>
             <td style="\${getActivityColumnStyle('host', 96)}">\${escHtml(e.runtime || t('activityHostFallback'))}</td>
             <td style="\${getActivityColumnStyle('event', 128)}">\${escHtml(businessEventLabel(e.tag))}</td>
-            <td style="\${getActivityColumnStyle('skill', 220)}">\${escHtml(e.skillId || '—')}</td>
+            <td style="\${getActivityColumnStyle('skill', 220)}">\${renderActivitySkillCell(projectPath, e)}</td>
             <td style="color:var(--muted);\${getActivityColumnStyle('status', 140)}">\${escHtml(e.status || t('activityStatusFallback'))}</td>
             <td style="\${getActivityColumnStyle('scope', 180)}">\${escHtml(e.scopeId || t('activityScopeFallback'))}</td>
             <td style="\${getActivityColumnStyle('detail', 520)}">

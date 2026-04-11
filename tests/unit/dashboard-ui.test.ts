@@ -621,6 +621,39 @@ describe('dashboard ui recovery', () => {
     expect(getElement('eventModalContent').textContent).toContain('系统已经完成本轮分析。');
   });
 
+  it('renders clickable skill cells in activity rows that open the skill modal', () => {
+    const { dashboard, getElement } = loadDashboardTestHarness({}, { lang: 'zh' });
+    const projectPath = '/tmp/ornn-project';
+
+    getElement('mainPanel');
+    dashboard.state.selectedMainTab = 'activity';
+    dashboard.state.selectedProjectId = projectPath;
+    dashboard.state.projectData = {
+      [projectPath]: {
+        daemon: {},
+        skills: [{ skillId: 'test-driven-development', runtime: 'codex' }],
+        traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
+        recentTraces: [],
+        decisionEvents: [{
+          id: 'evt-click-skill-1',
+          timestamp: '2026-04-10T05:23:00.000Z',
+          tag: 'evaluation_result',
+          runtime: 'codex',
+          skillId: 'test-driven-development',
+          status: 'no_patch_needed',
+          windowId: 'scope-click-skill-1',
+          detail: 'done',
+        }],
+        agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
+      },
+    };
+
+    dashboard.renderMainPanel(projectPath);
+    const html = getElement('mainPanel').innerHTML;
+    expect(html).toContain("onclick=\"viewSkill('/tmp/ornn-project','test-driven-development','codex');event.stopPropagation()\"");
+    expect(html).toContain('activity-skill-link');
+  });
+
   it('backfills skill_called scope ids from related decision events on the same trace', () => {
     const { dashboard } = loadDashboardTestHarness();
     const projectPath = '/tmp/ornn-project';
