@@ -811,7 +811,7 @@ describe('dashboard ui recovery', () => {
     expect(getElement('mainPanel').innerHTML).toContain('width:640px');
   });
 
-  it('renders simplified config controls without default provider and log level selectors', () => {
+  it('renders simplified config panel without mutable strategy controls', () => {
     const { dashboard, getElement } = loadDashboardTestHarness({}, { lang: 'en' });
     const projectPath = '/tmp/ornn-project';
 
@@ -879,6 +879,9 @@ describe('dashboard ui recovery', () => {
     expect(html).not.toContain('.ornn/ornn.toml');
     expect(html).not.toContain('id="cfg_default_provider"');
     expect(html).not.toContain('id="cfg_log_level"');
+    expect(html).not.toContain('tracking.auto_optimize');
+    expect(html).not.toContain('tracking.user_confirm');
+    expect(html).not.toContain('tracking.runtime_sync');
     expect(html).not.toContain('class="config-input cfg_env"');
     expect(html).toContain('name="cfg_provider_active"');
     expect(html).toContain('value="1" checked');
@@ -1052,12 +1055,13 @@ describe('dashboard ui recovery', () => {
     };
     dashboard.renderMainPanel(projectPath);
     const html = getElement('mainPanel').innerHTML;
-    expect(html).toContain('保证不同宿主使用同一份优化结果');
     expect(html).toContain('.ornn/config/settings.toml');
     expect(html).toContain('暂无模型服务');
     expect(html).toContain('只启用其中一个默认模型服务');
     expect(html).not.toContain('cfg_env');
-    expect(html).not.toContain('保证不同 runtime 使用同一份优化结果');
+    expect(html).not.toContain('tracking.auto_optimize');
+    expect(html).not.toContain('tracking.user_confirm');
+    expect(html).not.toContain('tracking.runtime_sync');
     expect(html).not.toContain('暂无 providers');
   });
 

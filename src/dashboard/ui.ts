@@ -2376,20 +2376,6 @@ function renderConfigPanel(projectPath) {
     \${loading ? \`<div class="config-help" style="margin-bottom:8px">\${t('configLoading')}</div>\` : ''}
     \${loadError ? \`<div class="config-help" style="margin-bottom:8px;color:var(--red)">\${t('configLoadErrorPrefix')} \${escHtml(loadError)}</div>\` : ''}
     <div class="config-intro">\${t('configIntro')}</div>
-    <div class="config-grid">
-      <div class="config-field">
-        <label class="config-check"><input type="checkbox" id="cfg_auto_optimize" \${config.autoOptimize ? 'checked' : ''}/> tracking.auto_optimize</label>
-        <div class="config-help">\${t('configAutoOptimizeHelp')}</div>
-      </div>
-      <div class="config-field">
-        <label class="config-check"><input type="checkbox" id="cfg_user_confirm" \${config.userConfirm ? 'checked' : ''}/> tracking.user_confirm</label>
-        <div class="config-help">\${t('configUserConfirmHelp')}</div>
-      </div>
-      <div class="config-field">
-        <label class="config-check"><input type="checkbox" id="cfg_runtime_sync" \${config.runtimeSync ? 'checked' : ''}/> tracking.runtime_sync</label>
-        <div class="config-help">\${t('configRuntimeSyncHelp')}</div>
-      </div>
-    </div>
     <div class="config-field" style="margin-top:10px">
       <label class="config-label">\${t('configProvidersLabel')}</label>
       <div class="providers-editor" id="cfg_providers_rows">\${rowsHtml}</div>
@@ -2718,9 +2704,9 @@ async function saveProjectConfig() {
     );
     const payload = {
       config: {
-        autoOptimize: document.getElementById('cfg_auto_optimize').checked,
-        userConfirm: document.getElementById('cfg_user_confirm').checked,
-        runtimeSync: document.getElementById('cfg_runtime_sync').checked,
+        autoOptimize: true,
+        userConfirm: false,
+        runtimeSync: true,
         defaultProvider: selectedProviderIndex >= 0 ? (providers[selectedProviderIndex]?.provider || '') : '',
         logLevel: currentConfig.logLevel || 'info',
         providers,
