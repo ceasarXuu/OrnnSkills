@@ -338,7 +338,7 @@ const en: I18nStrings = {
   configSaveFailed: 'Failed to save config',
   configLoading: 'Loading config...',
   configIntro:
-    'These settings are written to .ornn/ornn.toml for the current project and control optimization strategy and model provider behavior.',
+    'These settings are written to .ornn/config/settings.toml for the current project and control optimization strategy and model provider behavior.',
   configLogLevelLabel: 'Log Level',
   configLogLevelHelp:
     'Controls Ornn host-side log verbosity written into settings.toml.',
@@ -640,7 +640,7 @@ const zh: I18nStrings = {
   configSaveFailed: '配置保存失败',
   configLoading: '配置加载中...',
   configIntro:
-    '这些配置会写入当前项目的 .ornn/ornn.toml，用于控制 Ornn 的优化策略与模型供应商行为。',
+    '这些配置会写入当前项目的 .ornn/config/settings.toml，用于控制 Ornn 的优化策略与模型服务行为。',
   configLogLevelLabel: '日志级别',
   configLogLevelHelp:
     '控制写入 settings.toml 的宿主日志详细程度。',
@@ -661,7 +661,7 @@ const zh: I18nStrings = {
   configCheckConnectivity: '检查连通性',
   configConnectivityChecking: '检查中...',
   configConnectivityTitle: '模型服务连通性',
-  configConnectivityEmpty: '暂无 providers',
+  configConnectivityEmpty: '暂无模型服务',
   configAddProvider: '新增模型服务',
   configNoProviders: '暂无模型服务，请点击下方按钮添加。',
   configCatalogLoading: 'LiteLLM 列表加载中...',

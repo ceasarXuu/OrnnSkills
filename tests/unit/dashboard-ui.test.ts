@@ -877,6 +877,8 @@ describe('dashboard ui recovery', () => {
     expect(html).toContain('Log Level');
     expect(html).toContain('Add Provider');
     expect(html).toContain('Provider Connectivity');
+    expect(html).toContain('.ornn/config/settings.toml');
+    expect(html).not.toContain('.ornn/ornn.toml');
     expect(html).toContain('id="cfg_default_provider"');
     expect(html).toContain('id="cfg_log_level"');
     expect(html).toContain('value="deepseek" selected');
@@ -1046,7 +1048,10 @@ describe('dashboard ui recovery', () => {
     dashboard.renderMainPanel(projectPath);
     const html = getElement('mainPanel').innerHTML;
     expect(html).toContain('保证不同宿主使用同一份优化结果');
+    expect(html).toContain('.ornn/config/settings.toml');
+    expect(html).toContain('暂无模型服务');
     expect(html).not.toContain('保证不同 runtime 使用同一份优化结果');
+    expect(html).not.toContain('暂无 providers');
   });
 
   it('localizes daemon state activity summaries in both languages', () => {
