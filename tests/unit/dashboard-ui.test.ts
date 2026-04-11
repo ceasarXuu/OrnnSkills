@@ -811,7 +811,7 @@ describe('dashboard ui recovery', () => {
     expect(getElement('mainPanel').innerHTML).toContain('width:640px');
   });
 
-  it('renders config controls for default provider and log level with localized English copy', () => {
+  it('renders simplified config controls without default provider and log level selectors', () => {
     const { dashboard, getElement } = loadDashboardTestHarness({}, { lang: 'en' });
     const projectPath = '/tmp/ornn-project';
 
@@ -873,16 +873,14 @@ describe('dashboard ui recovery', () => {
 
     dashboard.renderMainPanel(projectPath);
     const html = getElement('mainPanel').innerHTML;
-    expect(html).toContain('Default Provider');
-    expect(html).toContain('Log Level');
     expect(html).toContain('Add Provider');
     expect(html).toContain('Provider Connectivity');
     expect(html).toContain('.ornn/config/settings.toml');
     expect(html).not.toContain('.ornn/ornn.toml');
-    expect(html).toContain('id="cfg_default_provider"');
-    expect(html).toContain('id="cfg_log_level"');
-    expect(html).toContain('value="deepseek" selected');
-    expect(html).toContain('value="debug" selected');
+    expect(html).not.toContain('id="cfg_default_provider"');
+    expect(html).not.toContain('id="cfg_log_level"');
+    expect(html).not.toContain('Default Provider');
+    expect(html).not.toContain('Log Level');
   });
 
   it('renders localized skill filters and raw trace headers in Chinese', () => {

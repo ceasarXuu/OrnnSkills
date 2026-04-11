@@ -2368,9 +2368,6 @@ function renderConfigPanel(projectPath) {
   const rowsHtml = providers.length > 0
     ? providers.map((row, index) => renderProviderRow(row, index)).join('')
     : \`<div class="config-help">\${t('configNoProviders')}</div>\`;
-  const defaultProvider = providers.some((row) => row.provider === config.defaultProvider)
-    ? config.defaultProvider
-    : (providers[0]?.provider || '');
 
   return \`
     \${state.providerCatalogLoading ? \`<div class="config-help" style="margin-bottom:8px">\${t('configCatalogLoading')}</div>\` : ''}
@@ -2379,20 +2376,6 @@ function renderConfigPanel(projectPath) {
     \${loadError ? \`<div class="config-help" style="margin-bottom:8px;color:var(--red)">\${t('configLoadErrorPrefix')} \${escHtml(loadError)}</div>\` : ''}
     <div class="config-intro">\${t('configIntro')}</div>
     <div class="config-grid">
-      <div class="config-field">
-        <label class="config-label" for="cfg_default_provider">\${t('configDefaultProviderLabel')}</label>
-        <select class="config-select" id="cfg_default_provider">
-          \${getDefaultProviderOptionsHtml(providers, defaultProvider)}
-        </select>
-        <div class="config-help">\${t('configDefaultProviderHelp')}</div>
-      </div>
-      <div class="config-field">
-        <label class="config-label" for="cfg_log_level">\${t('configLogLevelLabel')}</label>
-        <select class="config-select" id="cfg_log_level">
-          \${getLogLevelOptionsHtml(config.logLevel || 'info')}
-        </select>
-        <div class="config-help">\${t('configLogLevelHelp')}</div>
-      </div>
       <div class="config-field">
         <label class="config-check"><input type="checkbox" id="cfg_auto_optimize" \${config.autoOptimize ? 'checked' : ''}/> tracking.auto_optimize</label>
         <div class="config-help">\${t('configAutoOptimizeHelp')}</div>
@@ -2425,25 +2408,6 @@ function renderConfigPanel(projectPath) {
       </div>
     </div>
   \`;
-}
-
-function getDefaultProviderOptionsHtml(providers, selectedProvider) {
-  const rows = Array.isArray(providers) ? providers : [];
-  if (rows.length === 0) {
-    return '<option value="">' + escHtml(t('configConnectivityEmpty')) + '</option>';
-  }
-  return rows.map((row) => {
-    const providerId = String(row.provider || '');
-    const selected = providerId === selectedProvider ? 'selected' : '';
-    return '<option value="' + escHtml(providerId) + '" ' + selected + '>' + escHtml(providerId) + '</option>';
-  }).join('');
-}
-
-function getLogLevelOptionsHtml(selectedLevel) {
-  return ['debug', 'info', 'warn', 'error'].map((level) => {
-    const selected = level === selectedLevel ? 'selected' : '';
-    return '<option value="' + level + '" ' + selected + '>' + level + '</option>';
-  }).join('');
 }
 
 function retryLoadConfig() {
@@ -2716,15 +2680,14 @@ async function saveProjectConfig() {
   const projectPath = state.selectedProjectId;
   try {
     const providers = collectProvidersFromConfigEditor();
-    const defaultProviderEl = document.getElementById('cfg_default_provider');
-    const logLevelEl = document.getElementById('cfg_log_level');
+    const currentConfig = state.configByProject[projectPath] || {};
     const payload = {
       config: {
         autoOptimize: document.getElementById('cfg_auto_optimize').checked,
         userConfirm: document.getElementById('cfg_user_confirm').checked,
         runtimeSync: document.getElementById('cfg_runtime_sync').checked,
-        defaultProvider: defaultProviderEl ? defaultProviderEl.value : '',
-        logLevel: logLevelEl ? logLevelEl.value : 'info',
+        defaultProvider: currentConfig.defaultProvider || '',
+        logLevel: currentConfig.logLevel || 'info',
         providers,
       },
     };
