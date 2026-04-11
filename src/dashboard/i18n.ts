@@ -646,7 +646,7 @@ const zh: I18nStrings = {
     '控制写入 settings.toml 的宿主日志详细程度。',
   configDefaultProviderLabel: '默认模型服务',
   configDefaultProviderHelp:
-    '设置 llm.default_provider。后续分析调用默认优先走这个 provider，除非任务显式覆盖。',
+    '设置 llm.default_provider。后续分析调用默认优先走这个模型服务，除非任务显式覆盖。',
   configAutoOptimizeHelp:
     '开启后，Ornn 会自动分析 trace 并触发技能优化建议或写回流程。',
   configUserConfirmHelp:
@@ -655,7 +655,7 @@ const zh: I18nStrings = {
     '开启后，会把最新技能内容同步回项目 skills，保证不同宿主使用同一份优化结果。',
   configProvidersLabel: '模型服务列表',
   configProvidersHelp:
-    '通过下拉和输入框配置 provider：选择 provider，选择或输入 model，直接粘贴 API Key，并保留或调整写入 .env.local 的环境变量名。',
+    '通过下拉和输入框配置模型服务：选择模型服务，选择或输入模型，直接粘贴 API Key，并保留或调整写入 .env.local 的环境变量名。',
   configProvidersExample:
     '',
   configCheckConnectivity: '检查连通性',
@@ -671,7 +671,7 @@ const zh: I18nStrings = {
   configConnectivityCheckingHint: '连通性检查中...',
   configConnectivityDone: '连通性检查完成',
   configConnectivityFailed: '连通性检查失败',
-  configCustomProviderPlaceholder: '自定义 provider id（例如：xai）',
+  configCustomProviderPlaceholder: '自定义模型服务 ID（例如：xai）',
   configCustomModelPlaceholder: '自定义 model（例如：grok-3）',
   configApiKeyStoredPlaceholder: 'API Key 已保存；留空表示不修改',
   configApiKeyPastePlaceholder: '直接粘贴 API Key',
@@ -842,9 +842,9 @@ const zh: I18nStrings = {
   costSkillEmpty: '当前还没有技能聚合数据。',
   costSignalsTitle: 'LiteLLM 信号',
   costSignalsSourceLabel: '可视化来源：',
-  costSignalsSourceBody: '单价、上下文窗口和能力标签来自 LiteLLM model registry。',
+  costSignalsSourceBody: '单价、上下文窗口和能力标签来自 LiteLLM 模型注册表。',
   costSignalsVisibleLabel: '当前可见：',
-  costSignalsVisibleBody: '调用次数、输入 Token、输出 Token、总 Token、平均时延、最近调用，以及按 model、scope、skill 的拆账。',
+  costSignalsVisibleBody: '调用次数、输入 Token、输出 Token、总 Token、平均时延、最近调用，以及按模型、范围、技能的拆账。',
   costSignalsContextReady: '上下文窗口已接入',
   costSignalsContextPending: '上下文窗口待接入',
   costSignalsReasoningDetected: '已检测到 reasoning 附加计费',
@@ -860,7 +860,7 @@ const zh: I18nStrings = {
   costTableInOut: '输入 / 输出',
   costTableLastSeen: '最近',
   costPricingReasoningSurcharge: '含 reasoning 附加计费',
-  costPricingSource: 'LiteLLM registry',
+  costPricingSource: 'LiteLLM 模型注册表',
   costCapabilityReasoning: '推理',
   costCapabilityFunctionCalling: '函数调用',
   costCapabilityPromptCaching: 'Prompt 缓存',
