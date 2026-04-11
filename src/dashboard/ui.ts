@@ -749,6 +749,9 @@ let clientErrorFlushTimer = null;
 let clientErrorFlushing = false;
 let hasRequestedHardReload = false;
 let bootstrapRecoveryTimer = null;
+let configAutoSaveTimer = null;
+let configAutoSaveInFlight = false;
+let configAutoSaveQueued = false;
 
 function toErrorMessage(value) {
   if (value instanceof Error) return value.message || String(value);
@@ -2391,7 +2394,6 @@ function renderConfigPanel(projectPath) {
       <span id="cfg_save_hint" class="config-label">\${escHtml(configUi.saveHint || '')}</span>
       <div style="display:flex;gap:8px;">
         <button class="btn-primary" id="cfg_check_btn" onclick="checkProvidersConnectivity()">\${t('configCheckConnectivity')}</button>
-        <button class="btn-primary" onclick="saveProjectConfig()">\${t('configSave')}</button>
       </div>
     </div>
   \`;
@@ -2447,6 +2449,30 @@ function setConfigUi(projectPath, patch) {
   state.configUiByProject[projectPath] = { ...prev, ...patch };
 }
 
+function updateConfigSaveHint(projectPath, message) {
+  setConfigUi(projectPath, { saveHint: message });
+  if (state.selectedProjectId === projectPath && state.selectedMainTab === 'config') {
+    const hintEl = document.getElementById('cfg_save_hint');
+    if (hintEl) {
+      hintEl.textContent = message || '';
+    }
+  }
+}
+
+function scheduleProjectConfigSave(delayMs = 450) {
+  const projectPath = state.selectedProjectId;
+  if (!projectPath) return;
+  if (configAutoSaveTimer !== null) {
+    clearTimeout(configAutoSaveTimer);
+  }
+  updateConfigSaveHint(projectPath, t('configSaving'));
+  configAutoSaveTimer = setTimeout(() => {
+    configAutoSaveTimer = null;
+    if (state.selectedProjectId !== projectPath || state.selectedMainTab !== 'config') return;
+    void saveProjectConfig({ auto: true });
+  }, delayMs);
+}
+
 function getActiveProviderIndex(defaultProvider, providers) {
   const rows = Array.isArray(providers) ? providers : [];
   if (rows.length === 0) return -1;
@@ -2473,13 +2499,13 @@ function renderProviderRow(row, index, activeProviderIndex) {
         <select class="config-select cfg_model" onchange="handleModelChange(this)">
           \${modelOptions}
         </select>
-        <input class="config-input cfg_model_custom" value="\${modelIsCustom ? escHtml(normalizedModel) : ''}" placeholder="\${t('configCustomModelPlaceholder')}" style="margin-top:6px;\${modelIsCustom ? '' : 'display:none;'}" />
+        <input class="config-input cfg_model_custom" value="\${modelIsCustom ? escHtml(normalizedModel) : ''}" placeholder="\${t('configCustomModelPlaceholder')}" style="margin-top:6px;\${modelIsCustom ? '' : 'display:none;'}" oninput="scheduleProjectConfigSave(500)" />
       </div>
       <div>
-        <input class="config-input cfg_api_key" type="password" value="" placeholder="\${hasApiKey ? t('configApiKeyStoredPlaceholder') : t('configApiKeyPastePlaceholder')}" />
+        <input class="config-input cfg_api_key" type="password" value="" placeholder="\${hasApiKey ? t('configApiKeyStoredPlaceholder') : t('configApiKeyPastePlaceholder')}" oninput="scheduleProjectConfigSave(500)" />
       </div>
       <label class="config-check" style="height:100%;justify-content:center;">
-        <input type="radio" class="cfg_provider_active" name="cfg_provider_active" value="\${index}" \${index === activeProviderIndex ? 'checked' : ''}/>
+        <input type="radio" class="cfg_provider_active" name="cfg_provider_active" value="\${index}" \${index === activeProviderIndex ? 'checked' : ''} onchange="scheduleProjectConfigSave(150)"/>
         \${t('configProviderActiveLabel')}
       </label>
       <button class="btn-danger" type="button" onclick="removeProviderRow(this)">\${t('configRemoveProvider')}</button>
@@ -2583,6 +2609,7 @@ function handleProviderChange(selectEl) {
       modelCustomInput.style.display = '';
     }
     row.setAttribute('data-api-key-env-var', guessApiKeyEnvVar(customInput?.value?.trim() || ''));
+    scheduleProjectConfigSave(150);
     return;
   }
   row.setAttribute('data-api-key-env-var', guessApiKeyEnvVar(providerId));
@@ -2597,12 +2624,14 @@ function handleProviderChange(selectEl) {
   if (modelCustomInput) {
     modelCustomInput.style.display = 'none';
   }
+  scheduleProjectConfigSave(150);
 }
 
 function handleCustomProviderInput(inputEl) {
   const row = inputEl.closest('.provider-row');
   if (!row) return;
   row.setAttribute('data-api-key-env-var', guessApiKeyEnvVar(inputEl.value.trim()));
+  scheduleProjectConfigSave(500);
 }
 
 function handleModelChange(selectEl) {
@@ -2611,6 +2640,7 @@ function handleModelChange(selectEl) {
   const customInput = row.querySelector('.cfg_model_custom');
   if (!customInput) return;
   customInput.style.display = selectEl.value === '__custom__' ? '' : 'none';
+  scheduleProjectConfigSave(150);
 }
 
 function addProviderRow() {
@@ -2630,6 +2660,7 @@ function addProviderRow() {
   const nextDefaultProvider = config.defaultProvider || rows[0]?.provider || '';
   state.configByProject[state.selectedProjectId] = { ...config, defaultProvider: nextDefaultProvider, providers: rows };
   renderMainPanel(state.selectedProjectId);
+  scheduleProjectConfigSave(150);
 }
 
 function removeProviderRow(btn) {
@@ -2649,6 +2680,7 @@ function removeProviderRow(btn) {
     : (rows[0]?.provider || '');
   state.configByProject[state.selectedProjectId] = { ...config, defaultProvider: nextDefaultProvider, providers: rows };
   renderMainPanel(state.selectedProjectId);
+  scheduleProjectConfigSave(150);
 }
 
 function getSelectedProviderIndexFromEditor(providerCount, fallbackDefaultProvider, providers) {
@@ -2691,9 +2723,17 @@ async function ensureProjectConfig(projectPath) {
   }
 }
 
-async function saveProjectConfig() {
+async function saveProjectConfig(options = {}) {
   if (!state.selectedProjectId) return;
   const projectPath = state.selectedProjectId;
+  const auto = !!options.auto;
+  if (auto && configAutoSaveInFlight) {
+    configAutoSaveQueued = true;
+    return;
+  }
+  if (auto) {
+    configAutoSaveInFlight = true;
+  }
   try {
     const providers = collectProvidersFromConfigEditor();
     const currentConfig = state.configByProject[projectPath] || {};
@@ -2722,13 +2762,25 @@ async function saveProjectConfig() {
       ...payload.config,
       providers: sanitizeProvidersForState(payload.config.providers),
     };
-    setConfigUi(projectPath, { saveHint: t('configSaved') });
+    updateConfigSaveHint(projectPath, auto ? t('configAutoSaved') : t('configSaved'));
     await ensureProviderHealth(projectPath, true);
-    renderMainPanel(projectPath);
+    if (!auto) {
+      renderMainPanel(projectPath);
+    }
   } catch (e) {
     console.error('[dashboard] failed to save config', { error: String(e) });
-    setConfigUi(projectPath, { saveHint: t('configSaveFailed') + ': ' + String(e) });
-    renderMainPanel(projectPath);
+    updateConfigSaveHint(projectPath, t('configSaveFailed') + ': ' + String(e));
+    if (!auto) {
+      renderMainPanel(projectPath);
+    }
+  } finally {
+    if (auto) {
+      configAutoSaveInFlight = false;
+      if (configAutoSaveQueued) {
+        configAutoSaveQueued = false;
+        scheduleProjectConfigSave(150);
+      }
+    }
   }
 }
 

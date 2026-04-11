@@ -41,6 +41,8 @@ export interface I18nStrings {
   configTitle: string;
   configSave: string;
   configSaved: string;
+  configSaving: string;
+  configAutoSaved: string;
   configSaveFailed: string;
   configLoading: string;
   configIntro: string;
@@ -336,6 +338,8 @@ const en: I18nStrings = {
   configTitle: 'Ornn Config',
   configSave: 'Save Config',
   configSaved: 'Config saved',
+  configSaving: 'Saving...',
+  configAutoSaved: 'Auto-saved',
   configSaveFailed: 'Failed to save config',
   configLoading: 'Loading config...',
   configIntro:
@@ -639,6 +643,8 @@ const zh: I18nStrings = {
   configTitle: 'Ornn 配置',
   configSave: '保存配置',
   configSaved: '配置已保存',
+  configSaving: '保存中...',
+  configAutoSaved: '已自动保存',
   configSaveFailed: '配置保存失败',
   configLoading: '配置加载中...',
   configIntro:

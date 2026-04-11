@@ -877,6 +877,8 @@ describe('dashboard ui recovery', () => {
     expect(html).toContain('Provider Connectivity');
     expect(html).toContain('.ornn/config/settings.toml');
     expect(html).not.toContain('.ornn/ornn.toml');
+    expect(html).not.toContain('Save Config');
+    expect(html).not.toContain('onclick="saveProjectConfig()"');
     expect(html).not.toContain('id="cfg_default_provider"');
     expect(html).not.toContain('id="cfg_log_level"');
     expect(html).not.toContain('tracking.auto_optimize');
@@ -885,6 +887,8 @@ describe('dashboard ui recovery', () => {
     expect(html).not.toContain('class="config-input cfg_env"');
     expect(html).toContain('name="cfg_provider_active"');
     expect(html).toContain('value="1" checked');
+    expect(html).toContain('scheduleProjectConfigSave(150)');
+    expect(html).toContain('scheduleProjectConfigSave(500)');
     expect(html).not.toContain('Default Provider');
     expect(html).not.toContain('Log Level');
   });
@@ -994,11 +998,13 @@ describe('dashboard ui recovery', () => {
     expect(html).toContain('Provider Connectivity Failed');
     expect(html).toContain('Failed provider connectivity: openai/openai/gpt-4o-mini');
     expect(html).toContain('Open the Config tab to set provider and re-run connectivity check.');
+    expect(html).not.toContain('Save Config');
     expect(html).toContain('Custom provider id (e.g. xai)');
     expect(html).toContain('Custom model (e.g. grok-3)');
     expect(html).toContain('API key stored; leave blank to keep');
     expect(html).toContain('mark exactly one provider as active');
     expect(html).toContain('cfg_provider_active');
+    expect(html).toContain('scheduleProjectConfigSave(500)');
     expect(html).toContain('Use');
     expect(html).not.toContain('cfg_env');
     expect(html).toContain('Remove');
