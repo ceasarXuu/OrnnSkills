@@ -256,6 +256,7 @@ export class SkillCallAnalyzer {
         temperature: 0.1,
         maxTokens: 1400,
         timeout: 45000,
+        responseFormat: 'json_object',
       });
       const usage = client.getTokenUsage();
       recordAgentUsage(projectPath, {

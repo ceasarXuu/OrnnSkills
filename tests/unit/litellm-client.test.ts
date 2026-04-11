@@ -144,4 +144,71 @@ describe('LiteLLMClient connectivity probe', () => {
       'Empty content in LLM response'
     );
   });
+
+  it('enables json_object mode and retries once for deepseek empty JSON responses', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          model: 'deepseek-reasoner',
+          choices: [
+            {
+              index: 0,
+              finish_reason: 'stop',
+              message: {
+                role: 'assistant',
+                content: '',
+              },
+            },
+          ],
+          usage: {
+            prompt_tokens: 5,
+            completion_tokens: 0,
+            total_tokens: 5,
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          model: 'deepseek-reasoner',
+          choices: [
+            {
+              index: 0,
+              finish_reason: 'stop',
+              message: {
+                role: 'assistant',
+                content: '{"ok":true}',
+              },
+            },
+          ],
+          usage: {
+            prompt_tokens: 5,
+            completion_tokens: 6,
+            total_tokens: 11,
+          },
+        }),
+      });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new LiteLLMClient({
+      provider: 'deepseek',
+      modelName: 'deepseek/deepseek-reasoner',
+      apiKey: 'test-key',
+      maxTokens: 32,
+    });
+
+    await expect(client.completion({
+      prompt: 'return json',
+      timeout: 1000,
+      responseFormat: 'json_object',
+    })).resolves.toBe('{"ok":true}');
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const [, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(String(requestInit.body))).toMatchObject({
+      model: 'deepseek-reasoner',
+      response_format: { type: 'json_object' },
+    });
+  });
 });

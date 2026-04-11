@@ -95,4 +95,83 @@ describe('SkillCallAnalyzer', () => {
     expect(result.success).toBe(false);
     expect(result.error).toBeTruthy();
   });
+
+  it('retries deepseek json-mode calls when the first response has empty content', async () => {
+    readDashboardConfigMock.mockResolvedValue({
+      autoOptimize: true,
+      userConfirm: false,
+      runtimeSync: true,
+      defaultProvider: 'deepseek',
+      logLevel: 'info',
+      providers: [
+        {
+          provider: 'deepseek',
+          modelName: 'deepseek/deepseek-chat',
+          apiKeyEnvVar: 'DEEPSEEK_API_KEY',
+          apiKey: 'test-key',
+          hasApiKey: true,
+        },
+      ],
+    });
+
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: '',
+              },
+            },
+          ],
+          usage: {
+            prompt_tokens: 12,
+            completion_tokens: 0,
+            total_tokens: 12,
+          },
+          model: 'deepseek-chat',
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: '{"should_patch":false,"reason":"证据不足","confidence":0.2,"evidence":[]}',
+              },
+            },
+          ],
+          usage: {
+            prompt_tokens: 12,
+            completion_tokens: 18,
+            total_tokens: 30,
+          },
+          model: 'deepseek-chat',
+        }),
+      });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const analyzer = createSkillCallAnalyzer();
+    const result = await analyzer.analyzeWindow('/tmp/project', {
+      windowId: 'window-3',
+      skillId: 'test-skill',
+      runtime: 'codex',
+      sessionId: 'session-1',
+      closeReason: 'completed',
+      startedAt: '2026-04-10T00:00:00.000Z',
+      lastTraceAt: '2026-04-10T00:01:00.000Z',
+      traces: [],
+    } as never, 'content');
+
+    expect(result.success).toBe(true);
+    expect(result.evaluation?.should_patch).toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const [, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(String(requestInit.body))).toMatchObject({
+      model: 'deepseek-chat',
+      response_format: { type: 'json_object' },
+    });
+  });
 });

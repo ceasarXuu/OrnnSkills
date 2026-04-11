@@ -241,6 +241,7 @@ export class ReadinessProbeAnalyzer {
         temperature: 0.1,
         maxTokens: 900,
         timeout: 30000,
+        responseFormat: 'json_object',
       });
       const usage = client.getTokenUsage();
       recordAgentUsage(projectPath, {

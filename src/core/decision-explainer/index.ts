@@ -169,6 +169,7 @@ export async function generateDecisionExplanation(
       temperature: 0.1,
       maxTokens: 1200,
       timeout: 30000,
+      responseFormat: 'json_object',
     });
     const usage = client.getTokenUsage();
     recordAgentUsage(projectPath, {
