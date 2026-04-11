@@ -1250,6 +1250,7 @@ function businessEventLabel(tag) {
     optimization_state: t('activityTagOptimization'),
     evaluation_result: t('activityTagEvaluationResult'),
     skill_feedback: t('activityTagSkillFeedback'),
+    patch_applied: t('activityTagPatchApplied'),
     analysis_failed: t('activityTagAnalysisFailed'),
     analysis_requested: t('activityTagAnalysisSubmitted'),
     episode_probe_result: t('activityTagProbeResult'),
@@ -1280,6 +1281,16 @@ function formatBusinessEvent(e) {
       return t('activitySummaryEvaluationResult') + ': ' + (e.detail || e.reason || '');
     case 'skill_feedback':
       return t('activitySummarySkillFeedback') + ': ' + (e.detail || e.reason || '');
+    case 'patch_applied': {
+      const parts = [];
+      if (e.changeType) parts.push(String(e.changeType));
+      const linesAdded = Number(e.linesAdded || 0);
+      const linesRemoved = Number(e.linesRemoved || 0);
+      if (linesAdded || linesRemoved) parts.push('+' + linesAdded + '/-' + linesRemoved);
+      return parts.length > 0
+        ? t('activitySummaryPatchApplied') + ': ' + parts.join(' · ')
+        : t('activitySummaryPatchApplied');
+    }
     case 'analysis_failed':
       return t('activitySummaryAnalysisFailed') + ': ' + (e.detail || e.reason || '');
     case 'analysis_requested':
@@ -1296,6 +1307,7 @@ function formatBusinessEvent(e) {
 function normalizeDecisionTag(tag) {
   if (!tag) return null;
   if (tag === 'skill_mapping' || tag === 'skill_mapped' || tag === 'skill_mapping_result') return null;
+  if (tag === 'skill_evaluation') return 'evaluation_result';
   return tag;
 }
 

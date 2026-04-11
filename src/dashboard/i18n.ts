@@ -169,6 +169,7 @@ export interface I18nStrings {
   activityTagOptimization: string;
   activityTagEvaluationResult: string;
   activityTagSkillFeedback: string;
+  activityTagPatchApplied: string;
   activityTagAnalysisFailed: string;
   activityTagAnalysisSubmitted: string;
   activityTagProbeResult: string;
@@ -194,6 +195,7 @@ export interface I18nStrings {
   activitySummaryOptimizationChanged: string;
   activitySummaryEvaluationResult: string;
   activitySummarySkillFeedback: string;
+  activitySummaryPatchApplied: string;
   activitySummaryAnalysisFailed: string;
   activitySummaryAnalysisSubmitted: string;
   activitySummaryProbeResult: string;
@@ -474,6 +476,7 @@ const en: I18nStrings = {
   activityTagOptimization: 'Optimization',
   activityTagEvaluationResult: 'Evaluation Result',
   activityTagSkillFeedback: 'Skill Feedback',
+  activityTagPatchApplied: 'Patch Applied',
   activityTagAnalysisFailed: 'Analysis Failed',
   activityTagAnalysisSubmitted: 'Analysis Submitted',
   activityTagProbeResult: 'Probe Result',
@@ -499,6 +502,7 @@ const en: I18nStrings = {
   activitySummaryOptimizationChanged: 'Optimization state changed',
   activitySummaryEvaluationResult: 'Evaluation result',
   activitySummarySkillFeedback: 'Skill feedback',
+  activitySummaryPatchApplied: 'Patch applied',
   activitySummaryAnalysisFailed: 'Analysis failed',
   activitySummaryAnalysisSubmitted: 'Analysis submitted',
   activitySummaryProbeResult: 'Probe result',
@@ -779,6 +783,7 @@ const zh: I18nStrings = {
   activityTagOptimization: '优化状态',
   activityTagEvaluationResult: '评估结果',
   activityTagSkillFeedback: '技能反馈',
+  activityTagPatchApplied: '补丁已应用',
   activityTagAnalysisFailed: '分析失败',
   activityTagAnalysisSubmitted: '分析已提交',
   activityTagProbeResult: '时机探测结果',
@@ -804,6 +809,7 @@ const zh: I18nStrings = {
   activitySummaryOptimizationChanged: '优化状态变化',
   activitySummaryEvaluationResult: '评估结果',
   activitySummarySkillFeedback: '技能反馈',
+  activitySummaryPatchApplied: '修改已应用',
   activitySummaryAnalysisFailed: '分析失败',
   activitySummaryAnalysisSubmitted: '已提交分析请求',
   activitySummaryProbeResult: '时机探测结果',

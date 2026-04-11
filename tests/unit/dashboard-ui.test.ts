@@ -727,6 +727,72 @@ describe('dashboard ui recovery', () => {
     expect(rows.find((row) => row.skillId === 'repo-x')).toBeUndefined();
   });
 
+  it('normalizes legacy skill_evaluation events into localized evaluation rows', () => {
+    const { dashboard } = loadDashboardTestHarness({}, { lang: 'zh' });
+    const projectPath = '/tmp/ornn-project';
+
+    dashboard.state.projectData = {
+      [projectPath]: {
+        daemon: {},
+        skills: [{ skillId: 'test-driven-development', runtime: 'codex' }],
+        traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
+        recentTraces: [],
+        decisionEvents: [{
+          id: 'legacy-eval-1',
+          timestamp: '2026-04-10T05:23:00.000Z',
+          tag: 'skill_evaluation',
+          runtime: 'codex',
+          skillId: 'test-driven-development',
+          status: 'needs_patch',
+          windowId: 'scope-legacy-1',
+          detail: '需要补丁',
+        }],
+        agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
+      },
+    };
+
+    const rows = dashboard.buildActivityRows(projectPath);
+    expect(rows[0]?.tag).toBe('evaluation_result');
+    expect(rows[0]?.detail).toContain('需要补丁');
+  });
+
+  it('renders localized patch_applied activity rows instead of raw event ids', () => {
+    const { dashboard, getElement } = loadDashboardTestHarness({}, { lang: 'zh' });
+    const projectPath = '/tmp/ornn-project';
+
+    getElement('mainPanel');
+    dashboard.state.selectedMainTab = 'activity';
+    dashboard.state.selectedProjectId = projectPath;
+    dashboard.state.projectData = {
+      [projectPath]: {
+        daemon: {},
+        skills: [{ skillId: 'test-driven-development', runtime: 'codex' }],
+        traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
+        recentTraces: [],
+        decisionEvents: [{
+          id: 'patch-activity-1',
+          timestamp: '2026-04-10T05:24:00.000Z',
+          tag: 'patch_applied',
+          runtime: 'codex',
+          skillId: 'test-driven-development',
+          status: 'success',
+          windowId: 'scope-patch-1',
+          changeType: 'add_fallback',
+          linesAdded: 12,
+          linesRemoved: 3,
+        }],
+        agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
+      },
+    };
+
+    dashboard.renderMainPanel(projectPath);
+    const html = getElement('mainPanel').innerHTML;
+    expect(html).toContain('补丁已应用');
+    expect(html).toContain('修改已应用');
+    expect(html).toContain('add_fallback');
+    expect(html).not.toContain('>patch_applied<');
+  });
+
   it('deduplicates repeated decision conclusions within the same short window', () => {
     const { dashboard } = loadDashboardTestHarness({
       'ornn-dashboard-activity-columns': JSON.stringify({ detail: 640 }),
