@@ -274,7 +274,7 @@ describe('dashboard ui recovery', () => {
     expect(html).toContain('映射策略');
     expect(html).toContain('评估规则');
     expect(html).toContain('跳过原因');
-    expect(html).toContain('Patch 类型');
+    expect(html).toContain('修改类型');
     expect(html).toContain('tool_call');
     expect(html).toContain('analysis_failed_output');
     expect(html).toContain('low_confidence');
