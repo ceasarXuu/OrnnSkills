@@ -2,6 +2,8 @@ import { createLiteLLMClient } from '../../llm/litellm-client.js';
 import { readDashboardConfig } from '../../config/manager.js';
 import { createChildLogger } from '../../utils/logger.js';
 import { recordAgentUsage } from '../agent-usage/index.js';
+import { readProjectLanguage } from '../../dashboard/language-state.js';
+import type { Language } from '../../dashboard/i18n.js';
 import type { DecisionEventEvidence, EvaluationResult, Trace } from '../../types/index.js';
 
 const logger = createChildLogger('decision-explainer');
@@ -39,6 +41,29 @@ function summarizeTrace(trace: Trace): string {
   return `${trace.event_type}: status=${trace.status}`;
 }
 
+function summarizeTraceWithLanguage(trace: Trace, lang: Language): string {
+  if (lang === 'zh') {
+    if (trace.event_type === 'user_input' && trace.user_input) {
+      return `用户输入: ${truncate(trace.user_input, 220)}`;
+    }
+    if (trace.event_type === 'assistant_output' && trace.assistant_output) {
+      return `助手输出: ${truncate(trace.assistant_output, 220)}`;
+    }
+    if (trace.event_type === 'tool_call') {
+      return `工具调用: ${trace.tool_name || 'unknown'} ${truncate(JSON.stringify(trace.tool_args || {}), 180)}`;
+    }
+    if (trace.event_type === 'tool_result') {
+      return `工具结果: ${trace.tool_name || 'unknown'} ${truncate(JSON.stringify(trace.tool_result || {}), 180)}`;
+    }
+    if (trace.event_type === 'file_change') {
+      return `文件变更: ${truncate(JSON.stringify(trace.files_changed || []), 180)}`;
+    }
+    return `${trace.event_type}: 状态=${trace.status}`;
+  }
+
+  return summarizeTrace(trace);
+}
+
 function formatEvidenceBlock(evidence: DecisionEventEvidence | null | undefined): string {
   if (!evidence) return 'none';
   const lines: string[] = [];
@@ -61,33 +86,61 @@ function buildPrompt(
   skillId: string,
   evaluation: EvaluationResult,
   traces: Trace[],
-  evidence: DecisionEventEvidence | null | undefined
+  evidence: DecisionEventEvidence | null | undefined,
+  lang: Language
 ): { systemPrompt: string; userPrompt: string } {
-  const systemPrompt = [
-    'You are Ornn\'s decision explanation synthesizer.',
-    'Your task is to convert a structured optimization decision into a human-readable explanation.',
-    'Be precise, evidence-based, and avoid hype.',
-    'Do not invent trace details or user intent that are not present.',
-    'Output must be JSON with exactly these fields: summary, evidence_readout, causal_chain, decision_rationale, recommended_action, uncertainties, contradictions.',
-    'All narrative fields must be arrays or strings of concise English sentences.',
-  ].join('\n');
+  const isZh = lang === 'zh';
+  const systemPrompt = isZh
+    ? [
+        '你是 Ornn 的决策解释器。',
+        '你的任务是把结构化优化决策转换成适合 dashboard 用户阅读的说明。',
+        '必须基于证据，表达准确，不要渲染。',
+        '不要虚构不存在的 trace 细节或用户意图。',
+        '只返回 JSON，字段固定为 summary, evidence_readout, causal_chain, decision_rationale, recommended_action, uncertainties, contradictions。',
+        '所有自然语言字段必须使用简体中文，并尽量简洁。',
+      ].join('\n')
+    : [
+        'You are Ornn\'s decision explanation synthesizer.',
+        'Your task is to convert a structured optimization decision into a human-readable explanation.',
+        'Be precise, evidence-based, and avoid hype.',
+        'Do not invent trace details or user intent that are not present.',
+        'Output must be JSON with exactly these fields: summary, evidence_readout, causal_chain, decision_rationale, recommended_action, uncertainties, contradictions.',
+        'All narrative fields must be arrays or strings of concise English sentences.',
+      ].join('\n');
 
-  const userPrompt = [
-    `Skill ID: ${skillId}`,
-    `Should Patch: ${evaluation.should_patch}`,
-    `Change Type: ${evaluation.change_type ?? 'none'}`,
-    `Confidence: ${evaluation.confidence}`,
-    `Target Section: ${evaluation.target_section ?? 'none'}`,
-    `Reason: ${evaluation.reason ?? 'none'}`,
-    '',
-    'Recorded Evidence:',
-    formatEvidenceBlock(evidence),
-    '',
-    'Observed Trace Timeline:',
-    ...traces.slice(-40).map((trace, index) => `${index + 1}. [${trace.timestamp}] ${summarizeTrace(trace)}`),
-    '',
-    'Produce a concise explanation for dashboard users.',
-  ].join('\n');
+  const userPrompt = isZh
+    ? [
+        `技能 ID: ${skillId}`,
+        `是否建议修改: ${evaluation.should_patch}`,
+        `修改类型: ${evaluation.change_type ?? 'none'}`,
+        `置信度: ${evaluation.confidence}`,
+        `目标段落: ${evaluation.target_section ?? 'none'}`,
+        `原因: ${evaluation.reason ?? 'none'}`,
+        '',
+        '已记录证据:',
+        formatEvidenceBlock(evidence),
+        '',
+        '观察到的 Trace 时间线:',
+        ...traces.slice(-40).map((trace, index) => `${index + 1}. [${trace.timestamp}] ${summarizeTraceWithLanguage(trace, lang)}`),
+        '',
+        '请生成一段面向 dashboard 用户的简洁解释。',
+      ].join('\n')
+    : [
+        `Skill ID: ${skillId}`,
+        `Should Patch: ${evaluation.should_patch}`,
+        `Change Type: ${evaluation.change_type ?? 'none'}`,
+        `Confidence: ${evaluation.confidence}`,
+        `Target Section: ${evaluation.target_section ?? 'none'}`,
+        `Reason: ${evaluation.reason ?? 'none'}`,
+        '',
+        'Recorded Evidence:',
+        formatEvidenceBlock(evidence),
+        '',
+        'Observed Trace Timeline:',
+        ...traces.slice(-40).map((trace, index) => `${index + 1}. [${trace.timestamp}] ${summarizeTraceWithLanguage(trace, lang)}`),
+        '',
+        'Produce a concise explanation for dashboard users.',
+      ].join('\n');
 
   return { systemPrompt, userPrompt };
 }
@@ -144,7 +197,20 @@ export async function generateDecisionExplanation(
   traces: Trace[],
   evidence?: DecisionEventEvidence | null
 ): Promise<DecisionExplanationResult> {
-  const fallback = buildFallbackExplanation(skillId, evaluation);
+  const lang = await readProjectLanguage(projectPath, 'en');
+  const fallback = lang === 'zh'
+    ? {
+        summary: evaluation.reason || `已记录 ${skillId} 的决策结果。`,
+        evidenceReadout: [],
+        causalChain: [],
+        decisionRationale: evaluation.reason || '当前没有记录到更具体的决策原因。',
+        recommendedAction: evaluation.should_patch
+          ? `继续执行 ${evaluation.change_type ?? '建议中的修改'}。`
+          : '继续观察，暂不修改技能。',
+        uncertainties: [],
+        contradictions: [],
+      }
+    : buildFallbackExplanation(skillId, evaluation);
   const config = await readDashboardConfig(projectPath);
   const activeProvider = config.providers[0];
 
@@ -158,7 +224,7 @@ export async function generateDecisionExplanation(
     apiKey: activeProvider.apiKey,
     maxTokens: 1200,
   });
-  const prompt = buildPrompt(skillId, evaluation, traces, evidence);
+  const prompt = buildPrompt(skillId, evaluation, traces, evidence, lang);
   const model = `${activeProvider.provider}/${activeProvider.modelName}`;
   const started = Date.now();
 

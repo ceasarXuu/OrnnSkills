@@ -15,6 +15,8 @@ import {
   type TaskEpisode,
 } from '../task-episode/index.js';
 import { createReadinessProbeAnalyzer } from '../readiness-probe/index.js';
+import { createSkillCallAnalyzer } from '../skill-call-analyzer/index.js';
+import { generateDecisionExplanation } from '../decision-explainer/index.js';
 import { hashString } from '../../utils/hash.js';
 import { buildShadowId, runtimeFromShadowId, skillIdFromShadowId } from '../../utils/parse.js';
 import { createSQLiteStorage } from '../../storage/sqlite.js';
@@ -28,6 +30,7 @@ import type {
   ShadowStatus,
   RuntimeType,
 } from '../../types/index.js';
+import type { SkillCallWindow } from '../skill-call-window/index.js';
 
 const logger = createChildLogger('shadow-manager');
 
@@ -47,6 +50,7 @@ export class ShadowManager {
   private decisionEvents;
   private taskEpisodes;
   private readinessProbe;
+  private skillCallAnalyzer;
   private lastPatchTime: Map<string, number> = new Map();
   private patchCountToday: Map<string, number> = new Map();
 
@@ -59,6 +63,7 @@ export class ShadowManager {
     this.decisionEvents = createDecisionEventRecorder(projectRoot);
     this.taskEpisodes = createTaskEpisodeStore(projectRoot);
     this.readinessProbe = createReadinessProbeAnalyzer();
+    this.skillCallAnalyzer = createSkillCallAnalyzer();
     this.dbPath = join(projectRoot, '.ornn', 'state', 'sessions.db');
 
     const patchConfig = configManager.getPatchConfig();
@@ -320,7 +325,10 @@ export class ShadowManager {
     const evaluation = evaluator.evaluate(recentTraces);
 
     if (!evaluation) {
-      await this.maybeRunEpisodeProbe(episode, trace, recentTraces, eventContext);
+      const probeOutcome = await this.maybeRunEpisodeProbe(episode, shadowId, trace, recentTraces, eventContext);
+      if (probeOutcome.handledDeepAnalysis) {
+        return;
+      }
       this.recordEvaluationResult(
         shadowId,
         eventContext,
@@ -332,7 +340,10 @@ export class ShadowManager {
     }
 
     if (!evaluation.should_patch) {
-      await this.maybeRunEpisodeProbe(episode, trace, recentTraces, eventContext);
+      const probeOutcome = await this.maybeRunEpisodeProbe(episode, shadowId, trace, recentTraces, eventContext);
+      if (probeOutcome.handledDeepAnalysis) {
+        return;
+      }
       this.recordEvaluationResult(
         shadowId,
         eventContext,
@@ -407,7 +418,9 @@ export class ShadowManager {
 
   private recordAnalysisRequested(
     context: ReturnType<ShadowManager['buildDecisionEventContext']>,
-    evaluation: EvaluationResult
+    evaluation: EvaluationResult | null,
+    detail = '已满足优化条件，开始生成改进方案。',
+    status = 'ready'
   ): void {
     this.decisionEvents.record({
       tag: 'analysis_requested',
@@ -416,23 +429,26 @@ export class ShadowManager {
       windowId: context.windowId,
       traceId: context.traceId,
       sessionId: context.sessionId,
-      status: 'ready',
-      detail: '已满足优化条件，开始生成改进方案。',
-      confidence: evaluation.confidence,
-      changeType: evaluation.change_type ?? null,
-      reason: evaluation.reason ?? null,
+      status,
+      detail,
+      confidence: evaluation?.confidence ?? null,
+      changeType: evaluation?.change_type ?? null,
+      reason: evaluation?.reason ?? null,
       traceCount: context.traceCount,
       sessionCount: context.sessionCount,
-      ruleName: evaluation.rule_name ?? null,
+      ruleName: evaluation?.rule_name ?? null,
     });
   }
 
   private recordAnalysisFailure(
     context: ReturnType<ShadowManager['buildDecisionEventContext']>,
-    evaluation: EvaluationResult,
-    detail: string
+    detail: string,
+    evaluation: EvaluationResult | null = null,
+    reason: string | null = null,
+    evidence: Record<string, unknown> | null = null
   ): void {
     this.taskEpisodes.markAnalysisState(context.sessionId, context.skillId, context.runtime, 'failed');
+    this.writeOptimizationCheckpoint('error', context.skillId, detail);
     this.decisionEvents.record({
       tag: 'analysis_failed',
       skillId: context.skillId,
@@ -442,12 +458,13 @@ export class ShadowManager {
       sessionId: context.sessionId,
       status: 'failed',
       detail,
-      confidence: evaluation.confidence,
-      changeType: evaluation.change_type ?? null,
-      reason: evaluation.reason ?? null,
+      confidence: evaluation?.confidence ?? null,
+      changeType: evaluation?.change_type ?? null,
+      reason: reason ?? evaluation?.reason ?? null,
       traceCount: context.traceCount,
       sessionCount: context.sessionCount,
-      ruleName: evaluation.rule_name ?? null,
+      ruleName: evaluation?.rule_name ?? null,
+      evidence: evidence as never,
     });
   }
 
@@ -497,15 +514,189 @@ export class ShadowManager {
     return result.reason ? `${prefix} 原因：${result.reason}` : prefix;
   }
 
+  private writeOptimizationCheckpoint(
+    state: 'idle' | 'analyzing' | 'optimizing' | 'error',
+    skillId: string | null,
+    error: string | null = null
+  ): void {
+    const checkpointPath = join(this.projectRoot, '.ornn', 'state', 'daemon-checkpoint.json');
+    let checkpoint: Record<string, unknown> = {
+      isRunning: true,
+      startedAt: new Date().toISOString(),
+      processedTraces: 0,
+      lastCheckpointAt: null,
+      retryQueueSize: 0,
+      optimizationStatus: {
+        currentState: 'idle',
+        currentSkillId: null,
+        lastOptimizationAt: null,
+        lastError: null,
+        queueSize: 0,
+      },
+    };
+
+    if (existsSync(checkpointPath)) {
+      try {
+        checkpoint = JSON.parse(readFileSync(checkpointPath, 'utf-8')) as Record<string, unknown>;
+      } catch {
+        // fall back to defaults
+      }
+    }
+
+    const previous = (checkpoint.optimizationStatus && typeof checkpoint.optimizationStatus === 'object')
+      ? checkpoint.optimizationStatus as Record<string, unknown>
+      : {};
+
+    checkpoint.lastCheckpointAt = new Date().toISOString();
+    checkpoint.optimizationStatus = {
+      currentState: state,
+      currentSkillId: state === 'idle' ? null : skillId,
+      lastOptimizationAt: state === 'idle' ? new Date().toISOString() : previous.lastOptimizationAt ?? null,
+      lastError: state === 'error' ? error : null,
+      queueSize: state === 'idle' || state === 'error' ? 0 : 1,
+    };
+
+    mkdirSync(join(this.projectRoot, '.ornn', 'state'), { recursive: true });
+    writeFileSync(checkpointPath, JSON.stringify(checkpoint, null, 2), 'utf-8');
+  }
+
+  private buildSkillCallWindow(
+    episode: TaskEpisode,
+    traces: Trace[],
+    context: ReturnType<ShadowManager['buildDecisionEventContext']>
+  ): SkillCallWindow {
+    return {
+      windowId: context.windowId,
+      skillId: context.skillId,
+      runtime: context.runtime,
+      sessionId: context.sessionId,
+      closeReason: 'probe_ready_for_analysis',
+      startedAt: episode.startedAt,
+      lastTraceAt: traces[traces.length - 1]?.timestamp ?? episode.lastActivityAt,
+      traces,
+    };
+  }
+
+  private async recordSkillFeedback(
+    context: ReturnType<ShadowManager['buildDecisionEventContext']>,
+    evaluation: EvaluationResult,
+    traces: Trace[]
+  ): Promise<void> {
+    const explanation = await generateDecisionExplanation(
+      this.projectRoot,
+      context.skillId,
+      evaluation,
+      traces,
+      null
+    );
+
+    const rawEvidenceParts = [
+      explanation.decisionRationale,
+      ...explanation.uncertainties.map((item) => `uncertainty: ${item}`),
+      ...explanation.contradictions.map((item) => `contradiction: ${item}`),
+    ].filter(Boolean);
+
+    this.decisionEvents.record({
+      tag: 'skill_feedback',
+      skillId: context.skillId,
+      runtime: context.runtime,
+      windowId: context.windowId,
+      traceId: context.traceId,
+      sessionId: context.sessionId,
+      status: evaluation.should_patch ? 'patch_recommended' : 'no_patch_needed',
+      detail: explanation.summary,
+      confidence: evaluation.confidence,
+      changeType: evaluation.change_type ?? null,
+      reason: evaluation.reason ?? null,
+      traceCount: context.traceCount,
+      sessionCount: context.sessionCount,
+      ruleName: evaluation.rule_name ?? null,
+      evidence: {
+        directEvidence: explanation.evidenceReadout,
+        causalJudgment: explanation.causalChain,
+        action: explanation.recommendedAction,
+        rawEvidence: rawEvidenceParts.join('\n'),
+      },
+    });
+  }
+
+  private async runDeepAnalysisFromEpisode(
+    episode: TaskEpisode,
+    shadowId: string,
+    traces: Trace[],
+    context: ReturnType<ShadowManager['buildDecisionEventContext']>
+  ): Promise<boolean> {
+    const currentContent = this.shadowRegistry.readContent(context.skillId, context.runtime);
+    if (!currentContent) {
+      this.recordAnalysisFailure(
+        context,
+        '当前技能内容为空，无法启动深度分析。',
+        null,
+        'missing_skill_content'
+      );
+      return true;
+    }
+
+    this.taskEpisodes.markAnalysisState(context.sessionId, context.skillId, context.runtime, 'running');
+    this.writeOptimizationCheckpoint('analyzing', context.skillId, null);
+    this.recordAnalysisRequested(
+      context,
+      null,
+      '时机探测已通过，开始深度分析本次调用窗口。',
+      'episode_ready'
+    );
+
+    const analysis = await this.skillCallAnalyzer.analyzeWindow(
+      this.projectRoot,
+      this.buildSkillCallWindow(episode, traces, context),
+      currentContent
+    );
+
+    if (!analysis.success || !analysis.evaluation) {
+      this.recordAnalysisFailure(
+        context,
+        analysis.userMessage ?? '深度分析没有返回可用结果。',
+        null,
+        analysis.technicalDetail ?? analysis.errorCode ?? analysis.error ?? null,
+        analysis.technicalDetail
+          ? {
+              rawEvidence: analysis.technicalDetail,
+            }
+          : null
+      );
+      return true;
+    }
+
+    const evaluation = analysis.evaluation;
+    if (!evaluation.should_patch) {
+      this.recordEvaluationResult(
+        shadowId,
+        context,
+        'no_patch_needed',
+        evaluation.reason ? `深度分析结论：${evaluation.reason}` : '深度分析认为当前无需修改。',
+        evaluation
+      );
+      await this.recordSkillFeedback(context, evaluation, traces);
+      this.taskEpisodes.markAnalysisState(context.sessionId, context.skillId, context.runtime, 'completed');
+      this.writeOptimizationCheckpoint('idle', null, null);
+      return true;
+    }
+
+    await this.recordSkillFeedback(context, evaluation, traces);
+    await this.handleEvaluation(shadowId, evaluation, traces, context, { skipAnalysisRequested: true });
+    return true;
+  }
+
   private async maybeRunEpisodeProbe(
     episode: TaskEpisode,
+    shadowId: string,
     trace: Trace,
     traces: Trace[],
     context: ReturnType<ShadowManager['buildDecisionEventContext']>
-  ): Promise<void> {
+  ): Promise<{ handledDeepAnalysis: boolean }> {
     const trigger = this.taskEpisodes.shouldTriggerProbe(episode, trace);
     if (!trigger.shouldProbe) {
-      return;
+      return { handledDeepAnalysis: false };
     }
 
     this.decisionEvents.record({
@@ -542,6 +733,14 @@ export class ShadowManager {
         ],
       },
     });
+
+    if (result.decision === 'ready_for_analysis') {
+      return {
+        handledDeepAnalysis: await this.runDeepAnalysisFromEpisode(episode, shadowId, traces, context),
+      };
+    }
+
+    return { handledDeepAnalysis: false };
   }
 
   /**
@@ -589,7 +788,8 @@ export class ShadowManager {
     shadowId: string,
     evaluation: EvaluationResult,
     _traces: Trace[],
-    context: ReturnType<ShadowManager['buildDecisionEventContext']>
+    context: ReturnType<ShadowManager['buildDecisionEventContext']>,
+    options: { skipAnalysisRequested?: boolean } = {}
   ): Promise<void> {
     // 检查是否在冷却期
     if (this.isInCooldown(shadowId)) {
@@ -647,15 +847,18 @@ export class ShadowManager {
     }
 
     this.taskEpisodes.markAnalysisState(context.sessionId, context.skillId, context.runtime, 'running');
-    this.recordAnalysisRequested(context, evaluation);
+    this.writeOptimizationCheckpoint('analyzing', context.skillId, null);
+    if (!options.skipAnalysisRequested) {
+      this.recordAnalysisRequested(context, evaluation);
+    }
 
     // 执行 patch
     const patchResult = await this.executePatch(shadowId, evaluation);
     if (!patchResult.ok) {
       this.recordAnalysisFailure(
         context,
-        evaluation,
-        patchResult.error ?? '本轮优化未完成，但系统没有返回更具体的原因。'
+        patchResult.error ?? '本轮优化未完成，但系统没有返回更具体的原因。',
+        evaluation
       );
       return;
     }
@@ -679,6 +882,7 @@ export class ShadowManager {
       linesRemoved: patchResult.linesRemoved ?? null,
     });
     this.taskEpisodes.markAnalysisState(context.sessionId, context.skillId, context.runtime, 'completed');
+    this.writeOptimizationCheckpoint('idle', null, null);
   }
 
   /**
