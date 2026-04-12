@@ -707,7 +707,7 @@ describe('dashboard ui recovery', () => {
     };
 
     const rows = dashboard.buildActivityRows(projectPath);
-    const traceRow = rows.find((row) => row.tag === 'skill_called');
+    const traceRow = rows.find((row) => row.tag === 'skill_observed');
     expect(traceRow?.scopeId).toBe('scope-trace-1');
   });
 
@@ -739,6 +739,7 @@ describe('dashboard ui recovery', () => {
       },
     };
 
+    dashboard.state.activityTagFilter = 'stability_feedback';
     dashboard.renderMainPanel(projectPath);
     const html = getElement('mainPanel').innerHTML;
     expect(html).toContain('模型返回了内容，但格式不符合系统要求');
@@ -804,7 +805,7 @@ describe('dashboard ui recovery', () => {
     };
 
     const rows = dashboard.buildActivityRows(projectPath);
-    expect(rows[0]?.tag).toBe('evaluation_result');
+    expect(rows[0]?.tag).toBe('analysis_concluded');
     expect(rows[0]?.detail).toContain('需要补丁');
   });
 
@@ -839,8 +840,8 @@ describe('dashboard ui recovery', () => {
 
     dashboard.renderMainPanel(projectPath);
     const html = getElement('mainPanel').innerHTML;
-    expect(html).toContain('补丁已应用');
-    expect(html).toContain('修改已应用');
+    expect(html).toContain('优化已应用');
+    expect(html).toContain('本轮优化已经写回');
     expect(html).toContain('add_fallback');
     expect(html).not.toContain('>patch_applied<');
   });
@@ -937,7 +938,7 @@ describe('dashboard ui recovery', () => {
     expect(html).toContain('test');
   });
 
-  it('deduplicates repeated decision conclusions within the same short window', () => {
+  it('keeps explanation-only skill_feedback out of the main business timeline', () => {
     const { dashboard } = loadDashboardTestHarness({
       'ornn-dashboard-activity-columns': JSON.stringify({ detail: 640 }),
     });
@@ -986,7 +987,91 @@ describe('dashboard ui recovery', () => {
     };
 
     const rows = dashboard.buildActivityRows(projectPath);
-    expect(rows.filter((row) => row.tag === 'skill_feedback')).toHaveLength(2);
+    expect(rows.filter((row) => row.tag === 'skill_feedback')).toHaveLength(0);
+  });
+
+  it('merges skill feedback into the analysis conclusion row instead of rendering it separately', () => {
+    const { dashboard } = loadDashboardTestHarness({}, { lang: 'zh' });
+    const projectPath = '/tmp/ornn-project';
+
+    dashboard.state.projectData = {
+      [projectPath]: {
+        daemon: {},
+        skills: [{ skillId: 'test-driven-development', runtime: 'codex' }],
+        traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
+        recentTraces: [],
+        decisionEvents: [
+          {
+            id: 'evt-eval-1',
+            timestamp: '2026-04-10T05:23:00.000Z',
+            tag: 'evaluation_result',
+            runtime: 'codex',
+            skillId: 'test-driven-development',
+            status: 'no_patch_needed',
+            windowId: 'scope-merge-1',
+            detail: '窗口分析结论：当前无需修改。',
+          },
+          {
+            id: 'evt-feedback-1',
+            timestamp: '2026-04-10T05:23:01.000Z',
+            tag: 'skill_feedback',
+            runtime: 'codex',
+            skillId: 'test-driven-development',
+            status: 'no_patch_needed',
+            windowId: 'scope-merge-1',
+            detail: '这次调用没有观察到稳定的设计缺陷。',
+          },
+        ],
+        agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
+      },
+    };
+
+    const rows = dashboard.buildActivityRows(projectPath);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.tag).toBe('analysis_concluded');
+    expect(rows[0]?.detail).toContain('窗口分析结论');
+    expect(rows[0]?.detail).toContain('这次调用没有观察到稳定的设计缺陷');
+  });
+
+  it('treats analysis_failed as stability feedback instead of a core business step', () => {
+    const { dashboard, getElement } = loadDashboardTestHarness({}, { lang: 'zh' });
+    const projectPath = '/tmp/ornn-project';
+
+    getElement('mainPanel');
+    dashboard.state.selectedMainTab = 'activity';
+    dashboard.state.selectedProjectId = projectPath;
+    dashboard.state.projectData = {
+      [projectPath]: {
+        daemon: {},
+        skills: [{ skillId: 'vercel-react-best-practices', runtime: 'codex' }],
+        traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
+        recentTraces: [],
+        decisionEvents: [{
+          id: 'evt-failure-core-filter',
+          timestamp: '2026-04-10T05:23:01.000Z',
+          tag: 'analysis_failed',
+          traceId: 'trace-failed-1',
+          sessionId: 'session-failed-1',
+          runtime: 'codex',
+          skillId: 'vercel-react-best-practices',
+          status: 'failed',
+          windowId: 'scope-failed-1',
+          detail: 'invalid_analysis_json',
+          reason: 'invalid_analysis_json',
+        }],
+        agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
+      },
+    };
+
+    dashboard.renderMainPanel(projectPath);
+    const html = getElement('mainPanel').innerHTML;
+    expect(html).toContain('核心流程');
+    expect(html).not.toContain('分析链路异常');
+
+    dashboard.state.activityTagFilter = 'stability_feedback';
+    dashboard.renderMainPanel(projectPath);
+    const stabilityHtml = getElement('mainPanel').innerHTML;
+    expect(stabilityHtml).toContain('分析链路异常');
   });
 
   it('uses persisted activity column widths when rendering the table', () => {

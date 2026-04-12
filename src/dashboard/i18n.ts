@@ -160,6 +160,14 @@ export interface I18nStrings {
   activityLayerBusiness: string;
   activityLayerRaw: string;
   activityTagAll: string;
+  activityTagCoreFlow: string;
+  activityTagStabilityFeedback: string;
+  activityTagSkillObserved: string;
+  activityTagAnalysisStarted: string;
+  activityTagAnalysisWaiting: string;
+  activityTagAnalysisConcluded: string;
+  activityTagOptimizationSkipped: string;
+  activityTagOptimizationApplied: string;
   activityTagSkillCalled: string;
   activityTagSkillAdded: string;
   activityTagSkillRemoved: string;
@@ -185,6 +193,12 @@ export interface I18nStrings {
   activitySourceDecision: string;
   activitySourceTrace: string;
   activitySummarySkillCalled: string;
+  activitySummarySkillObserved: string;
+  activitySummaryAnalysisStarted: string;
+  activitySummaryAnalysisWaiting: string;
+  activitySummaryAnalysisConcluded: string;
+  activitySummaryOptimizationSkipped: string;
+  activitySummaryOptimizationApplied: string;
   activitySummarySkillAdded: string;
   activitySummarySkillRemoved: string;
   activitySummarySkillEdited: string;
@@ -208,6 +222,10 @@ export interface I18nStrings {
   activitySourceLabel: string;
   activitySkillLabel: string;
   activitySessionIdLabel: string;
+  activityDetailInput: string;
+  activityDetailJudgment: string;
+  activityDetailOutput: string;
+  activityDetailNextStep: string;
 
   // Cost Panel
   costEmpty: string;
@@ -469,6 +487,14 @@ const en: I18nStrings = {
   activityLayerBusiness: 'Ornn Events',
   activityLayerRaw: 'Raw Traces',
   activityTagAll: 'All',
+  activityTagCoreFlow: 'Core Flow',
+  activityTagStabilityFeedback: 'Stability Feedback',
+  activityTagSkillObserved: 'Skill Observed',
+  activityTagAnalysisStarted: 'Analysis Started',
+  activityTagAnalysisWaiting: 'Waiting for More Context',
+  activityTagAnalysisConcluded: 'Analysis Concluded',
+  activityTagOptimizationSkipped: 'Optimization Skipped',
+  activityTagOptimizationApplied: 'Optimization Applied',
   activityTagSkillCalled: 'Skill Called',
   activityTagSkillAdded: 'Skill Added',
   activityTagSkillRemoved: 'Skill Removed',
@@ -479,7 +505,7 @@ const en: I18nStrings = {
   activityTagEvaluationResult: 'Evaluation Result',
   activityTagSkillFeedback: 'Skill Feedback',
   activityTagPatchApplied: 'Patch Applied',
-  activityTagAnalysisFailed: 'Analysis Failed',
+  activityTagAnalysisFailed: 'Analysis Pipeline Failure',
   activityTagAnalysisSubmitted: 'Analysis Submitted',
   activityTagProbeResult: 'Probe Result',
   activityTagProbeSubmitted: 'Probe Submitted',
@@ -494,6 +520,12 @@ const en: I18nStrings = {
   activitySourceDecision: 'Decision Event',
   activitySourceTrace: 'Trace',
   activitySummarySkillCalled: 'Skill called',
+  activitySummarySkillObserved: 'Observed skill activity',
+  activitySummaryAnalysisStarted: 'Analysis started',
+  activitySummaryAnalysisWaiting: 'Waiting for more context',
+  activitySummaryAnalysisConcluded: 'Analysis concluded',
+  activitySummaryOptimizationSkipped: 'Optimization skipped',
+  activitySummaryOptimizationApplied: 'Optimization applied',
   activitySummarySkillAdded: 'Started monitoring skill',
   activitySummarySkillRemoved: 'Stopped monitoring skill',
   activitySummarySkillEdited: 'Skill edited',
@@ -505,7 +537,7 @@ const en: I18nStrings = {
   activitySummaryEvaluationResult: 'Evaluation result',
   activitySummarySkillFeedback: 'Skill feedback',
   activitySummaryPatchApplied: 'Patch applied',
-  activitySummaryAnalysisFailed: 'Analysis failed',
+  activitySummaryAnalysisFailed: 'Analysis pipeline failed',
   activitySummaryAnalysisSubmitted: 'Analysis submitted',
   activitySummaryProbeResult: 'Probe result',
   activitySummaryProbeSubmitted: 'Probe submitted',
@@ -517,6 +549,10 @@ const en: I18nStrings = {
   activitySourceLabel: 'Source',
   activitySkillLabel: 'Skill',
   activitySessionIdLabel: 'Session ID',
+  activityDetailInput: 'Input',
+  activityDetailJudgment: 'Judgment',
+  activityDetailOutput: 'Output',
+  activityDetailNextStep: 'Next Step',
 
   // Cost Panel
   costEmpty: 'No agent usage has been recorded yet.',
@@ -778,6 +814,14 @@ const zh: I18nStrings = {
   activityLayerBusiness: 'Ornn 业务事件',
   activityLayerRaw: '原始 Trace',
   activityTagAll: '全部',
+  activityTagCoreFlow: '核心流程',
+  activityTagStabilityFeedback: '稳定性反馈',
+  activityTagSkillObserved: '观察到技能参与',
+  activityTagAnalysisStarted: '开始分析',
+  activityTagAnalysisWaiting: '继续等待上下文',
+  activityTagAnalysisConcluded: '分析结论',
+  activityTagOptimizationSkipped: '暂不优化',
+  activityTagOptimizationApplied: '优化已应用',
   activityTagSkillCalled: '技能调用',
   activityTagSkillAdded: '新增监控',
   activityTagSkillRemoved: '移除监控',
@@ -788,7 +832,7 @@ const zh: I18nStrings = {
   activityTagEvaluationResult: '评估结果',
   activityTagSkillFeedback: '技能反馈',
   activityTagPatchApplied: '补丁已应用',
-  activityTagAnalysisFailed: '分析失败',
+  activityTagAnalysisFailed: '分析链路异常',
   activityTagAnalysisSubmitted: '分析已提交',
   activityTagProbeResult: '时机探测结果',
   activityTagProbeSubmitted: '时机探测已提交',
@@ -803,6 +847,12 @@ const zh: I18nStrings = {
   activitySourceDecision: '决策事件',
   activitySourceTrace: 'Trace',
   activitySummarySkillCalled: '调用技能',
+  activitySummarySkillObserved: '观察到技能参与当前窗口',
+  activitySummaryAnalysisStarted: '已提交本轮分析',
+  activitySummaryAnalysisWaiting: '当前证据不足，继续收集上下文',
+  activitySummaryAnalysisConcluded: '本轮分析已形成结论',
+  activitySummaryOptimizationSkipped: '当前结论是不执行优化',
+  activitySummaryOptimizationApplied: '本轮优化已经写回',
   activitySummarySkillAdded: '开始监控技能',
   activitySummarySkillRemoved: '移除技能监控',
   activitySummarySkillEdited: '技能被编辑',
@@ -814,7 +864,7 @@ const zh: I18nStrings = {
   activitySummaryEvaluationResult: '评估结果',
   activitySummarySkillFeedback: '技能反馈',
   activitySummaryPatchApplied: '修改已应用',
-  activitySummaryAnalysisFailed: '分析失败',
+  activitySummaryAnalysisFailed: '分析链路异常',
   activitySummaryAnalysisSubmitted: '已提交分析请求',
   activitySummaryProbeResult: '时机探测结果',
   activitySummaryProbeSubmitted: '已提交时机探测',
@@ -826,6 +876,10 @@ const zh: I18nStrings = {
   activitySourceLabel: '来源',
   activitySkillLabel: '技能',
   activitySessionIdLabel: '会话 ID',
+  activityDetailInput: '输入',
+  activityDetailJudgment: '判断',
+  activityDetailOutput: '输出',
+  activityDetailNextStep: '下一步',
 
   // Cost Panel
   costEmpty: '当前还没有记录到 agent 调用成本数据。',

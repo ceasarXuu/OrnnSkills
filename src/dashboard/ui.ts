@@ -877,7 +877,7 @@ const state = {
   selectedMainTab: 'overview',
   currentSkillRuntime: 'codex',
   activityLayer: 'business',
-  activityTagFilter: 'all',
+  activityTagFilter: 'core_flow',
   activityRowsByProject: {},
   rawActivityRowsByProject: {},
   activityColumnWidths: loadSavedActivityColumnWidths(),
@@ -1380,6 +1380,14 @@ function updateBusinessEvents() {}
 function businessEventLabel(tag) {
   const map = {
     all: t('activityTagAll'),
+    core_flow: t('activityTagCoreFlow'),
+    stability_feedback: t('activityTagStabilityFeedback'),
+    skill_observed: t('activityTagSkillObserved'),
+    analysis_started: t('activityTagAnalysisStarted'),
+    analysis_waiting_more_context: t('activityTagAnalysisWaiting'),
+    analysis_concluded: t('activityTagAnalysisConcluded'),
+    optimization_skipped: t('activityTagOptimizationSkipped'),
+    optimization_applied: t('activityTagOptimizationApplied'),
     skill_called: t('activityTagSkillCalled'),
     skill_monitoring_started: t('activityTagSkillAdded'),
     skill_removed: t('activityTagSkillRemoved'),
@@ -1398,8 +1406,38 @@ function businessEventLabel(tag) {
   return map[tag] || tag;
 }
 
+function businessCategoryForTag(tag) {
+  if (tag === 'analysis_failed') return 'stability_feedback';
+  return 'core_flow';
+}
+
+function formatPatchSummary(e) {
+  const parts = [];
+  if (e.changeType) parts.push(String(e.changeType));
+  const linesAdded = Number(e.linesAdded || 0);
+  const linesRemoved = Number(e.linesRemoved || 0);
+  if (linesAdded || linesRemoved) parts.push('+' + linesAdded + '/-' + linesRemoved);
+  return parts.join(' · ');
+}
+
 function formatBusinessEvent(e) {
   switch (e.tag) {
+    case 'skill_observed':
+      return t('activitySummarySkillObserved') + (e.skillId ? ': ' + e.skillId : '');
+    case 'analysis_started':
+      return e.detail || t('activitySummaryAnalysisStarted');
+    case 'analysis_waiting_more_context':
+      return e.detail || t('activitySummaryAnalysisWaiting');
+    case 'analysis_concluded':
+      return e.detail || t('activitySummaryAnalysisConcluded');
+    case 'optimization_skipped':
+      return e.detail || t('activitySummaryOptimizationSkipped');
+    case 'optimization_applied': {
+      const patchSummary = formatPatchSummary(e);
+      return patchSummary
+        ? t('activitySummaryOptimizationApplied') + ': ' + patchSummary
+        : t('activitySummaryOptimizationApplied');
+    }
     case 'skill_called':
       return t('activitySummarySkillCalled') + ': ' + (e.skillId || 'unknown');
     case 'skill_monitoring_started':
@@ -1420,16 +1458,10 @@ function formatBusinessEvent(e) {
       return t('activitySummaryEvaluationResult') + ': ' + (e.detail || e.reason || '');
     case 'skill_feedback':
       return t('activitySummarySkillFeedback') + ': ' + (e.detail || e.reason || '');
-    case 'patch_applied': {
-      const parts = [];
-      if (e.changeType) parts.push(String(e.changeType));
-      const linesAdded = Number(e.linesAdded || 0);
-      const linesRemoved = Number(e.linesRemoved || 0);
-      if (linesAdded || linesRemoved) parts.push('+' + linesAdded + '/-' + linesRemoved);
-      return parts.length > 0
-        ? t('activitySummaryPatchApplied') + ': ' + parts.join(' · ')
+    case 'patch_applied':
+      return formatPatchSummary(e)
+        ? t('activitySummaryPatchApplied') + ': ' + formatPatchSummary(e)
         : t('activitySummaryPatchApplied');
-    }
     case 'analysis_failed':
       return t('activitySummaryAnalysisFailed') + ': ' + (e.detail || e.reason || '');
     case 'analysis_requested':
@@ -1443,11 +1475,62 @@ function formatBusinessEvent(e) {
   }
 }
 
-function normalizeDecisionTag(tag) {
+function normalizeDecisionTag(event) {
+  const tag = event?.tag;
+  const status = event?.status;
   if (!tag) return null;
-  if (tag === 'skill_mapping' || tag === 'skill_mapped' || tag === 'skill_mapping_result') return null;
-  if (tag === 'skill_evaluation') return 'evaluation_result';
+  if (
+    tag === 'skill_mapping' ||
+    tag === 'skill_mapped' ||
+    tag === 'skill_mapping_result' ||
+    tag === 'skill_monitoring_started' ||
+    tag === 'skill_removed' ||
+    tag === 'skill_edited' ||
+    tag === 'skill_version_iterated' ||
+    tag === 'episode_probe_result' ||
+    tag === 'episode_probe_requested' ||
+    tag === 'skill_feedback'
+  ) {
+    return null;
+  }
+  if (tag === 'analysis_requested') return 'analysis_started';
+  if (tag === 'patch_applied') return 'optimization_applied';
+  if (tag === 'analysis_failed') return 'analysis_failed';
+  if (tag === 'evaluation_result' || tag === 'skill_evaluation') {
+    if (status === 'continue_collecting') return 'analysis_waiting_more_context';
+    if (
+      status === 'cooldown' ||
+      status === 'daily_limit_reached' ||
+      status === 'frozen' ||
+      status === 'confidence_too_low'
+    ) {
+      return 'optimization_skipped';
+    }
+    return 'analysis_concluded';
+  }
   return tag;
+}
+
+function getActivityRelationKeys(event) {
+  if (!event) return [];
+  const keys = [];
+  const scopeId = event.windowId || event.scopeId || (event.evidence && typeof event.evidence === 'object' ? event.evidence.windowId : null);
+  if (scopeId) keys.push('scope:' + scopeId);
+  const traceId = event.traceId || event.trace_id || null;
+  if (traceId) keys.push('trace:' + traceId);
+  const sessionId = event.sessionId || event.session_id || null;
+  const skillId = event.skillId || event.skill_id || null;
+  if (sessionId && skillId) keys.push('session-skill:' + sessionId + '::' + skillId);
+  return [...new Set(keys)];
+}
+
+function collectUniqueText(values) {
+  return [...new Set(values.map((value) => (typeof value === 'string' ? value.trim() : '')).filter(Boolean))];
+}
+
+function mergeBusinessDetail(primary, supportingValues) {
+  const parts = collectUniqueText([primary].concat(Array.isArray(supportingValues) ? supportingValues : [supportingValues]));
+  return parts.join('\\n');
 }
 
 function getActivityScopeId(event) {
@@ -1659,6 +1742,45 @@ function buildActivityDetail(row) {
     if (row.sessionId) lines.push(t('activitySessionIdLabel') + ': ' + row.sessionId);
     return lines.join('\\n');
   }
+  const inputParts = [];
+  if (row.sourceLabel) inputParts.push(t('activitySourceLabel') + ': ' + row.sourceLabel);
+  if (row.traceId) inputParts.push(t('traceId') + ': ' + row.traceId);
+  if (row.sessionId) inputParts.push(t('activitySessionIdLabel') + ': ' + row.sessionId);
+  if (row.scopeId) inputParts.push(t('traceScope') + ': ' + row.scopeId);
+  let nextStep = '';
+  switch (row.tag) {
+    case 'skill_observed':
+      nextStep = currentLang === 'zh'
+        ? '继续在同一观察窗口内积累上下文，直到系统决定发起分析。'
+        : 'Keep collecting context in the same observation window until the system decides to start analysis.';
+      break;
+    case 'analysis_started':
+      nextStep = currentLang === 'zh'
+        ? '等待这一轮分析返回结果，再决定是继续观察、保持现状还是执行优化。'
+        : 'Wait for this analysis round to return before deciding whether to keep observing, stay unchanged, or optimize.';
+      break;
+    case 'analysis_waiting_more_context':
+      nextStep = currentLang === 'zh'
+        ? '本轮不会直接改技能，系统会扩大窗口后再次分析。'
+        : 'This round will not change the skill yet; the system will widen the window and analyze again.';
+      break;
+    case 'analysis_concluded':
+    case 'optimization_skipped':
+      nextStep = currentLang === 'zh'
+        ? '当前保持现状，后续如果出现新的强信号，会重新开启下一轮分析。'
+        : 'The current decision is to keep the skill unchanged unless stronger future evidence reopens analysis.';
+      break;
+    case 'optimization_applied':
+      nextStep = currentLang === 'zh'
+        ? '补丁已经写回，后续调用会继续验证这次优化是否有效。'
+        : 'The patch has been written back, and later calls will validate whether the optimization worked.';
+      break;
+    default:
+      nextStep = currentLang === 'zh'
+        ? '继续观察同一技能后续窗口中的变化。'
+        : 'Continue observing how this skill behaves in later windows.';
+      break;
+  }
   const lines = [
     t('traceTime') + ': ' + (row.timestamp || '—'),
     t('traceRuntime') + ': ' + (row.runtime || t('activityHostFallback')),
@@ -1666,11 +1788,11 @@ function buildActivityDetail(row) {
     t('activitySkillLabel') + ': ' + (row.skillId || '—'),
     t('traceStatus') + ': ' + (row.status || t('activityStatusFallback')),
     t('traceScope') + ': ' + (row.scopeId || t('activityScopeFallback')),
-    t('traceDetail') + ': ' + (row.detail || t('activityDetailFallback')),
-    t('activitySourceLabel') + ': ' + (row.sourceLabel || '—'),
+    t('activityDetailInput') + ': ' + (inputParts.join(' | ') || t('activityDetailFallback')),
+    t('activityDetailJudgment') + ': ' + (row.detail || t('activityDetailFallback')),
+    t('activityDetailOutput') + ': ' + formatBusinessEvent(row),
+    t('activityDetailNextStep') + ': ' + nextStep,
   ];
-  if (row.traceId) lines.push(t('traceId') + ': ' + row.traceId);
-  if (row.sessionId) lines.push(t('activitySessionIdLabel') + ': ' + row.sessionId);
   return lines.join('\\n');
 }
 
@@ -1746,22 +1868,47 @@ function buildActivityRows(projectPath) {
     if (trace.trace_id) runtimeByTraceId.set(trace.trace_id, trace.runtime || null);
   }
 
-  const decisionRows = [];
+  const feedbackByKey = new Map();
   for (const event of decisionEvents) {
-    const tag = normalizeDecisionTag(event.tag);
-    if (!tag) continue;
     const scopeId = getActivityScopeId(event);
     if (scopeId && event.traceId) scopeByTraceId.set(event.traceId, scopeId);
     if (scopeId && event.sessionId && event.skillId) scopeBySessionSkill.set(event.sessionId + '::' + event.skillId, scopeId);
+
+    if (event.tag !== 'skill_feedback') continue;
+    for (const key of getActivityRelationKeys(event)) {
+      if (!feedbackByKey.has(key)) feedbackByKey.set(key, []);
+      feedbackByKey.get(key).push(event);
+    }
+  }
+
+  const decisionRows = [];
+  for (const event of decisionEvents) {
+    const tag = normalizeDecisionTag(event);
+    if (!tag) continue;
+    const scopeId = getActivityScopeId(event);
+    const feedbackDetails = tag === 'analysis_failed'
+      ? []
+      : collectUniqueText(
+        getActivityRelationKeys({
+          windowId: scopeId,
+          traceId: event.traceId,
+          sessionId: event.sessionId,
+          skillId: event.skillId,
+        }).flatMap((key) => (feedbackByKey.get(key) || []).map((item) => item.detail))
+      );
     decisionRows.push({
       id: 'decision:' + event.id,
       timestamp: event.timestamp || '',
       tag,
+      category: businessCategoryForTag(tag),
       runtime: event.runtime || (event.traceId ? runtimeByTraceId.get(event.traceId) : null) || t('activityHostFallback'),
       skillId: event.skillId || null,
       status: event.status || (tag === 'analysis_failed' ? 'failed' : t('activityStatusFallback')),
       scopeId: scopeId || null,
-      detail: event.detail || event.reason || formatBusinessEvent(event),
+      detail: mergeBusinessDetail(
+        event.detail || event.reason || formatBusinessEvent({ ...event, tag }),
+        feedbackDetails
+      ),
       rawDetail: event.detail || null,
       rawReason: event.reason || null,
       evidence: event.evidence || null,
@@ -1780,10 +1927,11 @@ function buildActivityRows(projectPath) {
       traceRows.push({
         id: 'trace:' + trace.trace_id + ':' + skillRef,
         timestamp: trace.timestamp || '',
-        tag: 'skill_called',
+        tag: 'skill_observed',
+        category: 'core_flow',
         runtime: trace.runtime || t('activityHostFallback'),
         skillId: skillRef,
-        status: trace.status || 'success',
+        status: trace.status || 'observed',
         scopeId:
           scopeByTraceId.get(trace.trace_id) ||
           scopeBySessionSkill.get(trace.session_id + '::' + skillRef) ||
@@ -1796,28 +1944,9 @@ function buildActivityRows(projectPath) {
     }
   }
 
-  const daemon = pd.daemon || null;
-  const daemonRows = [];
-  if (daemon?.optimizationStatus?.currentState && daemon.optimizationStatus.currentState !== 'idle') {
-    daemonRows.push({
-      id: 'daemon:' + daemon.optimizationStatus.currentState + ':' + (daemon.optimizationStatus.lastOptimizationAt || ''),
-      timestamp: daemon.optimizationStatus.lastOptimizationAt || daemon.lastCheckpointAt || '',
-      tag: 'optimization_state',
-      runtime: daemon.optimizationStatus.currentSkillId ? 'codex' : t('activityHostFallback'),
-      skillId: daemon.optimizationStatus.currentSkillId || null,
-      status: daemon.optimizationStatus.currentState,
-      scopeId: null,
-      detail: formatBusinessEvent({ tag: 'optimization_state', status: daemon.optimizationStatus.currentState }),
-      sourceLabel: t('activitySourceDecision'),
-      traceId: null,
-      sessionId: null,
-    });
-  }
-
   const dedupe = new Map();
   const rows = decisionRows
     .concat(traceRows)
-    .concat(daemonRows)
     .sort((a, b) => String(b.timestamp).localeCompare(String(a.timestamp)))
     .filter((row) => {
       const dedupeKey = [row.tag, row.skillId || '', row.status || '', row.scopeId || '', row.detail || ''].join('::');
@@ -1841,7 +1970,8 @@ function buildActivityRows(projectPath) {
     rowCount: rows.length,
     decisionCount: decisionRows.length,
     traceCount: traceRows.length,
-    daemonCount: daemonRows.length,
+    coreFlowCount: rows.filter((row) => (row.category || 'core_flow') === 'core_flow').length,
+    stabilityFeedbackCount: rows.filter((row) => row.category === 'stability_feedback').length,
   });
   return rows;
 }
@@ -1910,23 +2040,28 @@ function renderActivitySkillCell(projectPath, row) {
 
 function renderBusinessEvents(projectPath) {
   const events = buildActivityRows(projectPath);
-  const allTags = ['all', ...Array.from(new Set(events.map((e) => e.tag)))];
-  const filtered = state.activityTagFilter === 'all'
+  const filters = [
+    { id: 'core_flow', label: businessEventLabel('core_flow') },
+    { id: 'stability_feedback', label: businessEventLabel('stability_feedback') },
+    { id: 'all', label: businessEventLabel('all') },
+  ];
+  const activeFilter = state.activityTagFilter || 'core_flow';
+  const filtered = activeFilter === 'all'
     ? events
-    : events.filter((e) => e.tag === state.activityTagFilter);
+    : events.filter((e) => (e.category || businessCategoryForTag(e.tag)) === activeFilter);
 
   if (events.length === 0) return '<div class="empty-state">' + t('activityEmpty') + '</div>';
 
   return \`
     <div class="activity-controls">
       <div class="activity-left">
-        \${allTags.map((tag) =>
-          \`<button class="tag-chip \${state.activityTagFilter === tag ? 'active' : ''}" onclick="setActivityTagFilter('\${escJsStr(tag)}')">\${businessEventLabel(tag)}</button>\`
+        \${filters.map((filter) =>
+          \`<button class="tag-chip \${activeFilter === filter.id ? 'active' : ''}" onclick="setActivityTagFilter('\${escJsStr(filter.id)}')">\${escHtml(filter.label)}</button>\`
         ).join('')}
       </div>
       <div style="font-size:10px;color:var(--muted)">\${filtered.length} / \${events.length}</div>
     </div>
-    <div class="trace-table-wrap">
+    \${filtered.length === 0 ? \`<div class="empty-state">\${t('activityEmpty')}</div>\` : \`<div class="trace-table-wrap">
       <table class="activity-table">
         <thead><tr>
           <th style="\${getActivityColumnStyle('time', 92)}">\${t('traceTime')}<span class="column-resizer" onmousedown="startActivityColumnResize(event,'time')"></span></th>
@@ -1955,7 +2090,7 @@ function renderBusinessEvents(projectPath) {
           </tr>\`).join('')}
         </tbody>
       </table>
-    </div>
+    </div>\`}
   \`;
 }
 
@@ -2708,7 +2843,7 @@ function setActivityLayer(layer) {
 }
 
 function setActivityTagFilter(tag) {
-  state.activityTagFilter = tag || 'all';
+  state.activityTagFilter = tag || 'core_flow';
   if (state.selectedProjectId) safeRenderMainPanel(state.selectedProjectId, 'setActivityTagFilter');
 }
 
