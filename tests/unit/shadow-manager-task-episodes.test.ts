@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createShadowManager } from '../../src/core/shadow-manager/index.js';
+import { createTaskEpisodeStore } from '../../src/core/task-episode/index.js';
 import type { Trace } from '../../src/types/index.js';
 import type { DecisionEventRecord } from '../../src/core/decision-events/index.js';
 import type { TaskEpisodeSnapshot } from '../../src/core/task-episode/index.js';
@@ -52,6 +53,21 @@ function makeMixedTrace(index: number, projectRoot: string, mapped: boolean): Tr
     status: 'success',
     timestamp: new Date(Date.UTC(2026, 3, 11, 9, 0, index)).toISOString(),
     metadata: mapped ? { skill_id: 'test-skill' } : undefined,
+  };
+}
+
+function makeEpisodeTrace(skillId: string, traceId: string, turnId: string, timestamp: string): Trace {
+  return {
+    trace_id: traceId,
+    session_id: 'sess-shared',
+    turn_id: turnId,
+    runtime: 'codex',
+    event_type: 'tool_call',
+    tool_name: 'exec_command',
+    tool_args: { cmd: `echo ${skillId}` },
+    status: 'success',
+    timestamp,
+    metadata: { skill_id: skillId },
   };
 }
 
@@ -256,5 +272,64 @@ describe('ShadowManager task episodes', () => {
     const events = readDecisionEvents(testProjectPath).filter((event) => event.sessionId === 'sess-mixed');
     expect(events.some((event) => event.tag === 'analysis_requested')).toBe(true);
     expect(events.some((event) => event.tag === 'evaluation_result')).toBe(true);
+  });
+
+  it('attaches an unmapped context trace only to the most recently active episode in a shared session', () => {
+    const store = createTaskEpisodeStore(testProjectPath);
+    const traceA = makeEpisodeTrace('skill-a', 'trace-a-1', 'turn-a-1', '2026-04-11T09:00:01.000Z');
+    const traceB = makeEpisodeTrace('skill-b', 'trace-b-1', 'turn-b-1', '2026-04-11T09:00:02.000Z');
+    const contextTrace: Trace = {
+      trace_id: 'trace-context-1',
+      session_id: 'sess-shared',
+      turn_id: 'turn-context-1',
+      runtime: 'codex',
+      event_type: 'assistant_output',
+      assistant_output: 'shared assistant output after skill-b',
+      status: 'success',
+      timestamp: '2026-04-11T09:00:03.000Z',
+    };
+
+    store.recordTrace(
+      traceA,
+      { skillId: 'skill-a', shadowId: 'skill-a@/tmp/project#codex', runtime: 'codex' },
+      [traceA]
+    );
+    store.recordTrace(
+      traceB,
+      { skillId: 'skill-b', shadowId: 'skill-b@/tmp/project#codex', runtime: 'codex' },
+      [traceB]
+    );
+
+    store.recordContextTrace(contextTrace);
+
+    const snapshot = readTaskEpisodes(testProjectPath);
+    expect(snapshot.episodes).toHaveLength(2);
+
+    const skillAEpisode = snapshot.episodes.find((episode) =>
+      episode.skillSegments.some((segment) => segment.skillId === 'skill-a')
+    );
+    const skillBEpisode = snapshot.episodes.find((episode) =>
+      episode.skillSegments.some((segment) => segment.skillId === 'skill-b')
+    );
+
+    expect(skillAEpisode?.traceRefs).not.toContain('trace-context-1');
+    expect(skillBEpisode?.traceRefs).toContain('trace-context-1');
+  });
+
+  it('does not backfill traces that happened before an episode started', () => {
+    const store = createTaskEpisodeStore(testProjectPath);
+    const traceA = makeEpisodeTrace('skill-a', 'trace-a-1', 'turn-a-1', '2026-04-11T09:00:01.000Z');
+    const traceB = makeEpisodeTrace('skill-b', 'trace-b-1', 'turn-b-1', '2026-04-11T09:00:02.000Z');
+
+    store.recordTrace(
+      traceB,
+      { skillId: 'skill-b', shadowId: 'skill-b@/tmp/project#codex', runtime: 'codex' },
+      [traceA, traceB]
+    );
+
+    const snapshot = readTaskEpisodes(testProjectPath);
+    expect(snapshot.episodes).toHaveLength(1);
+    expect(snapshot.episodes[0]?.traceRefs).toEqual(['trace-b-1']);
+    expect(snapshot.episodes[0]?.skillSegments[0]?.relatedTraceIds).toEqual(['trace-b-1']);
   });
 });

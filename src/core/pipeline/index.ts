@@ -137,9 +137,9 @@ export class OptimizationPipeline {
       // Step 3: 对每个 skill 分组进行窗口分析（带超时控制）
       for (const group of skillGroups) {
         try {
-          const task = await this.evaluateSkillGroup(group);
-          if (task) {
-            tasks.push(task);
+          const groupTasks = await this.evaluateSkillGroup(group);
+          if (groupTasks.length > 0) {
+            tasks.push(...groupTasks);
           }
         } catch (error) {
           const errorMsg = `Failed to analyze skill window ${group.skill_id}: ${String(error)}`;
@@ -177,16 +177,30 @@ export class OptimizationPipeline {
     this.state.errors.push(errorMsg);
   }
 
-  private buildAnalysisWindow(group: SkillTracesGroup): SkillCallWindow {
-    const orderedTraces = [...group.traces].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
-    const sessionIds = [...new Set(orderedTraces.map((trace) => trace.session_id).filter(Boolean))];
-    const runtime = runtimeFromShadowId(group.shadow_id) ?? 'codex';
+  private getPatchContextIssue(evaluation: EvaluationResult): string | null {
+    if (!evaluation.should_patch || !evaluation.change_type) {
+      return null;
+    }
+
+    if (
+      (evaluation.change_type === 'prune_noise' || evaluation.change_type === 'rewrite_section') &&
+      !evaluation.target_section?.trim()
+    ) {
+      return 'missing_target_section';
+    }
+
+    return null;
+  }
+
+  private buildAnalysisWindow(skillId: string, shadowId: string, traces: Trace[], sessionId: string): SkillCallWindow {
+    const orderedTraces = [...traces].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+    const runtime = runtimeFromShadowId(shadowId) ?? 'codex';
 
     return {
-      windowId: `pipeline::${runtime}::${group.skill_id}`,
-      skillId: group.skill_id,
+      windowId: `pipeline::${runtime}::${skillId}::${sessionId}`,
+      skillId,
       runtime,
-      sessionId: sessionIds[0] ?? 'pipeline',
+      sessionId,
       closeReason: 'window_threshold_reached',
       startedAt: orderedTraces[0]?.timestamp ?? new Date().toISOString(),
       lastTraceAt: orderedTraces[orderedTraces.length - 1]?.timestamp ?? new Date().toISOString(),
@@ -197,77 +211,108 @@ export class OptimizationPipeline {
   /**
    * 分析单个 skill 分组（带超时控制）
    */
-  private async evaluateSkillGroup(group: SkillTracesGroup): Promise<OptimizationTask | null> {
+  private async evaluateSkillGroup(group: SkillTracesGroup): Promise<OptimizationTask[]> {
     const { skill_id, shadow_id, traces } = group;
     const runtime = runtimeFromShadowId(shadow_id) ?? 'codex';
+    const tasks: OptimizationTask[] = [];
 
     // 检查 shadow skill 是否存在
     const shadow = this.shadowRegistry.get(skill_id, runtime);
     if (!shadow) {
       logger.debug('Shadow skill not found, skipping', { skill_id, runtime });
-      return null;
+      return tasks;
     }
 
     // 检查是否被冻结
     if (shadow.status === 'frozen') {
       logger.debug('Shadow skill is frozen, skipping', { skill_id, runtime });
-      return null;
+      return tasks;
     }
 
     const currentContent = this.shadowRegistry.readContent(skill_id, runtime);
     if (!currentContent?.trim()) {
       logger.debug('Shadow skill content is empty, skipping pipeline analysis', { skill_id, runtime });
-      return null;
+      return tasks;
     }
 
-    const analysis = await this.evaluateWithTimeout(this.buildAnalysisWindow(group), currentContent, 10000);
-    if (!analysis.success || !analysis.decision) {
-      logger.warn('Pipeline window analysis failed', {
-        skill_id,
-        runtime,
-        error: analysis.error ?? analysis.errorCode ?? analysis.technicalDetail ?? analysis.userMessage,
-      });
-      return null;
-    }
+    const sessionIds = [...new Set(traces.map((trace) => trace.session_id).filter(Boolean))];
+    for (const sessionId of sessionIds) {
+      const mappedSessionTraces = traces
+        .filter((trace) => trace.session_id === sessionId)
+        .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+      const sessionTraces = await this.traceManager.getSessionTraces(sessionId);
+      const windowTraces = (sessionTraces.length > 0 ? sessionTraces : mappedSessionTraces)
+        .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
 
-    const evaluation = analysis.evaluation ?? {
-      should_patch: analysis.decision === 'apply_optimization',
-      reason: analysis.userMessage ?? 'Pipeline window analysis returned no concrete conclusion.',
-      source_sessions: [...new Set(traces.map((trace) => trace.session_id).filter(Boolean))],
-      confidence: 0,
-      rule_name: 'llm_window_analysis',
-    };
+      const analysis = await this.evaluateWithTimeout(
+        this.buildAnalysisWindow(skill_id, shadow_id, windowTraces, sessionId),
+        currentContent,
+        10000
+      );
+      if (!analysis.success || !analysis.decision) {
+        logger.warn('Pipeline window analysis failed', {
+          skill_id,
+          runtime,
+          sessionId,
+          error: analysis.error ?? analysis.errorCode ?? analysis.technicalDetail ?? analysis.userMessage,
+        });
+        continue;
+      }
 
-    if (analysis.decision !== 'apply_optimization' || !evaluation.should_patch) {
-      logger.debug('Pipeline window does not require optimization yet', {
-        skill_id,
-        runtime,
-        decision: analysis.decision,
-      });
-      return null;
-    }
+      const evaluation = analysis.evaluation ?? {
+        should_patch: analysis.decision === 'apply_optimization',
+        reason: analysis.userMessage ?? 'Pipeline window analysis returned no concrete conclusion.',
+        source_sessions: [sessionId],
+        confidence: 0,
+        rule_name: 'llm_window_analysis',
+      };
 
-    if (evaluation.confidence < this.config.minConfidence) {
-      logger.debug('Pipeline window analysis confidence too low, skipping', {
+      if (analysis.decision !== 'apply_optimization' || !evaluation.should_patch) {
+        logger.debug('Pipeline window does not require optimization yet', {
+          skill_id,
+          runtime,
+          sessionId,
+          decision: analysis.decision,
+        });
+        continue;
+      }
+
+      if (this.getPatchContextIssue(evaluation)) {
+        logger.debug('Pipeline window suggested a patch without executable context, skipping', {
+          skill_id,
+          runtime,
+          sessionId,
+          changeType: evaluation.change_type,
+        });
+        continue;
+      }
+
+      if (evaluation.confidence < this.config.minConfidence) {
+        logger.debug('Pipeline window analysis confidence too low, skipping', {
+          skill_id,
+          sessionId,
+          confidence: evaluation.confidence,
+          minConfidence: this.config.minConfidence,
+        });
+        continue;
+      }
+
+      logger.info('Optimization task generated from window analysis', {
         skill_id,
+        sessionId,
+        change_type: evaluation.change_type,
         confidence: evaluation.confidence,
-        minConfidence: this.config.minConfidence,
       });
-      return null;
+
+      tasks.push({
+        skill_id,
+        shadow_id,
+        traces: windowTraces,
+        evaluation,
+      });
     }
 
-    logger.info('Optimization task generated from window analysis', {
-      skill_id,
-      change_type: evaluation.change_type,
-      confidence: evaluation.confidence,
-    });
-
-    return {
-      skill_id,
-      shadow_id,
-      traces,
-      evaluation,
-    };
+    return tasks;
   }
 
   /**

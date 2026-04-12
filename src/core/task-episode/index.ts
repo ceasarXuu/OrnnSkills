@@ -98,6 +98,10 @@ function isEpisodeOpen(episode: TaskEpisode): boolean {
   return !['closed', 'split'].includes(episode.state) && !['completed', 'failed', 'closed', 'split'].includes(episode.analysisStatus);
 }
 
+function isTraceWithinEpisodeWindow(episode: TaskEpisode, trace: Trace): boolean {
+  return trace.timestamp >= episode.startedAt;
+}
+
 function createEmptySnapshot(): TaskEpisodeSnapshot {
   return {
     updatedAt: new Date().toISOString(),
@@ -176,6 +180,11 @@ export class TaskEpisodeStore {
     episode.stats.turnsSinceLastProbe = Math.max(0, episode.turnIds.length - episode.probeState.lastProbeTurnIndex);
   }
 
+  private selectContextOwner(episodes: TaskEpisode[]): TaskEpisode | null {
+    if (episodes.length === 0) return null;
+    return [...episodes].sort((a, b) => String(b.lastActivityAt).localeCompare(String(a.lastActivityAt)))[0] ?? null;
+  }
+
   recordTrace(trace: Trace, context: TaskEpisodeTraceContext, sessionTraces: Trace[] = [trace]): TaskEpisode {
     const snapshot = this.readSnapshot();
     const existing = this.findActiveEpisode(snapshot.episodes, trace.session_id, context.skillId, context.runtime);
@@ -231,7 +240,11 @@ export class TaskEpisodeStore {
     }
 
     const normalizedSessionTraces = sessionTraces.length > 0 ? sessionTraces : [trace];
-    for (const sessionTrace of normalizedSessionTraces) {
+    const relevantSessionTraces = normalizedSessionTraces.filter((sessionTrace) =>
+      isTraceWithinEpisodeWindow(episode, sessionTrace)
+    );
+
+    for (const sessionTrace of relevantSessionTraces) {
       pushUnique(episode.sessionIds, sessionTrace.session_id);
       pushUnique(episode.traceRefs, sessionTrace.trace_id);
       pushUnique(episode.turnIds, sessionTrace.turn_id);
@@ -240,10 +253,10 @@ export class TaskEpisodeStore {
 
     const segment = episode.skillSegments.find((item) => item.skillId === context.skillId) ?? episode.skillSegments[0];
     pushUnique(segment.mappedTraceIds, trace.trace_id);
-    for (const sessionTrace of normalizedSessionTraces) {
+    for (const sessionTrace of relevantSessionTraces) {
       pushUnique(segment.relatedTraceIds, sessionTrace.trace_id);
     }
-    segment.lastRelatedTraceId = normalizedSessionTraces[normalizedSessionTraces.length - 1]?.trace_id ?? trace.trace_id;
+    segment.lastRelatedTraceId = relevantSessionTraces[relevantSessionTraces.length - 1]?.trace_id ?? trace.trace_id;
     segment.lastActivityAt = trace.timestamp;
     segment.status = episode.analysisStatus === 'running' ? 'analyzing' : 'active';
 
@@ -269,38 +282,39 @@ export class TaskEpisodeStore {
 
   recordContextTrace(trace: Trace): TaskEpisode[] {
     const snapshot = this.readSnapshot();
-    const affected = snapshot.episodes.filter((episode) =>
+    const candidates = snapshot.episodes.filter((episode) =>
       episode.runtime === trace.runtime &&
       episode.sessionIds.includes(trace.session_id) &&
+      isTraceWithinEpisodeWindow(episode, trace) &&
       isEpisodeOpen(episode)
     );
 
-    if (affected.length === 0) {
+    const owner = this.selectContextOwner(candidates);
+    if (!owner) {
       return [];
     }
 
-    for (const episode of affected) {
-      pushUnique(episode.traceRefs, trace.trace_id);
-      pushUnique(episode.turnIds, trace.turn_id);
-      episode.lastActivityAt = trace.timestamp;
+    pushUnique(owner.traceRefs, trace.trace_id);
+    pushUnique(owner.turnIds, trace.turn_id);
+    owner.lastActivityAt = trace.timestamp;
 
-      for (const segment of episode.skillSegments) {
-        pushUnique(segment.relatedTraceIds, trace.trace_id);
-        segment.lastRelatedTraceId = trace.trace_id;
-        segment.lastActivityAt = trace.timestamp;
-      }
-
-      this.recalculateStats(episode);
+    for (const segment of owner.skillSegments) {
+      pushUnique(segment.relatedTraceIds, trace.trace_id);
+      segment.lastRelatedTraceId = trace.trace_id;
+      segment.lastActivityAt = trace.timestamp;
     }
+
+    this.recalculateStats(owner);
 
     logger.debug('Task episode context trace attached', {
       projectPath: this.projectRoot,
       sessionId: trace.session_id,
       traceId: trace.trace_id,
-      affectedEpisodeCount: affected.length,
+      affectedEpisodeCount: 1,
+      ownerEpisodeId: owner.episodeId,
     });
     this.writeSnapshot(snapshot);
-    return affected;
+    return [owner];
   }
 
   shouldTriggerProbe(episode: TaskEpisode, trace: Trace): ProbeTriggerDecision {

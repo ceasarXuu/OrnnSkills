@@ -279,4 +279,60 @@ describe('ShadowManager deep analysis recovery chain', () => {
       queueSize: 0,
     });
   });
+
+  it('does not trigger a second window analysis while the first one is still running', async () => {
+    let resolveAnalysis: ((value: unknown) => void) | null = null;
+    const pendingAnalysis = new Promise((resolve) => {
+      resolveAnalysis = resolve;
+    });
+    analyzeWindowMock.mockImplementation(() => pendingAnalysis);
+
+    const manager = createShadowManager(testProjectPath);
+    await manager.init();
+
+    for (let index = 1; index <= 9; index += 1) {
+      await manager.processTrace(makeTrace(index, testProjectPath));
+    }
+
+    const firstRun = manager.processTrace(makeTrace(10, testProjectPath));
+    await vi.waitFor(() => {
+      expect(analyzeWindowMock).toHaveBeenCalledTimes(1);
+    });
+
+    const runningSnapshot = readTaskEpisodes(testProjectPath);
+    expect(runningSnapshot.episodes[0]).toMatchObject({
+      state: 'analyzing',
+      analysisStatus: 'running',
+    });
+
+    const secondRun = manager.processTrace(makeTrace(11, testProjectPath));
+    await Promise.resolve();
+
+    expect(analyzeWindowMock).toHaveBeenCalledTimes(1);
+
+    resolveAnalysis?.({
+      success: true,
+      model: 'deepseek/deepseek-chat',
+      decision: 'need_more_context',
+      userMessage: '需要继续等待更多上下文。',
+      nextWindowHint: {
+        suggestedTraceDelta: 6,
+        suggestedTurnDelta: 2,
+        waitForEventTypes: [],
+        mode: 'count_driven',
+      },
+      tokenUsage: {
+        promptTokens: 100,
+        completionTokens: 50,
+        totalTokens: 150,
+      },
+    });
+
+    await Promise.all([firstRun, secondRun]);
+
+    const analysisRequestedEvents = readDecisionEvents(testProjectPath).filter(
+      (event) => event.tag === 'analysis_requested'
+    );
+    expect(analysisRequestedEvents).toHaveLength(1);
+  });
 });

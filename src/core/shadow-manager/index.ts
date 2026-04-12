@@ -317,6 +317,15 @@ export class ShadowManager {
     }, recentTraces);
     const trigger = this.taskEpisodes.shouldTriggerProbe(episode, trace);
     if (!trigger.shouldProbe) {
+      if (episode.analysisStatus === 'running' || episode.state === 'analyzing') {
+        logger.debug('Skipping duplicate window analysis trigger while analysis is already running', {
+          traceId: trace.trace_id,
+          sessionId: eventContext.sessionId,
+          skillId: eventContext.skillId,
+          runtime: eventContext.runtime,
+          windowId: eventContext.windowId,
+        });
+      }
       return;
     }
 
@@ -612,6 +621,7 @@ export class ShadowManager {
       mode: 'count_driven' as const,
     };
 
+    this.taskEpisodes.markAnalysisState(context.sessionId, context.skillId, context.runtime, 'running');
     this.writeOptimizationCheckpoint('analyzing', context.skillId, null);
     this.recordAnalysisRequested(
       context,

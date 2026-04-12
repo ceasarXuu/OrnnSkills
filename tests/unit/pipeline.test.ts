@@ -4,12 +4,14 @@ import type { Trace } from '../../src/types/index.js';
 
 const {
   getRecentTracesMock,
+  getSessionTracesMock,
   mapAndGroupTracesMock,
   shadowGetMock,
   shadowReadContentMock,
   analyzeWindowMock,
 } = vi.hoisted(() => ({
   getRecentTracesMock: vi.fn(),
+  getSessionTracesMock: vi.fn(),
   mapAndGroupTracesMock: vi.fn(),
   shadowGetMock: vi.fn(),
   shadowReadContentMock: vi.fn(),
@@ -20,6 +22,7 @@ vi.mock('../../src/core/observer/trace-manager.js', () => ({
   createTraceManager: () => ({
     init: vi.fn().mockResolvedValue(undefined),
     getRecentTraces: getRecentTracesMock,
+    getSessionTraces: getSessionTracesMock,
   }),
 }));
 
@@ -62,6 +65,7 @@ function makeTrace(traceId: string, sessionId = 'sess-1'): Trace {
 describe('OptimizationPipeline', () => {
   beforeEach(() => {
     getRecentTracesMock.mockReset();
+    getSessionTracesMock.mockReset();
     mapAndGroupTracesMock.mockReset();
     shadowGetMock.mockReset();
     shadowReadContentMock.mockReset();
@@ -70,12 +74,24 @@ describe('OptimizationPipeline', () => {
 
   it('uses unified window analysis to generate optimization tasks', async () => {
     const traces = [makeTrace('trace-1'), makeTrace('trace-2')];
+    const sessionWindow = [
+      traces[0],
+      {
+        ...makeTrace('trace-context-1'),
+        event_type: 'assistant_output',
+        tool_name: undefined,
+        tool_args: undefined,
+        assistant_output: 'additional assistant context',
+        metadata: undefined,
+      },
+    ];
     getRecentTracesMock.mockResolvedValue(traces);
+    getSessionTracesMock.mockResolvedValue(sessionWindow);
     mapAndGroupTracesMock.mockReturnValue([
       {
         skill_id: 'test-skill',
         shadow_id: 'test-skill@/tmp/project#codex',
-        traces,
+        traces: [traces[0]],
         confidence: 0.9,
       },
     ]);
@@ -106,10 +122,15 @@ describe('OptimizationPipeline', () => {
     const tasks = await pipeline.runOnce();
 
     expect(analyzeWindowMock).toHaveBeenCalledTimes(1);
+    expect(analyzeWindowMock.mock.calls[0]?.[1]).toMatchObject({
+      sessionId: 'sess-1',
+      traces: sessionWindow,
+    });
     expect(tasks).toHaveLength(1);
     expect(tasks[0]).toMatchObject({
       skill_id: 'test-skill',
       shadow_id: 'test-skill@/tmp/project#codex',
+      traces: sessionWindow,
       evaluation: {
         should_patch: true,
         change_type: 'prune_noise',
@@ -121,6 +142,9 @@ describe('OptimizationPipeline', () => {
   it('skips task generation when the analysis asks for more context', async () => {
     const traces = [makeTrace('trace-1'), makeTrace('trace-2', 'sess-2')];
     getRecentTracesMock.mockResolvedValue(traces);
+    getSessionTracesMock.mockImplementation(async (sessionId: string) =>
+      traces.filter((trace) => trace.session_id === sessionId)
+    );
     mapAndGroupTracesMock.mockReturnValue([
       {
         skill_id: 'test-skill',
@@ -153,7 +177,7 @@ describe('OptimizationPipeline', () => {
 
     const tasks = await pipeline.runOnce();
 
-    expect(analyzeWindowMock).toHaveBeenCalledTimes(1);
+    expect(analyzeWindowMock).toHaveBeenCalledTimes(2);
     expect(tasks).toEqual([]);
   });
 });
