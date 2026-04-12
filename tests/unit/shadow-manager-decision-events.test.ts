@@ -103,6 +103,7 @@ describe('ShadowManager decision events', () => {
     evaluatorMock.evaluate.mockReturnValue({
       should_patch: true,
       change_type: 'prune_noise',
+      target_section: 'TODO',
       reason: 'Tool step was skipped repeatedly',
       source_sessions: ['sess-1'],
       confidence: 0.93,
@@ -155,6 +156,7 @@ describe('ShadowManager decision events', () => {
     evaluatorMock.evaluate.mockReturnValue({
       should_patch: true,
       change_type: 'prune_noise',
+      target_section: 'TODO',
       reason: 'Tool step was skipped repeatedly',
       source_sessions: ['sess-1'],
       confidence: 0.91,
@@ -185,5 +187,38 @@ describe('ShadowManager decision events', () => {
       changeType: 'prune_noise',
     });
     expect(events[1].detail).toContain('strategy execution failed');
+  });
+
+  it('does not enter error state when prune-noise evaluation lacks target section', async () => {
+    evaluatorMock.evaluate.mockReturnValue({
+      should_patch: true,
+      change_type: 'prune_noise',
+      reason: 'Tool step was skipped repeatedly',
+      source_sessions: ['sess-1'],
+      confidence: 0.91,
+      rule_name: 'repeated-drift',
+    });
+
+    const manager = createShadowManager(testProjectPath);
+    await manager.init();
+
+    await manager.processTrace(makeTrace('trace-missing-section', testProjectPath));
+
+    expect(patchGeneratorMock.generate).not.toHaveBeenCalled();
+
+    const events = readDecisionEvents(testProjectPath);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      tag: 'evaluation_result',
+      skillId: 'test-skill',
+      runtime: 'codex',
+      windowId: 'sess-1::test-skill',
+      status: 'continue_collecting',
+      traceId: 'trace-missing-section',
+      sessionId: 'sess-1',
+      ruleName: 'repeated-drift',
+      changeType: 'prune_noise',
+    });
+    expect(events[0].detail).toContain('缺少 target_section');
   });
 });

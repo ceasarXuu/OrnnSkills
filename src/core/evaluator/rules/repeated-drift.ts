@@ -1,5 +1,8 @@
+import { createChildLogger } from '../../../utils/logger.js';
 import { BaseRule } from '../base-rule.js';
 import type { Trace, EvaluationResult } from '../../../types/index.js';
+
+const logger = createChildLogger('repeated-drift-rule');
 
 /**
  * Repeated Drift 规则
@@ -45,13 +48,15 @@ export class RepeatedDriftRule extends BaseRule {
       return null;
     }
 
-    return {
-      should_patch: true,
-      change_type: 'prune_noise',
-      reason: `Skill section "${skippedTools[0]}" was skipped ${skipCount} times across ${sessionIds.length} sessions`,
-      source_sessions: sessionIds,
-      confidence,
-    };
+    // Current traces only tell us which tool path was skipped, not which markdown
+    // section in the skill should actually be pruned or rewritten.
+    logger.info('Repeated drift detected but no concrete skill section could be localized', {
+      skippedTool: skippedTools[0],
+      skipCount,
+      sessionCount: sessionIds.length,
+    });
+
+    return null;
   }
 
   /**

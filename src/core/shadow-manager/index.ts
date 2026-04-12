@@ -354,6 +354,29 @@ export class ShadowManager {
       return;
     }
 
+    const patchContextIssue = this.getPatchContextIssue(evaluation);
+    if (patchContextIssue) {
+      logger.warn('Skipping heuristic patch recommendation because patch context is incomplete', {
+        shadowId,
+        skillId: eventContext.skillId,
+        changeType: evaluation.change_type,
+        ruleName: evaluation.rule_name,
+        issue: patchContextIssue,
+      });
+      const probeOutcome = await this.maybeRunEpisodeProbe(episode, shadowId, trace, recentTraces, eventContext);
+      if (probeOutcome.handledDeepAnalysis) {
+        return;
+      }
+      this.recordEvaluationResult(
+        shadowId,
+        eventContext,
+        'continue_collecting',
+        `当前规则识别到了优化信号，但还不能安全落到具体修改位置：${patchContextIssue}`,
+        evaluation
+      );
+      return;
+    }
+
     await this.handleEvaluation(shadowId, evaluation, recentTraces, eventContext);
   }
 
@@ -386,6 +409,21 @@ export class ShadowManager {
       traceCount,
       sessionCount,
     };
+  }
+
+  private getPatchContextIssue(evaluation: EvaluationResult): string | null {
+    if (!evaluation.should_patch || !evaluation.change_type) {
+      return null;
+    }
+
+    if (
+      (evaluation.change_type === 'prune_noise' || evaluation.change_type === 'rewrite_section') &&
+      !evaluation.target_section?.trim()
+    ) {
+      return '缺少 target_section，无法定位需要修改的技能段落。';
+    }
+
+    return null;
   }
 
   private recordEvaluationResult(
@@ -677,6 +715,26 @@ export class ShadowManager {
         evaluation
       );
       await this.recordSkillFeedback(context, evaluation, traces);
+      this.taskEpisodes.markAnalysisState(context.sessionId, context.skillId, context.runtime, 'completed');
+      this.writeOptimizationCheckpoint('idle', null, null);
+      return true;
+    }
+
+    const patchContextIssue = this.getPatchContextIssue(evaluation);
+    if (patchContextIssue) {
+      logger.warn('Deep analysis returned an incomplete patch recommendation; skipping auto patch', {
+        shadowId,
+        skillId: context.skillId,
+        changeType: evaluation.change_type,
+        issue: patchContextIssue,
+      });
+      this.recordEvaluationResult(
+        shadowId,
+        context,
+        'analysis_incomplete',
+        `深度分析建议了修改，但缺少可执行的定位信息：${patchContextIssue}`,
+        evaluation
+      );
       this.taskEpisodes.markAnalysisState(context.sessionId, context.skillId, context.runtime, 'completed');
       this.writeOptimizationCheckpoint('idle', null, null);
       return true;

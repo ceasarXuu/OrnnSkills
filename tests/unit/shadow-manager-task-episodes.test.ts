@@ -128,6 +128,7 @@ describe('ShadowManager task episodes', () => {
     evaluatorMock.evaluate.mockReturnValue({
       should_patch: true,
       change_type: 'prune_noise',
+      target_section: 'TODO',
       reason: 'Tool step was skipped repeatedly',
       source_sessions: ['sess-1'],
       confidence: 0.93,

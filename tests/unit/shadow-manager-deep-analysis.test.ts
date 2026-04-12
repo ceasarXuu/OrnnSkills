@@ -226,6 +226,7 @@ describe('ShadowManager deep analysis recovery chain', () => {
       evaluation: {
         should_patch: true,
         change_type: 'prune_noise',
+        target_section: 'TODO',
         reason: '需要删掉多余的回显说明',
         source_sessions: ['sess-1'],
         confidence: 0.91,

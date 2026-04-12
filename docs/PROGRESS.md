@@ -67,6 +67,7 @@
 - 📝 记录恢复经验：兼容层方法不能只在“初始化完成后”才可读；旧 CLI 和脚本里存在 `journal.init()` 未 `await` 就直接查询默认值的历史调用方式，因此 `getLatestRevision / getSnapshots / getJournalRecords` 这类兼容方法在未初始化时也要返回安全默认值，而不是直接抛错
 - 📝 记录恢复经验：只恢复 journal 查询接口还不够，生产侧也要保留“改动前”的版本；如果 snapshot 只在改动后按间隔创建，第一次自动优化之前的基线会永久丢失，导致 rollback 语义残缺。正确做法是在写入新 shadow 前先对当前 revision 建立 snapshot
 - 📝 记录恢复经验：分析失败信息不要直接把错误码或异常串抛给 dashboard；正确做法是保留两层信息：一层是按当前语言生成的“失败原因 / 影响 / 建议动作”，另一层才是 `technicalDetail` 原文。否则中文界面很容易再次混入 `invalid_analysis_json`、`Empty content in LLM response` 这类底层词汇
+- 📝 记录恢复经验：任何 evaluator / analyzer 产出的 `change_type`，都必须和 patch generator 的必填上下文字段一起校验；像 `prune_noise`、`rewrite_section` 这类策略如果没有 `target_section`，继续往下走只会稳定地产生“优化状态=error”的假故障，正确做法是先降级为继续收集证据或分析不完整
 - 📝 记录恢复经验：dashboard 术语统一不能只改字典，不少可见词是直接硬编码在内嵌脚本模板里的；这次 `Skill` 列头就是漏网点。做这类清理时要同时扫 `i18n.ts` 和 `ui.ts` 模板字符串，否则会出现“字典已改、页面仍混英”的假完成
 - 📝 记录恢复经验：中文术语清理要按页面分层扫。活动页、配置页、成本页对同一个概念往往用了不同叫法；只在一个 tab 内局部替换，很容易留下 `provider / scope / model registry` 这类跨页面残留
 - 📝 记录恢复经验：配置页如果把 `defaultProvider` 从独立下拉改成 provider 行内互斥开关，不能只改 UI；`renderConfigPanel / saveProjectConfig / checkProvidersConnectivity / addProviderRow / removeProviderRow` 必须一起切换，否则一做“检查连通性”或重新渲染，启用态就会悄悄回退
