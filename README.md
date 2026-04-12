@@ -103,7 +103,7 @@ ornn skills unfreeze <skill-id>
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                     Main Agent Runtime                       │
+│                      Main Agent Host                         │
 │                  (Codex/OpenCode/Claude)                     │
 └─────────────────────────────────────────────────────────────┘
                               │
@@ -165,7 +165,7 @@ The system uses 6 strategies to map traces to corresponding skills:
 
 The system implements a complete automatic optimization loop:
 
-1. **Trace Collection**: Collect execution traces from Agent runtime
+1. **Trace Collection**: Collect execution traces from the Agent host
 2. **Trace-Skill Mapping**: Intelligently map traces to corresponding skills
 3. **Evaluation**: Analyze trace patterns and identify optimization opportunities
 4. **Task Generation**: Create optimization tasks
@@ -206,7 +206,7 @@ your-project/
     ├── state/
     │   ├── sessions.db         # SQLite database
     │   ├── traces.ndjson       # Raw traces
-    │   └── runtime_state.json  # Runtime state
+    │   └── runtime_state.json  # Host state
     └── config/
         └── settings.toml       # Project configuration
 ```

@@ -2,7 +2,7 @@
 
 ## 概述
 
-本报告记录了 Claude Code 和 OpenCode 两个 Agent 运行时的 trace/log 存储位置、格式和结构，用于指导 OrnnSkills 的 Observer 实现。
+本报告记录了 Claude Code 和 OpenCode 两个 Agent 宿主的 trace/log 存储位置、格式和结构，用于指导 OrnnSkills 的 Observer 实现。
 
 ---
 

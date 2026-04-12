@@ -38,7 +38,7 @@ export function createRollbackCommand(): Command {
     .option('-t, --to <revision>', 'Rollback to specific revision')
     .option('-s, --snapshot', 'Rollback to latest snapshot')
     .option('-i, --initial', 'Rollback to initial version (revision 0)')
-    .option('--runtime <runtime>', 'Runtime scope: codex | claude | opencode')
+    .option('--runtime <runtime>', 'Host scope: codex | claude | opencode')
     .option('-p, --project <path>', 'Project root path', process.cwd())
     .option('-f, --force', 'Skip confirmation prompt', false)
     .alias('revert')

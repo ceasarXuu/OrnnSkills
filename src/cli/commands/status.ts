@@ -29,7 +29,7 @@ export function createStatusCommand(): Command {
     .description('Show status of shadow skills in current project')
     .option('-p, --project <path>', 'Project root path', process.cwd())
     .option('-s, --skill <id>', 'Show detailed status for specific skill')
-    .option('-r, --runtime <runtime>', 'Runtime scope: codex | claude | opencode')
+    .option('-r, --runtime <runtime>', 'Host scope: codex | claude | opencode')
     .option('-i, --interactive', 'Select skill interactively', false)
     .alias('ls')
     .alias('list')

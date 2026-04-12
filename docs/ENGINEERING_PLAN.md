@@ -280,7 +280,7 @@ project/
     ├── state/
     │   ├── sessions.db         # SQLite 数据库
     │   ├── traces.ndjson       # 原始 trace
-    │   └── runtime_state.json  # 运行时状态
+    │   └── runtime_state.json  # 宿主状态
     └── config/
         └── settings.toml       # 项目配置
 ```

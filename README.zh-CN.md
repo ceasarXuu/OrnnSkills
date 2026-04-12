@@ -103,7 +103,7 @@ ornn skills unfreeze <skill-id>
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                     Main Agent Runtime                       │
+│                      Main Agent Host                         │
 │                  (Codex/OpenCode/Claude)                     │
 └─────────────────────────────────────────────────────────────┘
                               │
@@ -165,7 +165,7 @@ ornn skills unfreeze <skill-id>
 
 系统实现了完整的自动优化闭环：
 
-1. **Trace 采集**: 从 Agent 运行时采集执行 trace
+1. **Trace 采集**: 从 Agent 宿主采集执行 trace
 2. **Trace-Skill 映射**: 将 trace 智能映射到对应的 skill
 3. **评估**: 分析 trace 模式，识别优化机会
 4. **生成任务**: 创建优化任务
@@ -206,7 +206,7 @@ your-project/
     ├── state/
     │   ├── sessions.db         # SQLite 数据库
     │   ├── traces.ndjson       # 原始 trace
-    │   └── runtime_state.json  # 运行时状态
+    │   └── runtime_state.json  # 宿主状态
     └── config/
         └── settings.toml       # 项目配置
 ```

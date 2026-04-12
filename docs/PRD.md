@@ -98,7 +98,7 @@ repo-x/.ornn/skills/A/
 
 可被后台自动优化
 
-与 origin A 保持来源关系，但不共享运行时状态
+与 origin A 保持来源关系，但不共享宿主状态
 
 2.3 Evolution Journal
 
@@ -413,7 +413,7 @@ append-only 演化记录。
 本地 trace、session 状态、运行态缓存。
 
 8. 技术架构
-Main Agent Runtime
+Main Agent Host
   ├─ Codex
   ├─ OpenCode
   └─ Claude Code
@@ -1000,5 +1000,4 @@ patch 需要重复证据
 这版产品最准确的定义应该是：
 
 OrnnSkills 是一个后台常驻的本地元 Agent。它不管理复杂的 skill 分支树，而是为每个项目维护全局 skills 的影子副本，并基于真实 trace 对影子副本做持续的小步自动优化，同时用演化日志和 checkpoint 保证整个过程可追踪、可回滚。
-
 

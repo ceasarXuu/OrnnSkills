@@ -27,7 +27,7 @@ export function createDiffCommand(): Command {
     .argument('<skill>', 'Skill ID to show diff for')
     .option('-r, --revision <number>', 'Compare with specific revision')
     .option('-o, --origin', 'Compare with origin skill')
-    .option('--runtime <runtime>', 'Runtime scope: codex | claude | opencode')
+    .option('--runtime <runtime>', 'Host scope: codex | claude | opencode')
     .option('-p, --project <path>', 'Project root path', process.cwd())
     .action(async (skillId: string, options: DiffOptions) => {
       validateSkillIdOrExit(skillId, 'Validate skill ID', options.project);

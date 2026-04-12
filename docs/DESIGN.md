@@ -312,7 +312,7 @@ Tracked Skills: 1 | Token Usage: 5,678 | Press Ctrl+C to stop
 ```markdown
 <!-- Ornn Version: v3 -->
 <!-- Origin: ~/.codex/skills/code-review -->
-<!-- Runtime: codex -->
+<!-- Host: codex -->
 <!-- Project: /Users/xuzhang/OrnnSkills -->
 <!-- Last Optimized: 2026-03-24T10:40:18Z -->
 <!-- Optimization Reason: missing edge case handling -->

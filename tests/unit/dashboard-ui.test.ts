@@ -180,6 +180,18 @@ function loadDashboardTestHarness(
 }
 
 describe('dashboard ui recovery', () => {
+  it('uses host terminology consistently in localized dashboard copy', () => {
+    const zhHtml = getDashboardHtml(47432, 'zh', 'test-build-id');
+    expect(zhHtml).toContain('宿主');
+    expect(zhHtml).not.toContain('客户端运行时错误');
+    expect(zhHtml).toContain('客户端错误已经进入上报队列');
+
+    const enHtml = getDashboardHtml(47432, 'en', 'test-build-id');
+    expect(enHtml).toContain('Host');
+    expect(enHtml).not.toContain('client runtime errors');
+    expect(enHtml).toContain('client errors have been queued for reporting');
+  });
+
   it('renders decision summary cards and metric groups in overview', () => {
     const { dashboard, getElement } = loadDashboardTestHarness();
     const projectPath = '/tmp/ornn-project';

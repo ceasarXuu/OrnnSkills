@@ -17,15 +17,15 @@ interface SyncOptions {
 
 /**
  * Sync 命令
- * 将 shadow skill 同步到项目 runtime 路径（不改全局）
+ * 将 shadow skill 同步到项目宿主路径（不改全局）
  */
 export function createSyncCommand(): Command {
   const sync = new Command('sync');
 
   sync
-    .description('Sync shadow skill to project runtime path (apply optimizations)')
+    .description('Sync shadow skill to project host path (apply optimizations)')
     .argument('<skill>', 'Skill ID to sync')
-    .option('-r, --runtime <runtime>', 'Runtime scope: codex | claude | opencode')
+    .option('-r, --runtime <runtime>', 'Host scope: codex | claude | opencode')
     .option('-p, --project <path>', 'Project root path', process.cwd())
     .option('-f, --force', 'Force sync without confirmation', false)
     .action(async (skillId: string, options: SyncOptions) => {
@@ -67,10 +67,10 @@ export function createSyncCommand(): Command {
           return;
         }
 
-        cliInfo(`\n📦 Syncing skill "${skillId}" to project runtime...`);
+        cliInfo(`\n📦 Syncing skill "${skillId}" to project host...`);
         cliInfo(`  Shadow: ${shadowPath}`);
-        cliInfo(`  Runtime target: ${targetPath}`);
-        cliInfo(`  Runtime: ${targetRuntime}`);
+        cliInfo(`  Host target: ${targetPath}`);
+        cliInfo(`  Host: ${targetRuntime}`);
         cliInfo('');
 
         const changes = countChanges(deployedContent ?? '', shadowContent);
@@ -92,10 +92,10 @@ export function createSyncCommand(): Command {
 
         if (!options.force) {
           const ok = await confirmAction({
-            message: 'Sync this optimized skill to project runtime path?',
+            message: 'Sync this optimized skill to project host path?',
             warningLines: [
-              `⚠️  This will overwrite the project runtime skill file with the optimized shadow version.`,
-              `   Runtime target: ${targetPath}`,
+              `⚠️  This will overwrite the project host skill file with the optimized shadow version.`,
+              `   Host target: ${targetPath}`,
             ],
           });
 
@@ -125,10 +125,10 @@ export function createSyncCommand(): Command {
           });
         }
 
-        cliInfo(`\n✓ Successfully synced "${skillId}" to project runtime!`);
+        cliInfo(`\n✓ Successfully synced "${skillId}" to project host!`);
         cliInfo(`  The optimized skill is now active for this project.`);
         cliInfo('');
-        cliInfo(`  Runtime path: ${targetPath}`);
+        cliInfo(`  Host path: ${targetPath}`);
         cliInfo(`  Version: v${version.version}`);
         cliInfo('');
         cliInfo(`  Note: This does not modify global skills.`);

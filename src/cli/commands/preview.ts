@@ -19,7 +19,7 @@ export function createPreviewCommand(): Command {
     .description('Preview changes that would be applied to a shadow skill')
     .argument('<skill>', 'Skill ID to preview')
     .option('-r, --revision <rev>', 'Preview changes from specific revision')
-    .option('--runtime <runtime>', 'Runtime scope: codex | claude | opencode')
+    .option('--runtime <runtime>', 'Host scope: codex | claude | opencode')
     .option('-p, --project <path>', 'Project root path', process.cwd())
     .action(async (skillId: string, options: PreviewOptions) => {
       validateSkillIdOrExit(skillId, 'Preview skill', options.project);

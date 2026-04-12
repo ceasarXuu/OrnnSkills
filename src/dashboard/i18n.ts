@@ -359,7 +359,7 @@ const en: I18nStrings = {
   configUserConfirmHelp:
     'When enabled, optimization changes require manual confirmation before write-back; disable for fully automatic flow.',
   configRuntimeSyncHelp:
-    'When enabled, latest skill content is synced back to project skills so all runtimes share the same optimized version.',
+    'When enabled, latest skill content is synced back to project skills so all hosts share the same optimized version.',
   configProvidersLabel: 'Providers',
   configProvidersHelp:
     'Configure providers with dropdown + inputs. Pick provider, choose or type model, paste API Key, and mark exactly one provider as active.',
@@ -585,7 +585,7 @@ const en: I18nStrings = {
   initProjectsLoadFailed: 'Failed to load projects',
   initRecoveryWaiting: 'Initialization failed. Waiting for backend data to recover...',
   projectRenderFailed: 'Project data loaded, but the dashboard panel failed to render.',
-  projectRenderHint: 'Refresh the page. If it still reproduces, client runtime errors have been queued for reporting.',
+  projectRenderHint: 'Refresh the page. If it still reproduces, client errors have been queued for reporting.',
   runtimeBuildMismatchPrefix: 'build mismatch',
   runtimeHostUnavailable: 'host unavailable',
 
@@ -894,7 +894,7 @@ const zh: I18nStrings = {
   initProjectsLoadFailed: '加载项目失败',
   initRecoveryWaiting: '初始化失败，正在等待后台数据自动恢复...',
   projectRenderFailed: '项目数据已加载，但仪表板面板渲染失败。',
-  projectRenderHint: '请先刷新页面；如果仍能复现，客户端运行时错误已经进入上报队列。',
+  projectRenderHint: '请先刷新页面；如果仍能复现，客户端错误已经进入上报队列。',
   runtimeBuildMismatchPrefix: '版本不一致',
   runtimeHostUnavailable: '宿主信息不可用',
 
