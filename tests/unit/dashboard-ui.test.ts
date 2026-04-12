@@ -493,6 +493,9 @@ describe('dashboard ui recovery', () => {
     expect(html).toContain('推理');
     expect(html).toContain('函数调用');
     expect(html).toContain('$0.13');
+    expect(html).toContain('class="cost-shell"');
+    expect(html).toContain('class="cost-hero"');
+    expect(html).toContain('class="cost-rail"');
   });
 
   it('renders the richer cost tab with fully localized English copy', () => {
@@ -584,6 +587,9 @@ describe('dashboard ui recovery', () => {
     expect(html).toContain('Latest Call');
     expect(html).toContain('Top Skills by Token Spend');
     expect(html).toContain('LiteLLM Signals');
+    expect(html).toContain('class="cost-shell"');
+    expect(html).toContain('class="cost-hero"');
+    expect(html).toContain('class="cost-rail"');
     expect(html).toContain(
       'Calls, input tokens, output tokens, total tokens, average latency, latest call, and rollups by model, scope, and skill.'
     );

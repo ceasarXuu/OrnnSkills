@@ -258,6 +258,8 @@
 - ✅ 修复成本看板长期无数据的 episode 统计口径问题：probe 现在按 session 窗口累计 trace，而不是只看映射命中的少量 trace
 - ✅ 新增 `shadow-manager-task-episodes` 回归测试，覆盖“session 已达阈值但仅部分 trace 映射到 skill”时仍应触发 probe
 - 📝 补充调试经验：当成本看板为空时，先核对 `.ornn/state/agent-usage.ndjson` 是否存在，再对照 `task-episodes.json` 的 `totalTraceCount` 与 `mappedTraceCount` 是否失衡
+- ✅ 重做成本页布局：改成 `hero + summary grid + main table + side rail` 的层次结构，弱化“堆表格”观感
+- 📝 记录前端经验：成本页这类信息密度高的看板，优先把“主结论”放到 hero，再把拆解放到侧栏，避免所有卡片权重一致
 
 ---
 

@@ -332,6 +332,126 @@ export function getDashboardHtml(_port: number, lang: Language = 'en', buildId =
   .detail-copy-btn:hover, .detail-view-btn:hover { text-decoration: underline; }
 
   /* Cost tab */
+  .cost-shell { display: flex; flex-direction: column; gap: 14px; }
+  .cost-hero {
+    display: grid;
+    grid-template-columns: minmax(280px, 1.05fr) minmax(0, 1.95fr);
+    gap: 12px;
+    align-items: stretch;
+  }
+  .cost-hero-main {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid rgba(88,166,255,.2);
+    border-radius: 12px;
+    padding: 16px;
+    background:
+      radial-gradient(circle at top left, rgba(57,211,83,.18), transparent 42%),
+      radial-gradient(circle at bottom right, rgba(88,166,255,.16), transparent 46%),
+      linear-gradient(145deg, rgba(20,31,37,.98), rgba(16,23,32,.96));
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
+  }
+  .cost-hero-main::after {
+    content: '';
+    position: absolute;
+    inset: auto -40px -40px auto;
+    width: 140px;
+    height: 140px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(88,166,255,.15), transparent 68%);
+    pointer-events: none;
+  }
+  .cost-eyebrow {
+    font-size: 10px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .cost-hero-value {
+    margin-top: 10px;
+    font-size: 34px;
+    line-height: 1;
+    font-weight: 700;
+    color: var(--green);
+    letter-spacing: -.03em;
+  }
+  .cost-hero-copy {
+    margin-top: 10px;
+    max-width: 30ch;
+    font-size: 11px;
+    line-height: 1.6;
+    color: var(--text);
+  }
+  .cost-hero-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 14px;
+  }
+  .cost-hero-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 9px;
+    border-radius: 999px;
+    border: 1px solid rgba(88,166,255,.2);
+    background: rgba(15,23,30,.72);
+    color: var(--text);
+    font-size: 10px;
+  }
+  .cost-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
+  @media (max-width: 1180px) {
+    .cost-hero { grid-template-columns: 1fr; }
+    .cost-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (max-width: 720px) {
+    .cost-summary-grid { grid-template-columns: 1fr; }
+  }
+  .cost-summary-card {
+    min-height: 92px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    border: 1px solid rgba(48,54,61,.88);
+    background: linear-gradient(180deg, rgba(23,28,37,.96), rgba(19,23,31,.96));
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.03);
+  }
+  .cost-summary-label { font-size: 10px; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; }
+  .cost-summary-value { margin-top: 8px; font-size: 18px; font-weight: 650; color: var(--text); letter-spacing: -.02em; }
+  .cost-summary-sub { margin-top: 5px; font-size: 10px; color: var(--muted); line-height: 1.5; }
+  .cost-board {
+    display: grid;
+    grid-template-columns: minmax(0, 1.55fr) minmax(300px, .82fr);
+    gap: 12px;
+    align-items: start;
+  }
+  @media (max-width: 1080px) { .cost-board { grid-template-columns: 1fr; } }
+  .cost-main, .cost-rail { display: flex; flex-direction: column; gap: 12px; }
+  .cost-model-card {
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .cost-model-summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  @media (max-width: 820px) { .cost-model-summary { grid-template-columns: 1fr; } }
+  .cost-model-stat {
+    padding: 10px 12px;
+    border: 1px solid rgba(48,54,61,.78);
+    border-radius: 8px;
+    background: rgba(13,17,23,.52);
+  }
+  .cost-model-stat-label { font-size: 9px; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
+  .cost-model-stat-value { margin-top: 6px; font-size: 16px; font-weight: 650; color: var(--text); }
+  .cost-model-stat-sub { margin-top: 4px; font-size: 10px; color: var(--muted); }
+  .cost-rail .card { border-radius: 10px; }
+
   .cost-stats-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
   @media (max-width: 1100px) { .cost-stats-row { grid-template-columns: repeat(2, 1fr); } }
   @media (max-width: 720px) { .cost-stats-row { grid-template-columns: 1fr; } }
@@ -382,7 +502,7 @@ export function getDashboardHtml(_port: number, lang: Language = 'en', buildId =
   .cost-table { width: 100%; border-collapse: collapse; }
   .cost-table th, .cost-table td {
     font-size: 10px;
-    padding: 8px 10px;
+    padding: 10px 12px;
     border-bottom: 1px solid rgba(48,54,61,.5);
     vertical-align: top;
     text-align: left;
@@ -392,7 +512,9 @@ export function getDashboardHtml(_port: number, lang: Language = 'en', buildId =
     text-transform: uppercase;
     letter-spacing: .06em;
     white-space: nowrap;
+    background: rgba(13,17,23,.75);
   }
+  .cost-table tbody tr:hover { background: rgba(88,166,255,.04); }
   .cost-table tr:last-child td { border-bottom: none; }
   .capability-pills { display: flex; flex-wrap: wrap; gap: 6px; }
   .capability-pill {
@@ -2112,6 +2234,29 @@ function renderCostPanel(projectPath) {
   const hasReasoningSurcharge = modelRows.some(
     (row) => row.detail && Number(row.detail.outputCostPerReasoningToken) > 0
   );
+  const leadModel = modelRows[0] || null;
+  const leadScope = scopeRows[0] || null;
+  const leadSkill = skillRows[0] || null;
+
+  function renderSummaryCard(label, value, sub) {
+    return '<div class="cost-summary-card">' +
+      '<div class="cost-summary-label">' + escHtml(label) + '</div>' +
+      '<div class="cost-summary-value">' + escHtml(value) + '</div>' +
+      '<div class="cost-summary-sub">' + escHtml(sub) + '</div>' +
+    '</div>';
+  }
+
+  function renderHeroPill(text) {
+    return '<span class="cost-hero-pill">' + escHtml(text) + '</span>';
+  }
+
+  function renderModelStat(label, value, sub) {
+    return '<div class="cost-model-stat">' +
+      '<div class="cost-model-stat-label">' + escHtml(label) + '</div>' +
+      '<div class="cost-model-stat-value">' + escHtml(value) + '</div>' +
+      '<div class="cost-model-stat-sub">' + escHtml(sub) + '</div>' +
+    '</div>';
+  }
 
   const modelHtml = modelRows.map((row) =>
     '<tr>' +
@@ -2148,55 +2293,50 @@ function renderCostPanel(projectPath) {
     '</tr>'
   ).join('');
 
-  return '<div class="cost-stats-row">' +
-      '<div class="stat-card cost-spotlight">' +
-        '<div class="stat-label">' + t('costEstimated') + '</div>' +
-        '<div class="stat-value cost-accent">' + (pricedModelCount > 0 ? formatUsd(totalEstimatedSpend) : '—') + '</div>' +
-        '<div class="stat-sub">' + (pricedModelCount > 0 ? t('costEstimatedSub') : t('costUnknownPricing')) + '</div>' +
+  return '<div class="cost-shell">' +
+    '<div class="cost-hero">' +
+      '<div class="cost-hero-main">' +
+        '<div class="cost-eyebrow">' + escHtml(t('costEstimated')) + '</div>' +
+        '<div class="cost-hero-value">' + escHtml(pricedModelCount > 0 ? formatUsd(totalEstimatedSpend) : '—') + '</div>' +
+        '<div class="cost-hero-copy">' + escHtml(pricedModelCount > 0 ? t('costEstimatedSub') : t('costUnknownPricing')) + '</div>' +
+        '<div class="cost-hero-meta">' +
+          renderHeroPill(formatPlainNumber(modelRows.length) + ' ' + t('costModelCount')) +
+          renderHeroPill(t('costCalls') + ' · ' + formatPlainNumber(usage.callCount)) +
+          (leadScope ? renderHeroPill(leadScope.key + ' · ' + formatUsageCompact(leadScope.bucket.totalTokens || 0)) : '') +
+          (leadSkill ? renderHeroPill(leadSkill.key + ' · ' + formatUsageCompact(leadSkill.bucket.totalTokens || 0)) : '') +
+        '</div>' +
       '</div>' +
-      '<div class="stat-card">' +
-        '<div class="stat-label">' + t('costCalls') + '</div>' +
-        '<div class="stat-value">' + formatPlainNumber(usage.callCount) + '</div>' +
-        '<div class="stat-sub">' + t('costCallsSub') + '</div>' +
-      '</div>' +
-      '<div class="stat-card">' +
-        '<div class="stat-label">' + t('costInputTokens') + '</div>' +
-        '<div class="stat-value">' + formatUsageCompact(usage.promptTokens) + '</div>' +
-        '<div class="stat-sub">' + t('costInputTokensSub') + '</div>' +
-      '</div>' +
-      '<div class="stat-card">' +
-        '<div class="stat-label">' + t('costOutputTokens') + '</div>' +
-        '<div class="stat-value">' + formatUsageCompact(usage.completionTokens) + '</div>' +
-        '<div class="stat-sub">' + t('costOutputTokensSub') + '</div>' +
-      '</div>' +
-    '</div>' +
-    '<div class="cost-stats-row">' +
-      '<div class="stat-card">' +
-        '<div class="stat-label">' + t('costTotalTokens') + '</div>' +
-        '<div class="stat-value">' + formatUsageCompact(usage.totalTokens) + '</div>' +
-        '<div class="stat-sub">' + t('costTotalTokensSub') + '</div>' +
-      '</div>' +
-      '<div class="stat-card">' +
-        '<div class="stat-label">' + t('costAvgLatency') + '</div>' +
-        '<div class="stat-value">' + formatDurationMs(usage.avgDurationMs) + '</div>' +
-        '<div class="stat-sub">' + t('costAvgLatencySub') + '</div>' +
-      '</div>' +
-      '<div class="stat-card">' +
-        '<div class="stat-label">' + t('costAvgTokensPerCall') + '</div>' +
-        '<div class="stat-value">' + formatUsageCompact(avgTokensPerCall) + '</div>' +
-        '<div class="stat-sub">' + t('costAvgTokensPerCallSub') + '</div>' +
-      '</div>' +
-      '<div class="stat-card">' +
-        '<div class="stat-label">' + t('costLastCall') + '</div>' +
-        '<div class="stat-value" style="font-size:15px">' + (usage.lastCallAt ? timeAgo(usage.lastCallAt) : '—') + '</div>' +
-        '<div class="stat-sub">' + t('costLastCallSub') + '</div>' +
+      '<div class="cost-summary-grid">' +
+        renderSummaryCard(t('costInputTokens'), formatUsageCompact(usage.promptTokens), t('costInputTokensSub')) +
+        renderSummaryCard(t('costOutputTokens'), formatUsageCompact(usage.completionTokens), t('costOutputTokensSub')) +
+        renderSummaryCard(t('costTotalTokens'), formatUsageCompact(usage.totalTokens), t('costTotalTokensSub')) +
+        renderSummaryCard(t('costAvgLatency'), formatDurationMs(usage.avgDurationMs), t('costAvgLatencySub')) +
+        renderSummaryCard(t('costAvgTokensPerCall'), formatUsageCompact(avgTokensPerCall), t('costAvgTokensPerCallSub')) +
+        renderSummaryCard(t('costLastCall'), usage.lastCallAt ? timeAgo(usage.lastCallAt) : '—', t('costLastCallSub')) +
       '</div>' +
     '</div>' +
-    '<div class="cost-layout">' +
-      '<div class="cost-stack">' +
-        '<div class="card">' +
+    '<div class="cost-board">' +
+      '<div class="cost-main">' +
+        '<div class="card cost-model-card">' +
           '<div class="card-header"><span>' + t('costModelSpend') + '</span><span style="color:var(--muted)">' + formatPlainNumber(modelRows.length) + ' ' + t('costModelCount') + '</span></div>' +
           '<div class="card-body">' +
+            '<div class="cost-model-summary">' +
+              renderModelStat(
+                t('costTableModel'),
+                leadModel ? leadModel.key : '—',
+                leadModel ? (formatUsageCompact(leadModel.bucket.totalTokens || 0) + ' ' + t('costTableTokensSuffix')) : t('costScopeEmpty')
+              ) +
+              renderModelStat(
+                t('costEstimated'),
+                formatPlainNumber(pricedModelCount) + '/' + formatPlainNumber(modelRows.length),
+                pricedModelCount > 0 ? t('costPricingSource') : t('costUnknownPricing')
+              ) +
+              renderModelStat(
+                t('costLastCall'),
+                usage.lastCallAt ? timeAgo(usage.lastCallAt) : '—',
+                usage.callCount > 0 ? (formatPlainNumber(usage.callCount) + ' ' + t('costTableCallsSuffix')) : t('costCallsSub')
+              ) +
+            '</div>' +
             '<div class="cost-table-wrap">' +
               '<table class="cost-table">' +
                 '<thead><tr>' +
@@ -2214,7 +2354,7 @@ function renderCostPanel(projectPath) {
           '</div>' +
         '</div>' +
       '</div>' +
-      '<div class="cost-stack">' +
+      '<div class="cost-rail">' +
         renderCostBreakdown(t('costScopeBreakdown'), scopeRows, t('costScopeEmpty'), (row) => formatUsageCompact(row.bucket.totalTokens || 0), t('costTableTokensSuffix')) +
         renderCostBreakdown(t('costSkillBreakdown'), skillRows, t('costSkillEmpty'), (row) => formatUsageCompact(row.bucket.totalTokens || 0), t('costTableTokensSuffix')) +
         '<div class="card">' +
@@ -2229,7 +2369,8 @@ function renderCostPanel(projectPath) {
           '</div>' +
         '</div>' +
       '</div>' +
-    '</div>';
+    '</div>' +
+  '</div>';
 }
 
 // ─── Main Panel ───────────────────────────────────────────────────────────────
