@@ -5,14 +5,14 @@ import type { Trace } from '../../src/types/index.js';
 const {
   getRecentTracesMock,
   getSessionTracesMock,
-  mapAndGroupTracesMock,
+  mapTraceMock,
   shadowGetMock,
   shadowReadContentMock,
   analyzeWindowMock,
 } = vi.hoisted(() => ({
   getRecentTracesMock: vi.fn(),
   getSessionTracesMock: vi.fn(),
-  mapAndGroupTracesMock: vi.fn(),
+  mapTraceMock: vi.fn(),
   shadowGetMock: vi.fn(),
   shadowReadContentMock: vi.fn(),
   analyzeWindowMock: vi.fn(),
@@ -29,7 +29,14 @@ vi.mock('../../src/core/observer/trace-manager.js', () => ({
 vi.mock('../../src/core/trace-skill-mapper/index.js', () => ({
   createTraceSkillMapper: () => ({
     init: vi.fn().mockResolvedValue(undefined),
-    mapAndGroupTraces: mapAndGroupTracesMock,
+    mapTrace: mapTraceMock,
+    getMappingStats: vi.fn().mockReturnValue({
+      total_mappings: 0,
+      by_skill: {},
+      avg_confidence: 0,
+    }),
+    cleanupOldMappings: vi.fn(),
+    close: vi.fn(),
   }),
 }));
 
@@ -66,13 +73,13 @@ describe('OptimizationPipeline', () => {
   beforeEach(() => {
     getRecentTracesMock.mockReset();
     getSessionTracesMock.mockReset();
-    mapAndGroupTracesMock.mockReset();
+    mapTraceMock.mockReset();
     shadowGetMock.mockReset();
     shadowReadContentMock.mockReset();
     analyzeWindowMock.mockReset();
   });
 
-  it('uses unified window analysis to generate optimization tasks', async () => {
+  it('builds optimization tasks from full session timelines instead of mapped-only batches', async () => {
     const traces = [makeTrace('trace-1'), makeTrace('trace-2')];
     const sessionWindow = [
       traces[0],
@@ -87,14 +94,24 @@ describe('OptimizationPipeline', () => {
     ];
     getRecentTracesMock.mockResolvedValue(traces);
     getSessionTracesMock.mockResolvedValue(sessionWindow);
-    mapAndGroupTracesMock.mockReturnValue([
-      {
-        skill_id: 'test-skill',
-        shadow_id: 'test-skill@/tmp/project#codex',
-        traces: [traces[0]],
-        confidence: 0.9,
-      },
-    ]);
+    mapTraceMock.mockImplementation((trace: Trace) => {
+      if (trace.trace_id === 'trace-1') {
+        return {
+          trace_id: trace.trace_id,
+          skill_id: 'test-skill',
+          shadow_id: 'test-skill@/tmp/project#codex',
+          confidence: 0.9,
+          reason: 'metadata',
+        };
+      }
+      return {
+        trace_id: trace.trace_id,
+        skill_id: null,
+        shadow_id: null,
+        confidence: 0,
+        reason: 'no skill mapping found',
+      };
+    });
     shadowGetMock.mockReturnValue({ status: 'active' });
     shadowReadContentMock.mockReturnValue('# Test Skill');
     analyzeWindowMock.mockResolvedValue({
@@ -139,20 +156,46 @@ describe('OptimizationPipeline', () => {
     });
   });
 
-  it('skips task generation when the analysis asks for more context', async () => {
+  it('never falls back to mapped-only traces when the real session timeline is unavailable', async () => {
+    const traces = [makeTrace('trace-1'), makeTrace('trace-2')];
+    getRecentTracesMock.mockResolvedValue(traces);
+    getSessionTracesMock.mockResolvedValue([]);
+    mapTraceMock.mockReturnValue({
+      trace_id: 'trace-1',
+      skill_id: 'test-skill',
+      shadow_id: 'test-skill@/tmp/project#codex',
+      confidence: 0.9,
+      reason: 'metadata',
+    });
+    shadowGetMock.mockReturnValue({ status: 'active' });
+    shadowReadContentMock.mockReturnValue('# Test Skill');
+
+    const pipeline = createOptimizationPipeline({
+      projectRoot: '/tmp/project',
+      autoOptimize: true,
+      minConfidence: 0.5,
+    });
+    await pipeline.init();
+
+    const tasks = await pipeline.runOnce();
+
+    expect(analyzeWindowMock).not.toHaveBeenCalled();
+    expect(tasks).toEqual([]);
+  });
+
+  it('skips task generation when the real session window asks for more context', async () => {
     const traces = [makeTrace('trace-1'), makeTrace('trace-2', 'sess-2')];
     getRecentTracesMock.mockResolvedValue(traces);
     getSessionTracesMock.mockImplementation(async (sessionId: string) =>
       traces.filter((trace) => trace.session_id === sessionId)
     );
-    mapAndGroupTracesMock.mockReturnValue([
-      {
-        skill_id: 'test-skill',
-        shadow_id: 'test-skill@/tmp/project#codex',
-        traces,
-        confidence: 0.9,
-      },
-    ]);
+    mapTraceMock.mockImplementation((trace: Trace) => ({
+      trace_id: trace.trace_id,
+      skill_id: 'test-skill',
+      shadow_id: 'test-skill@/tmp/project#codex',
+      confidence: 0.9,
+      reason: 'metadata',
+    }));
     shadowGetMock.mockReturnValue({ status: 'active' });
     shadowReadContentMock.mockReturnValue('# Test Skill');
     analyzeWindowMock.mockResolvedValue({

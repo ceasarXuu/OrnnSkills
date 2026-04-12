@@ -4,7 +4,7 @@ import { createTraceManager } from '../observer/trace-manager.js';
 import { createTraceSkillMapper } from '../trace-skill-mapper/index.js';
 import { createSkillCallAnalyzer } from '../skill-call-analyzer/index.js';
 import { createShadowRegistry } from '../shadow-registry/index.js';
-import type { Trace, EvaluationResult, SkillTracesGroup } from '../../types/index.js';
+import type { Trace, EvaluationResult } from '../../types/index.js';
 import { runtimeFromShadowId } from '../../utils/parse.js';
 import type { SkillCallWindow } from '../skill-call-window/index.js';
 
@@ -38,6 +38,15 @@ export interface PipelineState {
   processedTraces: number;
   generatedTasks: number;
   errors: string[];
+}
+
+interface SessionWindowCandidate {
+  skill_id: string;
+  shadow_id: string;
+  sessionId: string;
+  mappedTraces: Trace[];
+  sessionTraces: Trace[];
+  confidence: number;
 }
 
 /**
@@ -130,19 +139,19 @@ export class OptimizationPipeline {
         return [];
       }
 
-      // Step 2: 将 traces 映射到 skills 并分组
-      const skillGroups = this.traceSkillMapper.mapAndGroupTraces(recentTraces);
-      logger.info('Traces mapped to skills', { groups: skillGroups.length });
+      // Step 2: 基于 recent traces 恢复真实 session 窗口候选
+      const windowCandidates = await this.collectWindowCandidates(recentTraces);
+      logger.info('Session-backed analysis windows collected', { windows: windowCandidates.length });
 
-      // Step 3: 对每个 skill 分组进行窗口分析（带超时控制）
-      for (const group of skillGroups) {
+      // Step 3: 对每个真实窗口进行分析（带超时控制）
+      for (const candidate of windowCandidates) {
         try {
-          const groupTasks = await this.evaluateSkillGroup(group);
+          const groupTasks = await this.evaluateWindowCandidate(candidate);
           if (groupTasks.length > 0) {
             tasks.push(...groupTasks);
           }
         } catch (error) {
-          const errorMsg = `Failed to analyze skill window ${group.skill_id}: ${String(error)}`;
+          const errorMsg = `Failed to analyze skill window ${candidate.skill_id}@${candidate.sessionId}: ${String(error)}`;
           logger.error(errorMsg);
           this.addError(errorMsg);
         }
@@ -192,16 +201,19 @@ export class OptimizationPipeline {
     return null;
   }
 
-  private buildAnalysisWindow(skillId: string, shadowId: string, traces: Trace[], sessionId: string): SkillCallWindow {
-    const orderedTraces = [...traces].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+  private buildAnalysisWindow(candidate: SessionWindowCandidate): SkillCallWindow {
+    const orderedTraces = [...candidate.sessionTraces].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+    const shadowId = candidate.shadow_id;
+    const skillId = candidate.skill_id;
+    const sessionId = candidate.sessionId;
     const runtime = runtimeFromShadowId(shadowId) ?? 'codex';
 
     return {
-      windowId: `pipeline::${runtime}::${skillId}::${sessionId}`,
+      windowId: `pipeline::session::${runtime}::${skillId}::${sessionId}`,
       skillId,
       runtime,
       sessionId,
-      closeReason: 'window_threshold_reached',
+      closeReason: 'session_timeline_replay',
       startedAt: orderedTraces[0]?.timestamp ?? new Date().toISOString(),
       lastTraceAt: orderedTraces[orderedTraces.length - 1]?.timestamp ?? new Date().toISOString(),
       traces: orderedTraces,
@@ -209,10 +221,60 @@ export class OptimizationPipeline {
   }
 
   /**
-   * 分析单个 skill 分组（带超时控制）
+   * 从 recent traces 恢复基于真实 session 时间线的分析窗口候选。
+   * 只要拿不到完整 session timeline，就不再退回到 mapped-only traces。
    */
-  private async evaluateSkillGroup(group: SkillTracesGroup): Promise<OptimizationTask[]> {
-    const { skill_id, shadow_id, traces } = group;
+  private async collectWindowCandidates(recentTraces: Trace[]): Promise<SessionWindowCandidate[]> {
+    const sessionIds = [...new Set(recentTraces.map((trace) => trace.session_id).filter(Boolean))];
+    const candidates: SessionWindowCandidate[] = [];
+
+    for (const sessionId of sessionIds) {
+      const sessionTraces = (await this.traceManager.getSessionTraces(sessionId))
+        .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+
+      if (sessionTraces.length === 0) {
+        logger.warn('Skipping pipeline session because no full session timeline is available', {
+          sessionId,
+        });
+        continue;
+      }
+
+      const grouped = new Map<string, SessionWindowCandidate>();
+      for (const trace of sessionTraces) {
+        const mapping = this.traceSkillMapper.mapTrace(trace);
+        if (!mapping.skill_id || !mapping.shadow_id || mapping.confidence < 0.5) {
+          continue;
+        }
+
+        const key = `${sessionId}::${mapping.shadow_id}`;
+        const existing = grouped.get(key);
+        if (existing) {
+          existing.mappedTraces.push(trace);
+          existing.confidence = Math.max(existing.confidence, mapping.confidence);
+          continue;
+        }
+
+        grouped.set(key, {
+          skill_id: mapping.skill_id,
+          shadow_id: mapping.shadow_id,
+          sessionId,
+          mappedTraces: [trace],
+          sessionTraces,
+          confidence: mapping.confidence,
+        });
+      }
+
+      candidates.push(...grouped.values());
+    }
+
+    return candidates;
+  }
+
+  /**
+   * 分析单个真实 session 窗口（带超时控制）
+   */
+  private async evaluateWindowCandidate(candidate: SessionWindowCandidate): Promise<OptimizationTask[]> {
+    const { skill_id, shadow_id, sessionId, sessionTraces } = candidate;
     const runtime = runtimeFromShadowId(shadow_id) ?? 'codex';
     const tasks: OptimizationTask[] = [];
 
@@ -235,82 +297,74 @@ export class OptimizationPipeline {
       return tasks;
     }
 
-    const sessionIds = [...new Set(traces.map((trace) => trace.session_id).filter(Boolean))];
-    for (const sessionId of sessionIds) {
-      const mappedSessionTraces = traces
-        .filter((trace) => trace.session_id === sessionId)
-        .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
-      const sessionTraces = await this.traceManager.getSessionTraces(sessionId);
-      const windowTraces = (sessionTraces.length > 0 ? sessionTraces : mappedSessionTraces)
-        .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+    const analysis = await this.evaluateWithTimeout(
+      this.buildAnalysisWindow(candidate),
+      currentContent,
+      10000
+    );
+    if (!analysis.success || !analysis.decision) {
+      logger.warn('Pipeline window analysis failed', {
+        skill_id,
+        runtime,
+        sessionId,
+        error: analysis.error ?? analysis.errorCode ?? analysis.technicalDetail ?? analysis.userMessage,
+      });
+      return tasks;
+    }
 
-      const analysis = await this.evaluateWithTimeout(
-        this.buildAnalysisWindow(skill_id, shadow_id, windowTraces, sessionId),
-        currentContent,
-        10000
-      );
-      if (!analysis.success || !analysis.decision) {
-        logger.warn('Pipeline window analysis failed', {
-          skill_id,
-          runtime,
-          sessionId,
-          error: analysis.error ?? analysis.errorCode ?? analysis.technicalDetail ?? analysis.userMessage,
-        });
-        continue;
-      }
+    const evaluation = analysis.evaluation ?? {
+      should_patch: analysis.decision === 'apply_optimization',
+      reason: analysis.userMessage ?? 'Pipeline window analysis returned no concrete conclusion.',
+      source_sessions: [sessionId],
+      confidence: 0,
+      rule_name: 'llm_window_analysis',
+    };
 
-      const evaluation = analysis.evaluation ?? {
-        should_patch: analysis.decision === 'apply_optimization',
-        reason: analysis.userMessage ?? 'Pipeline window analysis returned no concrete conclusion.',
-        source_sessions: [sessionId],
-        confidence: 0,
-        rule_name: 'llm_window_analysis',
-      };
+    if (analysis.decision !== 'apply_optimization' || !evaluation.should_patch) {
+      logger.debug('Pipeline window does not require optimization yet', {
+        skill_id,
+        runtime,
+        sessionId,
+        decision: analysis.decision,
+      });
+      return tasks;
+    }
 
-      if (analysis.decision !== 'apply_optimization' || !evaluation.should_patch) {
-        logger.debug('Pipeline window does not require optimization yet', {
-          skill_id,
-          runtime,
-          sessionId,
-          decision: analysis.decision,
-        });
-        continue;
-      }
+    if (this.getPatchContextIssue(evaluation)) {
+      logger.debug('Pipeline window suggested a patch without executable context, skipping', {
+        skill_id,
+        runtime,
+        sessionId,
+        changeType: evaluation.change_type,
+      });
+      return tasks;
+    }
 
-      if (this.getPatchContextIssue(evaluation)) {
-        logger.debug('Pipeline window suggested a patch without executable context, skipping', {
-          skill_id,
-          runtime,
-          sessionId,
-          changeType: evaluation.change_type,
-        });
-        continue;
-      }
-
-      if (evaluation.confidence < this.config.minConfidence) {
-        logger.debug('Pipeline window analysis confidence too low, skipping', {
-          skill_id,
-          sessionId,
-          confidence: evaluation.confidence,
-          minConfidence: this.config.minConfidence,
-        });
-        continue;
-      }
-
-      logger.info('Optimization task generated from window analysis', {
+    if (evaluation.confidence < this.config.minConfidence) {
+      logger.debug('Pipeline window analysis confidence too low, skipping', {
         skill_id,
         sessionId,
-        change_type: evaluation.change_type,
         confidence: evaluation.confidence,
+        minConfidence: this.config.minConfidence,
       });
-
-      tasks.push({
-        skill_id,
-        shadow_id,
-        traces: windowTraces,
-        evaluation,
-      });
+      return tasks;
     }
+
+    logger.info('Optimization task generated from session-backed window analysis', {
+      skill_id,
+      sessionId,
+      mappedTraceCount: candidate.mappedTraces.length,
+      sessionTraceCount: sessionTraces.length,
+      change_type: evaluation.change_type,
+      confidence: evaluation.confidence,
+    });
+
+    tasks.push({
+      skill_id,
+      shadow_id,
+      traces: sessionTraces,
+      evaluation,
+    });
 
     return tasks;
   }

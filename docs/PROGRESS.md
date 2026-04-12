@@ -3,6 +3,8 @@
 ## 📊 总体进度：Phase 1 ✅ 完成
 
 ### 2026-04-13
+- ✅ 重构 legacy `OptimizationPipeline` 的窗口恢复模型：pipeline 现在不再走 `recent batch -> skill group -> mapped-only traces` 的伪窗口拼装，而是统一改成 `recent sessions -> full session timeline -> session-backed window candidate`；拿不到完整 session timeline 时宁可跳过，也不再把 mapped trace 伪装成真实分析窗口
+- 📝 记录架构经验：只要分析器依赖“上下文窗口”的语义，就不能从按 skill 聚合的 recent batch 直接合成窗口；正确抽象必须先恢复真实 session 时间线，再在时间线上派生 skill candidate。否则即使接口上叫 `window`，本质仍然是伪时间线，迟早会产出高置信度的错误结论
 - ✅ 收紧实时追踪的业务事件契约：`DecisionEventRecord` 现在由后端直接写出 `businessCategory / businessTag / inputSummary / judgment / nextAction` 等 canonical 业务语义字段，dashboard 不再需要仅靠原始 tag 和状态去猜测“这是不是核心流程节点”
 - ✅ 重构分析链路的业务产出：`ShadowManager` 在 `analysis_requested / evaluation_result / skill_feedback / patch_applied / analysis_failed` 各生产点统一写出业务层语义，明确区分 `core_flow / supporting_detail / stability_feedback`，并把“下一步动作”一并沉淀到事件里
 - ✅ 收紧实时追踪消费层：活动表现在优先消费后端给出的 canonical 字段，只保留旧 tag 归一作为兼容兜底；同 scope 的 supporting detail 会并入主结论行，避免 UI 再重复维护一套独立的业务判断规则
