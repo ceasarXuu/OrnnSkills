@@ -156,6 +156,48 @@ describe('OptimizationPipeline', () => {
     });
   });
 
+  it('builds a canonical skill window id for session-backed pipeline analysis', async () => {
+    const traces = [makeTrace('trace-1')];
+    getRecentTracesMock.mockResolvedValue(traces);
+    getSessionTracesMock.mockResolvedValue(traces);
+    mapTraceMock.mockReturnValue({
+      trace_id: 'trace-1',
+      skill_id: 'test-skill',
+      shadow_id: 'test-skill@/tmp/project#codex',
+      confidence: 0.9,
+      reason: 'metadata',
+    });
+    shadowGetMock.mockReturnValue({ status: 'active' });
+    shadowReadContentMock.mockReturnValue('# Test Skill');
+    analyzeWindowMock.mockResolvedValue({
+      success: true,
+      decision: 'need_more_context',
+      userMessage: 'Need a larger context window before deciding.',
+      evaluation: {
+        should_patch: false,
+        reason: 'Need a larger context window before deciding.',
+        source_sessions: ['sess-1'],
+        confidence: 0.4,
+        rule_name: 'llm_window_analysis',
+      },
+    });
+
+    const pipeline = createOptimizationPipeline({
+      projectRoot: '/tmp/project',
+      autoOptimize: true,
+      minConfidence: 0.5,
+    });
+    await pipeline.init();
+
+    await pipeline.runOnce();
+
+    expect(analyzeWindowMock.mock.calls[0]?.[1]).toMatchObject({
+      windowId: 'pipeline::session::codex::test-skill::sess-1',
+      closeReason: 'session_timeline_replay',
+      traces,
+    });
+  });
+
   it('never falls back to mapped-only traces when the real session timeline is unavailable', async () => {
     const traces = [makeTrace('trace-1'), makeTrace('trace-2')];
     getRecentTracesMock.mockResolvedValue(traces);

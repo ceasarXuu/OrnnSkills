@@ -3,6 +3,8 @@
 ## 📊 总体进度：Phase 1 ✅ 完成
 
 ### 2026-04-13
+- ✅ 抽出共享窗口恢复层：新增 `session-window-candidates` 负责从 `recent sessions -> full session timelines` 恢复真实分析窗口候选，新增 `createSkillCallWindow()` 负责统一标准化窗口对象；`OptimizationPipeline` 与 `ShadowManager` 不再各自内联维护一套 window 构造规则
+- 📝 记录架构经验：只修某一条分析入口还不够，只要“窗口恢复”和“窗口对象规范化”散落在多个 orchestrator 里，系统就迟早再次分叉。长期主义的做法是把“窗口如何被恢复、如何被标准化”抽成共享能力，再让上层编排模块只关心何时分析、如何处理结果
 - ✅ 重构 legacy `OptimizationPipeline` 的窗口恢复模型：pipeline 现在不再走 `recent batch -> skill group -> mapped-only traces` 的伪窗口拼装，而是统一改成 `recent sessions -> full session timeline -> session-backed window candidate`；拿不到完整 session timeline 时宁可跳过，也不再把 mapped trace 伪装成真实分析窗口
 - 📝 记录架构经验：只要分析器依赖“上下文窗口”的语义，就不能从按 skill 聚合的 recent batch 直接合成窗口；正确抽象必须先恢复真实 session 时间线，再在时间线上派生 skill candidate。否则即使接口上叫 `window`，本质仍然是伪时间线，迟早会产出高置信度的错误结论
 - ✅ 收紧实时追踪的业务事件契约：`DecisionEventRecord` 现在由后端直接写出 `businessCategory / businessTag / inputSummary / judgment / nextAction` 等 canonical 业务语义字段，dashboard 不再需要仅靠原始 tag 和状态去猜测“这是不是核心流程节点”

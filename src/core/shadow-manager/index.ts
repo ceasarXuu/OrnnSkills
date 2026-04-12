@@ -27,7 +27,7 @@ import type {
   ShadowStatus,
   RuntimeType,
 } from '../../types/index.js';
-import type { SkillCallWindow } from '../skill-call-window/index.js';
+import { createSkillCallWindow, type SkillCallWindow } from '../skill-call-window/index.js';
 
 const logger = createChildLogger('shadow-manager');
 
@@ -590,7 +590,7 @@ export class ShadowManager {
     traces: Trace[],
     context: ReturnType<ShadowManager['buildDecisionEventContext']>
   ): SkillCallWindow {
-    return {
+    return createSkillCallWindow({
       windowId: context.windowId,
       skillId: context.skillId,
       runtime: context.runtime,
@@ -599,7 +599,7 @@ export class ShadowManager {
       startedAt: episode.startedAt,
       lastTraceAt: traces[traces.length - 1]?.timestamp ?? episode.lastActivityAt,
       traces,
-    };
+    });
   }
 
   private async recordSkillFeedback(

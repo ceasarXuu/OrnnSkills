@@ -6,7 +6,11 @@ import { createSkillCallAnalyzer } from '../skill-call-analyzer/index.js';
 import { createShadowRegistry } from '../shadow-registry/index.js';
 import type { Trace, EvaluationResult } from '../../types/index.js';
 import { runtimeFromShadowId } from '../../utils/parse.js';
-import type { SkillCallWindow } from '../skill-call-window/index.js';
+import { createSkillCallWindow, type SkillCallWindow } from '../skill-call-window/index.js';
+import {
+  collectSessionWindowCandidates,
+  type SessionWindowCandidate,
+} from '../session-window-candidates/index.js';
 
 const logger = createChildLogger('pipeline');
 
@@ -38,15 +42,6 @@ export interface PipelineState {
   processedTraces: number;
   generatedTasks: number;
   errors: string[];
-}
-
-interface SessionWindowCandidate {
-  skill_id: string;
-  shadow_id: string;
-  sessionId: string;
-  mappedTraces: Trace[];
-  sessionTraces: Trace[];
-  confidence: number;
 }
 
 /**
@@ -202,22 +197,19 @@ export class OptimizationPipeline {
   }
 
   private buildAnalysisWindow(candidate: SessionWindowCandidate): SkillCallWindow {
-    const orderedTraces = [...candidate.sessionTraces].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
     const shadowId = candidate.shadow_id;
     const skillId = candidate.skill_id;
     const sessionId = candidate.sessionId;
     const runtime = runtimeFromShadowId(shadowId) ?? 'codex';
 
-    return {
+    return createSkillCallWindow({
       windowId: `pipeline::session::${runtime}::${skillId}::${sessionId}`,
       skillId,
       runtime,
       sessionId,
       closeReason: 'session_timeline_replay',
-      startedAt: orderedTraces[0]?.timestamp ?? new Date().toISOString(),
-      lastTraceAt: orderedTraces[orderedTraces.length - 1]?.timestamp ?? new Date().toISOString(),
-      traces: orderedTraces,
-    };
+      traces: candidate.sessionTraces,
+    });
   }
 
   /**
@@ -225,48 +217,25 @@ export class OptimizationPipeline {
    * 只要拿不到完整 session timeline，就不再退回到 mapped-only traces。
    */
   private async collectWindowCandidates(recentTraces: Trace[]): Promise<SessionWindowCandidate[]> {
-    const sessionIds = [...new Set(recentTraces.map((trace) => trace.session_id).filter(Boolean))];
-    const candidates: SessionWindowCandidate[] = [];
-
-    for (const sessionId of sessionIds) {
-      const sessionTraces = (await this.traceManager.getSessionTraces(sessionId))
-        .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
-
-      if (sessionTraces.length === 0) {
-        logger.warn('Skipping pipeline session because no full session timeline is available', {
-          sessionId,
-        });
-        continue;
-      }
-
-      const grouped = new Map<string, SessionWindowCandidate>();
-      for (const trace of sessionTraces) {
-        const mapping = this.traceSkillMapper.mapTrace(trace);
-        if (!mapping.skill_id || !mapping.shadow_id || mapping.confidence < 0.5) {
-          continue;
+    const sessionsWithoutTimeline = new Set<string>();
+    const candidates = await collectSessionWindowCandidates({
+      recentTraces,
+      loadSessionTraces: async (sessionId) => {
+        const traces = await this.traceManager.getSessionTraces(sessionId);
+        if (traces.length === 0) {
+          sessionsWithoutTimeline.add(sessionId);
         }
+        return traces;
+      },
+      mapTrace: (trace) => this.traceSkillMapper.mapTrace(trace),
+      minConfidence: 0.5,
+    });
 
-        const key = `${sessionId}::${mapping.shadow_id}`;
-        const existing = grouped.get(key);
-        if (existing) {
-          existing.mappedTraces.push(trace);
-          existing.confidence = Math.max(existing.confidence, mapping.confidence);
-          continue;
-        }
-
-        grouped.set(key, {
-          skill_id: mapping.skill_id,
-          shadow_id: mapping.shadow_id,
-          sessionId,
-          mappedTraces: [trace],
-          sessionTraces,
-          confidence: mapping.confidence,
-        });
-      }
-
-      candidates.push(...grouped.values());
+    for (const sessionId of sessionsWithoutTimeline) {
+      logger.warn('Skipping pipeline session because no full session timeline is available', {
+        sessionId,
+      });
     }
-
     return candidates;
   }
 
