@@ -3,6 +3,8 @@
 ## 📊 总体进度：Phase 1 ✅ 完成
 
 ### 2026-04-13
+- ✅ 抽出共享分析协调层：新增 `window-analysis-coordinator`，统一负责 `analyzeWindow()` 调用、超时控制以及 `evaluation / nextWindowHint` 的 fallback 归一；`OptimizationPipeline`、`ShadowManager` 的自动窗口分析和手动窗口分析现在共用同一套 analyzer 协议
+- 📝 记录架构经验：只共享 window 对象还不够，如果不同入口继续各自包装 `analyzeWindow()`，fallback 评估、超时语义、失败处理很快又会分叉。长期主义的做法是把“分析调用协议”本身也抽成共享协调层，让 orchestrator 只处理业务状态流转
 - ✅ 抽出共享窗口恢复层：新增 `session-window-candidates` 负责从 `recent sessions -> full session timelines` 恢复真实分析窗口候选，新增 `createSkillCallWindow()` 负责统一标准化窗口对象；`OptimizationPipeline` 与 `ShadowManager` 不再各自内联维护一套 window 构造规则
 - 📝 记录架构经验：只修某一条分析入口还不够，只要“窗口恢复”和“窗口对象规范化”散落在多个 orchestrator 里，系统就迟早再次分叉。长期主义的做法是把“窗口如何被恢复、如何被标准化”抽成共享能力，再让上层编排模块只关心何时分析、如何处理结果
 - ✅ 重构 legacy `OptimizationPipeline` 的窗口恢复模型：pipeline 现在不再走 `recent batch -> skill group -> mapped-only traces` 的伪窗口拼装，而是统一改成 `recent sessions -> full session timeline -> session-backed window candidate`；拿不到完整 session timeline 时宁可跳过，也不再把 mapped trace 伪装成真实分析窗口

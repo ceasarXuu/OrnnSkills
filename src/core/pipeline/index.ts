@@ -11,6 +11,7 @@ import {
   collectSessionWindowCandidates,
   type SessionWindowCandidate,
 } from '../session-window-candidates/index.js';
+import { executeWindowAnalysis } from '../window-analysis-coordinator/index.js';
 
 const logger = createChildLogger('pipeline');
 
@@ -266,11 +267,13 @@ export class OptimizationPipeline {
       return tasks;
     }
 
-    const analysis = await this.evaluateWithTimeout(
-      this.buildAnalysisWindow(candidate),
-      currentContent,
-      10000
-    );
+    const analysis = await executeWindowAnalysis({
+      analyzeWindow: this.skillCallAnalyzer.analyzeWindow.bind(this.skillCallAnalyzer),
+      projectPath: this.config.projectRoot,
+      window: this.buildAnalysisWindow(candidate),
+      skillContent: currentContent,
+      timeoutMs: 10000,
+    });
     if (!analysis.success || !analysis.decision) {
       logger.warn('Pipeline window analysis failed', {
         skill_id,
@@ -281,13 +284,15 @@ export class OptimizationPipeline {
       return tasks;
     }
 
-    const evaluation = analysis.evaluation ?? {
-      should_patch: analysis.decision === 'apply_optimization',
-      reason: analysis.userMessage ?? 'Pipeline window analysis returned no concrete conclusion.',
-      source_sessions: [sessionId],
-      confidence: 0,
-      rule_name: 'llm_window_analysis',
-    };
+    const evaluation = analysis.evaluation;
+    if (!evaluation) {
+      logger.warn('Pipeline window analysis returned no normalized evaluation', {
+        skill_id,
+        runtime,
+        sessionId,
+      });
+      return tasks;
+    }
 
     if (analysis.decision !== 'apply_optimization' || !evaluation.should_patch) {
       logger.debug('Pipeline window does not require optimization yet', {
@@ -336,28 +341,6 @@ export class OptimizationPipeline {
     });
 
     return tasks;
-  }
-
-  /**
-   * 带超时控制的窗口分析。
-   * 超时或分析异常时抛出，调用方可在 evaluateSkillGroup 中统一捕获并记录错误。
-   */
-  private async evaluateWithTimeout(
-    window: SkillCallWindow,
-    skillContent: string,
-    timeoutMs: number
-  ) {
-    const evaluatePromise = new Promise<Awaited<ReturnType<typeof this.skillCallAnalyzer.analyzeWindow>>>(
-      (resolve, reject) => {
-      try {
-        resolve(this.skillCallAnalyzer.analyzeWindow(this.config.projectRoot, window, skillContent));
-      } catch (error) {
-        reject(error instanceof Error ? error : new Error(String(error)));
-      }
-    }
-    );
-
-    return withTimeout(evaluatePromise, timeoutMs, 'Pipeline window analysis');
   }
 
   /**

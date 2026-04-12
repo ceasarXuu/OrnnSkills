@@ -14,6 +14,7 @@ import {
 } from '../task-episode/index.js';
 import { createSkillCallAnalyzer } from '../skill-call-analyzer/index.js';
 import { generateDecisionExplanation } from '../decision-explainer/index.js';
+import { executeWindowAnalysis } from '../window-analysis-coordinator/index.js';
 import { hashString } from '../../utils/hash.js';
 import { buildShadowId, runtimeFromShadowId, skillIdFromShadowId } from '../../utils/parse.js';
 import { createSQLiteStorage } from '../../storage/sqlite.js';
@@ -674,13 +675,6 @@ export class ShadowManager {
     }
 
     const windowTraces = this.buildEpisodeWindowTraces(episode, sessionTraces);
-    const fallbackHint = {
-      suggestedTraceDelta: Math.max(6, Math.ceil(Math.max(windowTraces.length, 1) * 0.4)),
-      suggestedTurnDelta: 2,
-      waitForEventTypes: [],
-      mode: 'count_driven' as const,
-    };
-
     this.taskEpisodes.markAnalysisState(context.sessionId, context.skillId, context.runtime, 'running');
     this.writeOptimizationCheckpoint('analyzing', context.skillId, null);
     this.recordAnalysisRequested(
@@ -690,11 +684,12 @@ export class ShadowManager {
       'window_ready'
     );
 
-    const analysis = await this.skillCallAnalyzer.analyzeWindow(
-      this.projectRoot,
-      this.buildSkillCallWindow(episode, windowTraces, context),
-      currentContent
-    );
+    const analysis = await executeWindowAnalysis({
+      analyzeWindow: this.skillCallAnalyzer.analyzeWindow.bind(this.skillCallAnalyzer),
+      projectPath: this.projectRoot,
+      window: this.buildSkillCallWindow(episode, windowTraces, context),
+      skillContent: currentContent,
+    });
 
     if (!analysis.success || !analysis.decision) {
       this.recordAnalysisFailure(
@@ -711,16 +706,28 @@ export class ShadowManager {
       return;
     }
 
-    const evaluation = analysis.evaluation ?? {
-      should_patch: analysis.decision === 'apply_optimization',
-      reason: analysis.userMessage ?? '当前窗口尚无明确结论。',
-      source_sessions: [context.sessionId],
-      confidence: 0,
-      rule_name: 'llm_window_analysis',
-    };
-    const nextHint = analysis.nextWindowHint ?? fallbackHint;
+    const evaluation = analysis.evaluation;
+    if (!evaluation) {
+      this.recordAnalysisFailure(
+        context,
+        '窗口分析没有返回可归一化的评估结果。',
+        null,
+        'missing_normalized_evaluation'
+      );
+      return;
+    }
+    const nextHint = analysis.nextWindowHint;
 
     if (analysis.decision === 'need_more_context') {
+      if (!nextHint) {
+        this.recordAnalysisFailure(
+          context,
+          '窗口分析要求继续观察，但没有返回下一轮窗口提示。',
+          evaluation,
+          'missing_next_window_hint'
+        );
+        return;
+      }
       this.taskEpisodes.applyNeedMoreContextHint(episode.episodeId, nextHint);
       this.recordEvaluationResult(
         shadowId,
@@ -755,6 +762,15 @@ export class ShadowManager {
         changeType: evaluation.change_type,
         issue: patchContextIssue,
       });
+      if (!nextHint) {
+        this.recordAnalysisFailure(
+          context,
+          '窗口分析建议继续扩窗，但没有返回下一轮窗口提示。',
+          evaluation,
+          'missing_next_window_hint'
+        );
+        return;
+      }
       this.taskEpisodes.applyNeedMoreContextHint(episode.episodeId, nextHint);
       this.recordEvaluationResult(
         shadowId,
@@ -1096,9 +1112,10 @@ export class ShadowManager {
     }
 
     this.recordAnalysisRequested(eventContext, null, '手动触发窗口分析。', 'manual');
-    const analysis = await this.skillCallAnalyzer.analyzeWindow(
-      this.projectRoot,
-      {
+    const analysis = await executeWindowAnalysis({
+      analyzeWindow: this.skillCallAnalyzer.analyzeWindow.bind(this.skillCallAnalyzer),
+      projectPath: this.projectRoot,
+      window: createSkillCallWindow({
         windowId: `manual::${eventContext.windowId}`,
         skillId,
         runtime,
@@ -1107,9 +1124,9 @@ export class ShadowManager {
         startedAt: traces[0]?.timestamp ?? fallbackTrace.timestamp,
         lastTraceAt: traces[traces.length - 1]?.timestamp ?? fallbackTrace.timestamp,
         traces,
-      },
-      currentContent
-    );
+      }),
+      skillContent: currentContent,
+    });
 
     if (!analysis.success || !analysis.decision) {
       this.recordAnalysisFailure(
@@ -1121,13 +1138,16 @@ export class ShadowManager {
       return null;
     }
 
-    const evaluation = analysis.evaluation ?? {
-      should_patch: analysis.decision === 'apply_optimization',
-      reason: analysis.userMessage ?? '当前窗口尚无明确结论。',
-      source_sessions: [eventContext.sessionId],
-      confidence: 0,
-      rule_name: 'llm_window_analysis',
-    };
+    const evaluation = analysis.evaluation;
+    if (!evaluation) {
+      this.recordAnalysisFailure(
+        eventContext,
+        '手动窗口分析没有返回可归一化的评估结果。',
+        null,
+        'missing_normalized_evaluation'
+      );
+      return null;
+    }
 
     if (analysis.decision === 'need_more_context') {
       this.recordEvaluationResult(
