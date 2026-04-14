@@ -281,6 +281,11 @@
 - ✅ 抽出 `daemon-status-store`：把 `.ornn/state/daemon-checkpoint.json` 的运行状态写入从 `ShadowManager` 中移出
 - ✅ `ShadowManager` 改为消费 builder/store，删除大段事件文案与 checkpoint IO 逻辑，为后续拆 `AnalyzeSkillWindowUseCase` 做准备
 - ✅ 新增模块级单测：覆盖 activity event builder 与 daemon status store 的稳定输出契约
+- ✅ 抽出 `analyze-skill-window`：统一自动/手动窗口分析的 skill-content 校验、LLM 调用、outcome 归一化与用户可读 detail
+- ✅ 抽出 `optimization-eligibility`：统一冷却期、日限、冻结、置信度不足四类准入判定
+- ✅ 抽出 `optimization-executor`：统一 patch 生成、shadow 写回、journal 记录、snapshot 管理与 patch 统计
+- ✅ `ShadowManager` 改为消费分析/准入/执行三层模块，主链路只保留编排职责
+- ✅ 新增模块级单测：覆盖 analyze-skill-window、optimization-eligibility、optimization-executor 的稳定契约
 
 ---
 
