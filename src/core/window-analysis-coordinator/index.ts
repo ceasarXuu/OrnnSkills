@@ -61,7 +61,10 @@ export async function executeWindowAnalysis(
 
   return {
     ...raw,
-    evaluation: raw.evaluation ?? buildFallbackEvaluation(raw, input.window),
+    evaluation:
+      raw.evaluation ?? (raw.decision === 'apply_optimization'
+        ? undefined
+        : buildFallbackEvaluation(raw, input.window)),
     nextWindowHint: raw.nextWindowHint ?? buildFallbackHint(input.window),
   };
 }

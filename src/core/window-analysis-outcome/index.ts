@@ -53,6 +53,26 @@ export function getWindowPatchContextIssue(
   return null;
 }
 
+function getApplyOptimizationValidationError(
+  evaluation: EvaluationResult
+): { reasonCode: string; userMessage: string } | null {
+  if (!evaluation.should_patch) {
+    return {
+      reasonCode: 'missing_should_patch',
+      userMessage: 'Window analysis returned apply_optimization without should_patch=true.',
+    };
+  }
+
+  if (!evaluation.change_type) {
+    return {
+      reasonCode: 'missing_change_type',
+      userMessage: 'Window analysis returned apply_optimization without a change_type.',
+    };
+  }
+
+  return null;
+}
+
 export function resolveWindowAnalysisOutcome(
   input: ResolveWindowAnalysisOutcomeInput
 ): WindowAnalysisOutcome {
@@ -97,6 +117,18 @@ export function resolveWindowAnalysisOutcome(
       kind: 'no_optimization',
       evaluation,
     };
+  }
+
+  if (analysis.decision === 'apply_optimization') {
+    const validationError = getApplyOptimizationValidationError(evaluation);
+    if (validationError) {
+      return {
+        kind: 'analysis_failed',
+        reasonCode: validationError.reasonCode,
+        userMessage: validationError.userMessage,
+        evaluation,
+      };
+    }
   }
 
   const patchContextIssue =

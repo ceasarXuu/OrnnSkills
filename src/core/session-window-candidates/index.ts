@@ -22,9 +22,24 @@ export async function collectSessionWindowCandidates(
 ): Promise<SessionWindowCandidate[]> {
   const minConfidence = input.minConfidence ?? 0.5;
   const sessionIds = [...new Set(input.recentTraces.map((trace) => trace.session_id).filter(Boolean))];
+  const recentTraceIdsBySession = new Map<string, Set<string>>();
   const candidates: SessionWindowCandidate[] = [];
 
+  for (const trace of input.recentTraces) {
+    const sessionId = trace.session_id;
+    if (!sessionId) continue;
+
+    const traceIds = recentTraceIdsBySession.get(sessionId) ?? new Set<string>();
+    traceIds.add(trace.trace_id);
+    recentTraceIdsBySession.set(sessionId, traceIds);
+  }
+
   for (const sessionId of sessionIds) {
+    const recentTraceIds = recentTraceIdsBySession.get(sessionId);
+    if (!recentTraceIds || recentTraceIds.size === 0) {
+      continue;
+    }
+
     const sessionTraces = (await input.loadSessionTraces(sessionId))
       .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
 
@@ -34,6 +49,10 @@ export async function collectSessionWindowCandidates(
 
     const grouped = new Map<string, SessionWindowCandidate>();
     for (const trace of sessionTraces) {
+      if (!recentTraceIds.has(trace.trace_id)) {
+        continue;
+      }
+
       const mapping = input.mapTrace(trace);
       if (!mapping.skill_id || !mapping.shadow_id || mapping.confidence < minConfidence) {
         continue;

@@ -225,6 +225,76 @@ describe('OptimizationPipeline', () => {
     expect(tasks).toEqual([]);
   });
 
+  it('does not analyze stale skills that only appear in the older session timeline', async () => {
+    const recentTraces = [makeTrace('trace-recent')];
+    const staleTrace = {
+      ...makeTrace('trace-stale'),
+      metadata: { skill_id: 'stale-skill' },
+    };
+    getRecentTracesMock.mockResolvedValue(recentTraces);
+    getSessionTracesMock.mockResolvedValue([staleTrace, recentTraces[0]]);
+    mapTraceMock.mockImplementation((trace: Trace) => {
+      if (trace.trace_id === 'trace-recent') {
+        return {
+          trace_id: trace.trace_id,
+          skill_id: 'test-skill',
+          shadow_id: 'test-skill@/tmp/project#codex',
+          confidence: 0.9,
+          reason: 'metadata',
+        };
+      }
+
+      if (trace.trace_id === 'trace-stale') {
+        return {
+          trace_id: trace.trace_id,
+          skill_id: 'stale-skill',
+          shadow_id: 'stale-skill@/tmp/project#codex',
+          confidence: 0.92,
+          reason: 'metadata',
+        };
+      }
+
+      return {
+        trace_id: trace.trace_id,
+        skill_id: null,
+        shadow_id: null,
+        confidence: 0,
+        reason: 'no skill mapping found',
+      };
+    });
+    shadowGetMock.mockImplementation((skillId: string) => ({
+      status: 'active',
+      skillId,
+    }));
+    shadowReadContentMock.mockReturnValue('# Test Skill');
+    analyzeWindowMock.mockResolvedValue({
+      success: true,
+      decision: 'no_optimization',
+      userMessage: 'No optimization needed.',
+      evaluation: {
+        should_patch: false,
+        reason: 'No optimization needed.',
+        source_sessions: ['sess-1'],
+        confidence: 0.2,
+        rule_name: 'llm_window_analysis',
+      },
+    });
+
+    const pipeline = createOptimizationPipeline({
+      projectRoot: '/tmp/project',
+      autoOptimize: true,
+      minConfidence: 0.5,
+    });
+    await pipeline.init();
+
+    await pipeline.runOnce();
+
+    expect(analyzeWindowMock).toHaveBeenCalledTimes(1);
+    expect(analyzeWindowMock.mock.calls[0]?.[1]).toMatchObject({
+      skillId: 'test-skill',
+    });
+  });
+
   it('skips task generation when the real session window asks for more context', async () => {
     const traces = [makeTrace('trace-1'), makeTrace('trace-2', 'sess-2')];
     getRecentTracesMock.mockResolvedValue(traces);

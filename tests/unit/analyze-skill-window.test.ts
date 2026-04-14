@@ -126,4 +126,53 @@ describe('analyzeSkillWindow', () => {
       evaluation: patchEvaluation,
     });
   });
+
+  it('fails malformed apply_optimization results that omit executable patch fields', async () => {
+    const analyzeWindow = vi.fn().mockResolvedValue({
+      success: true,
+      decision: 'apply_optimization',
+      model: 'deepseek/deepseek-chat',
+      userMessage: 'Should patch, but no structured payload was returned.',
+      tokenUsage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
+    });
+
+    const result = await analyzeSkillWindow({
+      analyzeWindow,
+      projectPath: '/tmp/project',
+      window: baseWindow,
+      skillContent: '# Skill',
+      mode: 'auto',
+    });
+
+    expect(result).toMatchObject({
+      kind: 'analysis_failed',
+      reasonCode: 'missing_normalized_evaluation',
+    });
+  });
+
+  it('fails apply_optimization results when change_type is missing from the evaluation', async () => {
+    const analyzeWindow = vi.fn().mockResolvedValue({
+      success: true,
+      decision: 'apply_optimization',
+      model: 'deepseek/deepseek-chat',
+      evaluation: {
+        ...patchEvaluation,
+        change_type: undefined,
+      },
+      tokenUsage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
+    });
+
+    const result = await analyzeSkillWindow({
+      analyzeWindow,
+      projectPath: '/tmp/project',
+      window: baseWindow,
+      skillContent: '# Skill',
+      mode: 'auto',
+    });
+
+    expect(result).toMatchObject({
+      kind: 'analysis_failed',
+      reasonCode: 'missing_change_type',
+    });
+  });
 });

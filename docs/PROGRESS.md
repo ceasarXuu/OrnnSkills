@@ -3,6 +3,10 @@
 ## 📊 总体进度：Phase 1 ✅ 完成
 
 ### 2026-04-15
+- ✅ 修复 session-backed pipeline 的候选漂移：`session-window-candidates` 现在只会为 `recentTraces` 实际命中的 trace 建立 skill candidate，full session timeline 仅用于补上下文，不再因为长会话里更早的历史 skill 被重新映射而重复打开陈旧优化窗口
+- ✅ 收紧 analyzer 协议校验：`apply_optimization` 结果现在必须携带完整结构化 `evaluation`，且至少满足 `should_patch=true + change_type`；缺失执行字段时会直接归类为 `analysis_failed`，不再伪装成可执行 patch 建议
+- 📝 记录架构经验：恢复真实 session 时间线是为了补上下文，不是为了重跑整段历史上的所有 skill 候选；candidate 选择权仍然必须留在触发本轮分析的 recent batch 手里，否则长会话会持续复活陈旧窗口，破坏增量分析语义
+- 📝 记录架构经验：共享分析协调层可以做“无害归一化”，但不能替 analyzer 脑补执行必需字段；凡是会进入 patch 链路的字段都必须被当作协议硬约束校验，缺失时宁可失败，也不能静默伪造一个看起来可执行的结论
 - ✅ 修复 daemon/dashboard 启动 OOM：`CodexObserver` 不再在 bootstrap 和 change 事件中整文件重读 session JSONL，而是改成“启动时 priming 文件末尾偏移 + 最近 1 个 session 的 10 行安全尾部回放 + 后续按字节偏移增量读取”；同时跳过 `compacted / event_msg / turn_context` 这类 transport 或维护型事件，并对结构化 payload 做轻量摘要，避免长会话把 observer/daemon 直接压爆
 - 📝 记录运行经验：Codex 的真实 session 日志里会出现多 MB 级的 `compacted` 行和几十万字符的历史消息包。只要 observer 继续“整文件 read + split + 全 payload 保留”，daemon 重启时就会在 bootstrap 阶段稳定 OOM；正确做法必须是“按偏移增量读取 + 只保留进入业务链路的最小语义片段”
 - ✅ 收紧 dashboard 首屏启动负载：初始化阶段不再预取配置页专属依赖，`provider catalog / provider health / project config` 改为进入配置 tab 后按需加载；避免总览首屏还没打开配置，就先拉取近 1MB 的模型目录和连通性数据
