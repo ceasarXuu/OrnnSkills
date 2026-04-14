@@ -286,6 +286,9 @@
 - ✅ 抽出 `optimization-executor`：统一 patch 生成、shadow 写回、journal 记录、snapshot 管理与 patch 统计
 - ✅ `ShadowManager` 改为消费分析/准入/执行三层模块，主链路只保留编排职责
 - ✅ 新增模块级单测：覆盖 analyze-skill-window、optimization-eligibility、optimization-executor 的稳定契约
+- ✅ 抽出 `task-episode-policy`：把 episode 开窗、trace 合并、probe 触发、probe 结果应用、分析状态迁移从 `TaskEpisodeStore` 中移出
+- ✅ `TaskEpisodeStore` 收敛为 snapshot 读写与 policy 委托层，避免状态机规则和持久化耦合
+- ✅ 新增模块级单测：覆盖 task-episode-policy 的 probe 触发、probe 结果应用与分析状态迁移
 
 ---
 
