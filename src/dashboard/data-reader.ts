@@ -249,13 +249,17 @@ function backfillOptimizationStatus(
     }
   }
   if (next.currentState === 'idle') {
-    const latestFailure = events.find((event) => event.tag === 'analysis_failed');
-    if (latestFailure) {
+    const latestTerminalEvent = events.find((event) =>
+      event.tag === 'analysis_failed' ||
+      event.tag === 'patch_applied' ||
+      event.tag === 'evaluation_result'
+    );
+    if (latestTerminalEvent?.tag === 'analysis_failed') {
       next = {
         ...next,
         currentState: 'error',
-        currentSkillId: latestFailure.skillId ?? next.currentSkillId,
-        lastError: latestFailure.detail ?? latestFailure.reason ?? next.lastError,
+        currentSkillId: latestTerminalEvent.skillId ?? next.currentSkillId,
+        lastError: latestTerminalEvent.detail ?? latestTerminalEvent.reason ?? next.lastError,
       };
     }
   }

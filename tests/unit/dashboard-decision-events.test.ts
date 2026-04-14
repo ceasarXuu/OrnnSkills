@@ -404,6 +404,45 @@ describe('dashboard decision event reader', () => {
     });
   });
 
+  it('does not backfill a stale failure when a newer recovery event already exists', () => {
+    const projectRoot = join(tmpdir(), `ornn-dashboard-daemon-recovered-${Date.now()}`);
+    testRoots.push(projectRoot);
+    mkdirSync(join(projectRoot, '.ornn', 'state'), { recursive: true });
+
+    writeFileSync(
+      join(projectRoot, '.ornn', 'state', 'decision-events.ndjson'),
+      [
+        JSON.stringify({
+          id: 'failure-1',
+          timestamp: '2026-04-10T22:38:53.914Z',
+          tag: 'analysis_failed',
+          skillId: 'systematic-debugging',
+          runtime: 'codex',
+          status: 'failed',
+          detail: 'llm unavailable',
+        }),
+        JSON.stringify({
+          id: 'patch-1',
+          timestamp: '2026-04-10T22:40:53.914Z',
+          tag: 'patch_applied',
+          skillId: 'systematic-debugging',
+          runtime: 'codex',
+          status: 'success',
+          detail: 'revision=2',
+        }),
+      ].join('\n') + '\n',
+      'utf-8'
+    );
+
+    const daemon = readDaemonStatus(projectRoot);
+    expect(daemon.optimizationStatus).toMatchObject({
+      currentState: 'idle',
+      currentSkillId: null,
+      lastError: null,
+      lastOptimizationAt: '2026-04-10T22:40:53.914Z',
+    });
+  });
+
   it('backfills processed trace count from default trace store when checkpoint is stale', () => {
     const projectRoot = join(tmpdir(), `ornn-dashboard-daemon-trace-count-${Date.now()}`);
     testRoots.push(projectRoot);
