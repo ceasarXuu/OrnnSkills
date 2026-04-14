@@ -53,7 +53,11 @@ function createFakeElement(id = ''): FakeElement {
 
 function loadDashboardTestHarness(
   storageSeed: Record<string, string> = {},
-  options: { lang?: 'zh' | 'en' } = {}
+  options: {
+    lang?: 'zh' | 'en';
+    fetchMap?: Record<string, unknown>;
+    fetchImpl?: (url: string, init?: Record<string, unknown>) => Promise<{ ok: boolean; status?: number; statusText?: string; json: () => Promise<unknown> }>;
+  } = {}
 ) {
   const lang = options.lang || 'zh';
   const html = getDashboardHtml(47432, lang, 'test-build-id');
@@ -65,6 +69,7 @@ function loadDashboardTestHarness(
   const elements = new Map<string, FakeElement>();
   const selectorMap = new Map<string, FakeElement>();
   const localStorageData = new Map<string, string>(Object.entries(storageSeed));
+  const fetchCalls: Array<{ url: string; init?: Record<string, unknown> }> = [];
   let copiedText = '';
 
   const ensureElement = (id: string) => {
@@ -98,6 +103,89 @@ function loadDashboardTestHarness(
     },
   };
 
+  const defaultFetchJson = (url: string) => {
+    if (url === '/api/projects') {
+      return { projects: [] };
+    }
+    if (url === '/api/logs') {
+      return { lines: [] };
+    }
+    if (url === '/api/dashboard/runtime') {
+      return { buildId: 'test-build-id', pid: 1 };
+    }
+    if (url.includes('/snapshot')) {
+      return {
+        daemon: {
+          isRunning: false,
+          pid: null,
+          startedAt: null,
+          processedTraces: 0,
+          lastCheckpointAt: null,
+          retryQueueSize: 0,
+          optimizationStatus: {
+            currentState: 'idle',
+            currentSkillId: null,
+            lastOptimizationAt: null,
+            lastError: null,
+            queueSize: 0,
+          },
+        },
+        skills: [],
+        traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
+        recentTraces: [],
+        decisionEvents: [],
+        agentUsage: {
+          callCount: 0,
+          promptTokens: 0,
+          completionTokens: 0,
+          totalTokens: 0,
+          durationMsTotal: 0,
+          avgDurationMs: 0,
+          lastCallAt: null,
+          byModel: {},
+          byScope: {},
+          bySkill: {},
+        },
+      };
+    }
+    if (url.includes('/config')) {
+      return {
+        config: {
+          autoOptimize: true,
+          userConfirm: false,
+          runtimeSync: true,
+          defaultProvider: '',
+          logLevel: 'info',
+          providers: [],
+        },
+      };
+    }
+    if (url.includes('/provider-health')) {
+      return {
+        health: {
+          level: 'ok',
+          code: 'ok',
+          message: 'All providers are healthy',
+          checkedAt: '2026-04-10T00:00:00.000Z',
+          results: [],
+        },
+      };
+    }
+    if (url === '/api/providers/catalog') {
+      return {
+        providers: [{
+          id: 'deepseek',
+          name: 'deepseek',
+          models: ['deepseek/deepseek-reasoner'],
+          modelDetails: [],
+          defaultModel: 'deepseek/deepseek-reasoner',
+          apiKeyEnvVar: 'DEEPSEEK_API_KEY',
+        }],
+      };
+    }
+    return { buildId: 'test-build-id', projects: [], providers: [] };
+  };
+
   const runtime = {
     document,
     window: {
@@ -125,10 +213,22 @@ function loadDashboardTestHarness(
         localStorageData.set(key, value);
       },
     },
-    fetch: async () => ({
-      ok: true,
-      json: async () => ({ buildId: 'test-build-id', projects: [], providers: [] }),
-    }),
+    fetch: async (url: string, init?: Record<string, unknown>) => {
+      fetchCalls.push({ url: String(url), init });
+      if (options.fetchImpl) {
+        return options.fetchImpl(String(url), init);
+      }
+      const key = String(url);
+      const json = options.fetchMap && Object.prototype.hasOwnProperty.call(options.fetchMap, key)
+        ? options.fetchMap[key]
+        : defaultFetchJson(key);
+      return {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: async () => json,
+      };
+    },
     console,
     alert: () => undefined,
     EventSource: class {
@@ -153,7 +253,7 @@ function loadDashboardTestHarness(
   const script = scriptMatch[1]
     .replace(/\binit\(\);\s*$/, '')
     .concat(
-      '\n;globalThis.__dashboardTest = { state, renderMainPanel, safeRenderMainPanel, buildActivityRows, copyActivityDetail, openActivityDetail, renderCostPanel };'
+      '\n;globalThis.__dashboardTest = { state, init, selectProject, selectMainTab, renderMainPanel, safeRenderMainPanel, buildActivityRows, copyActivityDetail, openActivityDetail, renderCostPanel };'
     );
 
   vm.runInNewContext(script, runtime);
@@ -162,6 +262,9 @@ function loadDashboardTestHarness(
     dashboard: (runtime as typeof runtime & {
       __dashboardTest: {
         state: Record<string, any>;
+        init: () => Promise<void>;
+        selectProject: (projectPath: string) => Promise<void>;
+        selectMainTab: (tab: string) => void;
         renderMainPanel: (projectPath: string) => void;
         safeRenderMainPanel: (projectPath: string, source?: string) => boolean;
         buildActivityRows: (projectPath: string) => Array<Record<string, any>>;
@@ -175,6 +278,12 @@ function loadDashboardTestHarness(
     },
     getCopiedText() {
       return copiedText;
+    },
+    getFetchCalls() {
+      return fetchCalls.map((call) => call.url);
+    },
+    clearFetchCalls() {
+      fetchCalls.length = 0;
     },
   };
 }
@@ -190,6 +299,83 @@ describe('dashboard ui recovery', () => {
     expect(enHtml).toContain('Host');
     expect(enHtml).not.toContain('client runtime errors');
     expect(enHtml).toContain('client errors have been queued for reporting');
+  });
+
+  it('does not prefetch config dependencies during initial overview bootstrap', async () => {
+    const projectPath = '/tmp/ornn-project';
+    const encodedPath = encodeURIComponent(projectPath);
+    const { dashboard, getFetchCalls } = loadDashboardTestHarness({}, {
+      fetchMap: {
+        '/api/projects': {
+          projects: [{ path: projectPath, name: 'OrnnSkills', isRunning: true, skillCount: 1 }],
+        },
+        [`/api/projects/${encodedPath}/snapshot`]: {
+          daemon: {
+            isRunning: true,
+            pid: 1,
+            startedAt: '2026-04-10T00:00:00.000Z',
+            processedTraces: 1,
+            lastCheckpointAt: null,
+            retryQueueSize: 0,
+            optimizationStatus: { currentState: 'idle', currentSkillId: null, lastOptimizationAt: null, lastError: null, queueSize: 0 },
+          },
+          skills: [],
+          traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
+          recentTraces: [],
+          decisionEvents: [],
+          agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
+        },
+      },
+    });
+
+    await dashboard.init();
+
+    const fetchCalls = getFetchCalls();
+    expect(fetchCalls).toContain('/api/projects');
+    expect(fetchCalls).toContain(`/api/projects/${encodedPath}/snapshot`);
+    expect(fetchCalls).not.toContain('/api/providers/catalog');
+    expect(fetchCalls.some((url) => url.includes('/provider-health'))).toBe(false);
+    expect(fetchCalls.some((url) => url.endsWith('/config'))).toBe(false);
+  });
+
+  it('loads config dependencies lazily after switching to the config tab', async () => {
+    const projectPath = '/tmp/ornn-project';
+    const encodedPath = encodeURIComponent(projectPath);
+    const { dashboard, getFetchCalls, clearFetchCalls } = loadDashboardTestHarness({}, {
+      fetchMap: {
+        '/api/projects': {
+          projects: [{ path: projectPath, name: 'OrnnSkills', isRunning: true, skillCount: 1 }],
+        },
+        [`/api/projects/${encodedPath}/snapshot`]: {
+          daemon: {
+            isRunning: true,
+            pid: 1,
+            startedAt: '2026-04-10T00:00:00.000Z',
+            processedTraces: 1,
+            lastCheckpointAt: null,
+            retryQueueSize: 0,
+            optimizationStatus: { currentState: 'idle', currentSkillId: null, lastOptimizationAt: null, lastError: null, queueSize: 0 },
+          },
+          skills: [],
+          traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
+          recentTraces: [],
+          decisionEvents: [],
+          agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
+        },
+      },
+    });
+
+    await dashboard.init();
+    clearFetchCalls();
+
+    dashboard.selectMainTab('config');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const fetchCalls = getFetchCalls();
+    expect(fetchCalls).toContain('/api/providers/catalog');
+    expect(fetchCalls).toContain(`/api/projects/${encodedPath}/provider-health`);
+    expect(fetchCalls).toContain(`/api/projects/${encodedPath}/config`);
   });
 
   it('renders decision summary cards and metric groups in overview', () => {

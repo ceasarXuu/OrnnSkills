@@ -49,6 +49,8 @@ interface ProjectWithStatus extends RegisteredProject {
 interface SseClient {
   res: ServerResponse;
   id: string;
+  projectSnapshotVersions: Map<string, string>;
+  projectsSignature: string;
 }
 
 interface DashboardClientErrorEvent {
@@ -83,8 +85,6 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
   const buildId = `${Date.now()}`;
   const startedAt = new Date().toISOString();
   const clientErrors: DashboardClientErrorEvent[] = [];
-  const lastProjectSnapshotVersions = new Map<string, string>();
-  let lastProjectsSignature = '';
 
   // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -171,6 +171,33 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
     return readProjectSnapshot(projectPath);
   }
 
+  function buildProjectsSignature(projects: ProjectWithStatus[]): string {
+    return JSON.stringify(
+      projects.map((project) => ({
+        path: project.path,
+        name: project.name,
+        isRunning: project.isRunning,
+        skillCount: project.skillCount,
+      }))
+    );
+  }
+
+  function seedClientSnapshotVersions(client: SseClient, projects: ProjectWithStatus[]): void {
+    const livePaths = new Set(projects.map((project) => project.path));
+    for (const existingPath of Array.from(client.projectSnapshotVersions.keys())) {
+      if (!livePaths.has(existingPath)) {
+        client.projectSnapshotVersions.delete(existingPath);
+      }
+    }
+    for (const project of projects) {
+      try {
+        client.projectSnapshotVersions.set(project.path, readProjectSnapshotVersion(project.path));
+      } catch {
+        client.projectSnapshotVersions.delete(project.path);
+      }
+    }
+  }
+
   async function getProviderHealthSummary(projectPath: string): Promise<ProviderHealthSummary> {
     const checkedAt = new Date().toISOString();
     const config = await readDashboardConfig(projectPath);
@@ -227,62 +254,52 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
 
     const projects = getProjectsWithStatus();
     const projectPaths = new Set(projects.map((project) => project.path));
-    for (const existingPath of Array.from(lastProjectSnapshotVersions.keys())) {
-      if (!projectPaths.has(existingPath)) {
-        lastProjectSnapshotVersions.delete(existingPath);
-      }
-    }
+    const projectsSignature = buildProjectsSignature(projects);
 
-    const projectsSignature = JSON.stringify(
-      projects.map((project) => ({
-        path: project.path,
-        name: project.name,
-        isRunning: project.isRunning,
-        skillCount: project.skillCount,
-      }))
-    );
-    const projectsChanged = projectsSignature !== lastProjectsSignature;
-    if (projectsChanged) {
-      lastProjectsSignature = projectsSignature;
-    }
-
-    const projectData: Record<string, ProjectData> = {};
-    for (const p of projects) {
-      try {
-        const version = readProjectSnapshotVersion(p.path);
-        if (lastProjectSnapshotVersions.get(p.path) === version) {
-          continue;
-        }
-        lastProjectSnapshotVersions.set(p.path, version);
-        projectData[p.path] = getProjectSnapshot(p.path);
-      } catch {
-        // skip
-      }
-    }
-
-    // Fetch new log lines since last offset
     const { lines: newLogs, newOffset } = readLogsSince(logByteOffset);
     logByteOffset = newOffset;
 
-    if (!projectsChanged && Object.keys(projectData).length === 0 && newLogs.length === 0) {
-      return;
-    }
-
-    const payload = {
-      ...(projectsChanged ? { projects } : {}),
-      ...(Object.keys(projectData).length > 0 ? { projectData } : {}),
-      ...(newLogs.length > 0 ? { logs: newLogs } : {}),
-    };
-    const payloadBytes = Buffer.byteLength(JSON.stringify(payload), 'utf-8');
-    if (payloadBytes > 128 * 1024) {
-      logger.warn('Dashboard SSE payload is large', {
-        bytes: payloadBytes,
-        clients: clients.size,
-        projectCount: projects.length,
-      });
-    }
-
     for (const client of clients) {
+      for (const existingPath of Array.from(client.projectSnapshotVersions.keys())) {
+        if (!projectPaths.has(existingPath)) {
+          client.projectSnapshotVersions.delete(existingPath);
+        }
+      }
+
+      const projectData: Record<string, ProjectData> = {};
+      for (const project of projects) {
+        try {
+          const version = readProjectSnapshotVersion(project.path);
+          if (client.projectSnapshotVersions.get(project.path) === version) {
+            continue;
+          }
+          client.projectSnapshotVersions.set(project.path, version);
+          projectData[project.path] = getProjectSnapshot(project.path);
+        } catch {
+          client.projectSnapshotVersions.delete(project.path);
+        }
+      }
+
+      const projectsChanged = client.projectsSignature !== projectsSignature;
+      if (!projectsChanged && Object.keys(projectData).length === 0 && newLogs.length === 0) {
+        continue;
+      }
+      client.projectsSignature = projectsSignature;
+
+      const payload = {
+        ...(projectsChanged ? { projects } : {}),
+        ...(Object.keys(projectData).length > 0 ? { projectData } : {}),
+        ...(newLogs.length > 0 ? { logs: newLogs } : {}),
+      };
+      const payloadBytes = Buffer.byteLength(JSON.stringify(payload), 'utf-8');
+      if (payloadBytes > 128 * 1024) {
+        logger.warn('Dashboard SSE payload is large', {
+          bytes: payloadBytes,
+          clients: clients.size,
+          projectCount: projects.length,
+          clientId: client.id,
+        });
+      }
       sendSseEvent(client, 'update', payload);
     }
   }
@@ -391,21 +408,18 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
         });
         res.write('retry: 3000\n\n');
 
-        const client: SseClient = { res, id: Math.random().toString(36).slice(2) };
+        const projects = getProjectsWithStatus();
+        const client: SseClient = {
+          res,
+          id: Math.random().toString(36).slice(2),
+          projectSnapshotVersions: new Map<string, string>(),
+          projectsSignature: buildProjectsSignature(projects),
+        };
+        seedClientSnapshotVersions(client, projects);
         clients.add(client);
 
-        // Send initial full snapshot
-        const projects = getProjectsWithStatus();
-        const projectData: Record<string, ProjectData> = {};
-        for (const p of projects) {
-          try {
-            projectData[p.path] = getProjectSnapshot(p.path);
-          } catch {
-            // skip
-          }
-        }
         const initialLogs = readGlobalLogs(100);
-        sendSseEvent(client, 'update', { projects, projectData, logs: initialLogs });
+        sendSseEvent(client, 'update', { projects, logs: initialLogs });
 
         req.on('close', () => clients.delete(client));
         return;

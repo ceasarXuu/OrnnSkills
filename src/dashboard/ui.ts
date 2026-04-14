@@ -1185,8 +1185,6 @@ async function init() {
     renderSidebar();
     void loadRuntimeInfo();
 
-    void loadProviderCatalog();
-
     // 日志异步加载，不阻塞主页面渲染，避免 dashboard 卡在 loading
     fetchJsonWithTimeout('/api/logs', 5000)
       .then((logData) => {
@@ -1304,15 +1302,24 @@ async function selectProject(path) {
   }
   safeRenderMainPanel(path, 'selectProject');
   renderSidebar();
-  void ensureProviderHealth(path)
-    .then(() => {
-      if (state.selectedProjectId === path) {
-        safeRenderMainPanel(path, 'ensureProviderHealth');
-      }
-    })
-    .catch(() => {
-      // ensureProviderHealth already degrades internally
-    });
+}
+
+function ensureConfigTabDependencies(projectPath) {
+  if (!projectPath) return;
+  if (state.providerCatalog.length === 0 && !state.providerCatalogLoading) {
+    void loadProviderCatalog(true);
+  }
+  if (!state.providerHealthByProject[projectPath]) {
+    void ensureProviderHealth(projectPath)
+      .then(() => {
+        if (state.selectedProjectId === projectPath && state.selectedMainTab === 'config') {
+          safeRenderMainPanel(projectPath, 'ensureProviderHealth');
+        }
+      })
+      .catch(() => {
+        // ensureProviderHealth already degrades internally
+      });
+  }
 }
 
 async function ensureProviderHealth(projectPath, force = false) {
@@ -2791,6 +2798,7 @@ function renderMainPanel(projectPath) {
     renderLogs();
   }
   if (state.selectedMainTab === 'config') {
+    ensureConfigTabDependencies(projectPath);
     void ensureProjectConfig(projectPath);
   }
 }
@@ -2835,6 +2843,9 @@ function selectMainTab(tab) {
   state.selectedMainTab = tab;
   if ((tab === 'config' || tab === 'cost') && state.providerCatalog.length === 0) {
     void loadProviderCatalog(true);
+  }
+  if (tab === 'config' && state.selectedProjectId) {
+    ensureConfigTabDependencies(state.selectedProjectId);
   }
   if (state.selectedProjectId) {
     safeRenderMainPanel(state.selectedProjectId, 'selectMainTab:' + tab);

@@ -2,6 +2,12 @@
 
 ## 📊 总体进度：Phase 1 ✅ 完成
 
+### 2026-04-15
+- ✅ 收紧 dashboard 首屏启动负载：初始化阶段不再预取配置页专属依赖，`provider catalog / provider health / project config` 改为进入配置 tab 后按需加载；避免总览首屏还没打开配置，就先拉取近 1MB 的模型目录和连通性数据
+- ✅ 重构 dashboard SSE 首次握手协议：`/events` 初始连接不再给每个客户端推全量 `projectData`，并把“已见快照版本”从服务端全局状态改成按客户端维护；新客户端不会再触发一次全量快照解析，也不会污染其他客户端的增量版本基线
+- 📝 记录性能经验：dashboard 首屏的事实来源应该是“最小可见面板需要的数据”，不是“所有 tab 未来可能用到的数据”；像配置 catalog、provider health、全量 project snapshot 这种重对象，必须延迟到对应交互时再拉
+- 📝 记录架构经验：SSE 的增量游标如果做成全局共享状态，新客户端接入时很容易错误重置或跳过旧客户端还没消费的更新。正确抽象是把版本基线绑定到客户端连接本身，广播时按客户端计算增量，而不是偷懒维护一个全局 `lastVersion`
+
 ### 2026-04-13
 - ✅ 抽出共享分析协调层：新增 `window-analysis-coordinator`，统一负责 `analyzeWindow()` 调用、超时控制以及 `evaluation / nextWindowHint` 的 fallback 归一；`OptimizationPipeline`、`ShadowManager` 的自动窗口分析和手动窗口分析现在共用同一套 analyzer 协议
 - 📝 记录架构经验：只共享 window 对象还不够，如果不同入口继续各自包装 `analyzeWindow()`，fallback 评估、超时语义、失败处理很快又会分叉。长期主义的做法是把“分析调用协议”本身也抽成共享协调层，让 orchestrator 只处理业务状态流转
