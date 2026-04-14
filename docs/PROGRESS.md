@@ -289,6 +289,9 @@
 - ✅ 抽出 `task-episode-policy`：把 episode 开窗、trace 合并、probe 触发、probe 结果应用、分析状态迁移从 `TaskEpisodeStore` 中移出
 - ✅ `TaskEpisodeStore` 收敛为 snapshot 读写与 policy 委托层，避免状态机规则和持久化耦合
 - ✅ 新增模块级单测：覆盖 task-episode-policy 的 probe 触发、probe 结果应用与分析状态迁移
+- ✅ 抽出 `shadow-bootstrapper`：把 skill 扫描、来源优先级、shadow 注册、mapper 注册、项目物化从 `ShadowManager.init()` 链中移出
+- ✅ `ShadowManager` 初始化链现在只负责组装依赖并调用 bootstrapper，删除大段 origin/shadow 启动同步逻辑
+- ✅ 新增模块级单测：覆盖“项目 skill 优先于全局重复项”和“全局 skill 物化到项目”的 bootstrap 契约
 
 ---
 

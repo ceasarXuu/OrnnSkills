@@ -27,17 +27,14 @@ import type { ActivityEventContext } from '../activity-event-builder/index.js';
 import { createDaemonStatusStore } from '../daemon-status-store/index.js';
 import { resolveOptimizationEligibility } from '../optimization-eligibility/index.js';
 import { executeOptimizationPatch } from '../optimization-executor/index.js';
-import { hashString } from '../../utils/hash.js';
-import { buildShadowId, runtimeFromShadowId, skillIdFromShadowId } from '../../utils/parse.js';
+import { bootstrapSkillsForMonitoring } from '../shadow-bootstrapper/index.js';
+import { runtimeFromShadowId, skillIdFromShadowId } from '../../utils/parse.js';
 import { createSQLiteStorage } from '../../storage/sqlite.js';
-import { existsSync, readdirSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { homedir } from 'node:os';
 import type {
   Trace,
   EvaluationResult,
   AutoOptimizePolicy,
-  ShadowStatus,
   RuntimeType,
 } from '../../types/index.js';
 import { createSkillCallWindow, type SkillCallWindow } from '../skill-call-window/index.js';
@@ -97,209 +94,17 @@ export class ShadowManager {
     await this.traceSkillMapper.init();
     this.db = await createSQLiteStorage(this.dbPath);
     await this.db.init();
-    this.bootstrapSkillsForMonitoring();
-    logger.debug('Shadow manager initialized');
-  }
-
-  /**
-   * 启动时自动发现并注册 skills，避免“trace 有了但无 skill 监控”
-   */
-  private bootstrapSkillsForMonitoring(): void {
     if (!this.db) throw new Error('ShadowManager database not initialized');
-
-    // 宿主对齐：项目内 + 全局同扫；同名按项目优先，且按 runtime 维度独立决议来源。
-    const projectRoots = [
-      join(this.projectRoot, '.codex', 'skills'),
-      join(this.projectRoot, '.claude', 'skills'),
-      join(this.projectRoot, '.opencode', 'skills'),
-      join(this.projectRoot, 'skills'),
-      join(this.projectRoot, '.skills'),
-      join(this.projectRoot, '.agents', 'skills'),
-    ];
-    const globalRoots = [
-      ...configManager.getOriginPaths(),
-      join(homedir(), '.agents', 'skills'),
-      join(homedir(), '.codex', 'skills'),
-    ];
-    const candidateRoots = [...new Set<string>([...projectRoots, ...globalRoots])];
-    const selectedSourceByRuntimeSkill = new Map<
-      string,
-      { root: string; skillPath: string; content: string; isProjectSource: boolean }
-    >();
-
-    const runtimes = configManager.getGlobalConfig().observer.enabled_runtimes;
-    let discovered = 0;
-    let registered = 0;
-    let createdShadows = 0;
-    let bootstrapVersionedUpdates = 0;
-    let materializedToProject = 0;
-    const originUpserted = new Set<string>();
-
-    for (const root of candidateRoots) {
-      if (!existsSync(root)) continue;
-
-      let entries = [] as import('node:fs').Dirent[];
-      try {
-        entries = readdirSync(root, { withFileTypes: true, encoding: 'utf8' });
-      } catch {
-        continue;
-      }
-
-      for (const entry of entries) {
-        if (!entry.isDirectory()) continue;
-
-        const skillId = entry.name;
-        const skillDir = join(root, skillId);
-        const skillFileCandidates = [join(skillDir, 'SKILL.md'), join(skillDir, 'skill.md')];
-        const skillPath = skillFileCandidates.find((p) => existsSync(p));
-        if (!skillPath) continue;
-
-        discovered++;
-        const isProjectSource = root.startsWith(this.projectRoot);
-        const runtimeScope = this.resolveRootRuntime(root);
-        const applicableRuntimes =
-          runtimeScope === null ? runtimes : runtimes.filter((r) => r === runtimeScope);
-
-        let content = '';
-        try {
-          content = readFileSync(skillPath, 'utf-8');
-        } catch {
-          continue;
-        }
-
-        for (const runtime of applicableRuntimes) {
-          const scopedKey = `${runtime}::${skillId}`;
-          if (selectedSourceByRuntimeSkill.has(scopedKey)) continue;
-          selectedSourceByRuntimeSkill.set(scopedKey, {
-            root,
-            skillPath,
-            content,
-            isProjectSource,
-          });
-        }
-      }
-    }
-
-    for (const [scopedKey, selected] of selectedSourceByRuntimeSkill.entries()) {
-      const [runtime, skillId] = scopedKey.split('::') as [RuntimeType, string];
-      const now = new Date().toISOString();
-      const originVersion = hashString(selected.content);
-
-      if (!originUpserted.has(skillId)) {
-        const origin = {
-          skill_id: skillId,
-          origin_path: selected.skillPath,
-          origin_version: originVersion,
-          source: 'local' as const,
-          installed_at: now,
-          last_seen_at: now,
-        };
-        this.db.upsertOriginSkill(origin);
-        originUpserted.add(skillId);
-      }
-
-      if (!this.shadowRegistry.has(skillId, runtime)) {
-        this.shadowRegistry.create(skillId, selected.content, originVersion, runtime);
-        createdShadows++;
-      } else {
-        const current = this.shadowRegistry.readContent(skillId, runtime);
-        if (current !== undefined && current !== selected.content) {
-          this.shadowRegistry.updateContent(skillId, selected.content, runtime);
-          const versionManager = createSkillVersionManager({
-            projectPath: this.projectRoot,
-            skillId,
-            runtime,
-          });
-          versionManager.createVersion(
-            selected.content,
-            `Bootstrap source sync (${selected.isProjectSource ? 'project' : 'global'} -> project-preferred)`,
-            []
-          );
-          bootstrapVersionedUpdates++;
-        }
-      }
-
-      const shadowEntry = this.shadowRegistry.get(skillId, runtime);
-      const status: ShadowStatus = shadowEntry?.status === 'frozen' ? 'frozen' : 'active';
-      const shadow = {
-        project_id: this.projectRoot,
-        skill_id: scopedKey,
-        runtime,
-        shadow_id: buildShadowId(skillId, this.projectRoot, runtime),
-        origin_skill_id: skillId,
-        origin_version_at_fork: originVersion,
-        shadow_path: join(this.projectRoot, '.ornn', 'shadows', runtime, `${skillId}.md`),
-        current_revision: 0,
-        status,
-        created_at: now,
-        last_optimized_at: now,
-      };
-      this.db.upsertShadowSkill(shadow);
-      const originForMapper = {
-        skill_id: skillId,
-        origin_path: selected.skillPath,
-        origin_version: originVersion,
-        source: 'local' as const,
-        installed_at: now,
-        last_seen_at: now,
-      };
-      this.traceSkillMapper.registerSkill(originForMapper, shadow);
-      registered++;
-
-      // 当来源是全局 skill 且项目侧尚不存在时，物化到项目目录，
-      // 保证后续由项目副本生效，避免改动全局影响其它项目。
-      if (!selected.isProjectSource) {
-        if (this.materializeSkillToProject(runtime, skillId, selected.content)) {
-          materializedToProject++;
-        }
-      }
-    }
-
-    logger.info('Skill monitoring bootstrap completed', {
-      discovered,
-      registered,
-      createdShadows,
-      bootstrapVersionedUpdates,
-      roots: candidateRoots,
-      prioritizedProjectRoots: projectRoots,
-      selectedSkills: selectedSourceByRuntimeSkill.size,
-      materializedToProject,
+    bootstrapSkillsForMonitoring({
+      projectRoot: this.projectRoot,
+      db: this.db,
+      shadowRegistry: this.shadowRegistry,
+      traceSkillMapper: this.traceSkillMapper,
+      createVersionManager: (input) => createSkillVersionManager(input),
+      originPaths: configManager.getOriginPaths(),
+      enabledRuntimes: configManager.getGlobalConfig().observer.enabled_runtimes,
     });
-  }
-
-  private resolveRootRuntime(root: string): RuntimeType | null {
-    if (root.includes(`${this.projectRoot}/.codex/skills`) || root.includes('/.codex/skills')) {
-      return 'codex';
-    }
-    if (root.includes(`${this.projectRoot}/.claude/skills`) || root.includes('/.claude/skills')) {
-      return 'claude';
-    }
-    if (root.includes(`${this.projectRoot}/.opencode/skills`) || root.includes('/.opencode/skills')) {
-      return 'opencode';
-    }
-    return null;
-  }
-
-  private getProjectSkillPath(runtime: RuntimeType, skillId: string): string {
-    switch (runtime) {
-      case 'codex':
-        return join(this.projectRoot, '.codex', 'skills', skillId, 'SKILL.md');
-      case 'claude':
-        return join(this.projectRoot, '.claude', 'skills', skillId, 'SKILL.md');
-      case 'opencode':
-        return join(this.projectRoot, '.opencode', 'skills', skillId, 'SKILL.md');
-      default:
-        return join(this.projectRoot, 'skills', skillId, 'SKILL.md');
-    }
-  }
-
-  private materializeSkillToProject(runtime: RuntimeType, skillId: string, content: string): boolean {
-    const targetPath = this.getProjectSkillPath(runtime, skillId);
-    if (existsSync(targetPath)) return false;
-
-    mkdirSync(join(this.projectRoot, `.${runtime}`, 'skills', skillId), { recursive: true });
-    writeFileSync(targetPath, content, 'utf-8');
-    return true;
+    logger.debug('Shadow manager initialized');
   }
 
   /**
