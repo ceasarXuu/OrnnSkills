@@ -38,6 +38,7 @@ export class CodexObserver extends BaseObserver {
   private turnCounter: number = 0;
   private processedFiles: Set<string> = new Set();
   private processedByteOffset: Map<string, number> = new Map();
+  private pendingLineFragment: Map<string, string> = new Map();
   // 启动恢复只保留极小窗口，避免把历史长会话一次性灌回优化链路。
   private readonly bootstrapFileLimit = 1;
   private readonly bootstrapTailLineLimit = 10;
@@ -91,10 +92,6 @@ export class CodexObserver extends BaseObserver {
       persistent: true,
       // 紧急止血：避免启动时扫描全部历史会话导致 CPU 飙升
       ignoreInitial: true,
-      awaitWriteFinish: {
-        stabilityThreshold: 500, // 文件写入完成需要一定时间
-        pollInterval: 300,
-      },
     });
 
     this.watcher.on('add', (path) => this.handleFileAdd(path));
@@ -129,6 +126,7 @@ export class CodexObserver extends BaseObserver {
 
     this.processedFiles.clear();
     this.processedByteOffset.clear();
+    this.pendingLineFragment.clear();
     logger.info('Codex observer stopped');
   }
 
@@ -188,6 +186,7 @@ export class CodexObserver extends BaseObserver {
   private handleFileUnlink(path: string): void {
     this.processedFiles.delete(path);
     this.processedByteOffset.delete(path);
+    this.pendingLineFragment.delete(path);
     logger.debug('Session file removed from observer tracking', { path });
   }
 
@@ -362,6 +361,9 @@ export class CodexObserver extends BaseObserver {
   private readSessionLinesSinceOffset(path: string): { lines: string[]; nextOffset: number } {
     const fileSize = statSync(path).size;
     const previousOffset = this.processedByteOffset.get(path) ?? 0;
+    if (fileSize < previousOffset) {
+      this.pendingLineFragment.delete(path);
+    }
     const startOffset = fileSize < previousOffset ? 0 : previousOffset;
     if (fileSize <= startOffset) {
       return { lines: [], nextOffset: fileSize };
@@ -372,9 +374,23 @@ export class CodexObserver extends BaseObserver {
       const readSize = fileSize - startOffset;
       const buffer = Buffer.alloc(readSize);
       readSync(fd, buffer, 0, readSize, startOffset);
-      const content = buffer.toString('utf-8');
+      const previousFragment = this.pendingLineFragment.get(path) ?? '';
+      const content = previousFragment + buffer.toString('utf-8');
+      const parts = content.split('\n');
+      const hasCompleteTrailingLine = content.endsWith('\n');
+      const nextFragment = hasCompleteTrailingLine ? '' : (parts.pop() ?? '');
+      if (nextFragment) {
+        this.pendingLineFragment.set(path, nextFragment);
+        logger.debug('Buffered partial Codex session line awaiting completion', {
+          sessionId: this.extractSessionId(path),
+          path,
+          fragmentChars: nextFragment.length,
+        });
+      } else {
+        this.pendingLineFragment.delete(path);
+      }
       return {
-        lines: content.split('\n').filter((line) => line.trim()),
+        lines: parts.filter((line) => line.trim()),
         nextOffset: fileSize,
       };
     } finally {

@@ -285,6 +285,11 @@
 ## 更新日志
 
 ### 2026-04-15
+- ✅ 修复实时追踪“看起来几小时没更新”的快照取数缺陷：dashboard 快照现在会在最新 trace 之外，额外回填一小批最近带 `skill_refs` 的 trace，避免大量空 `skill_refs` 工具事件把真正的技能调用完全冲出业务看板
+- ✅ 修复 `CodexObserver` 实时增量读取对 partial line 的脆弱性：新增按文件缓存的残片缓冲，允许 watcher 在 JSONL 行尚未完整写完时先记住残片，待下一次 change 再拼成完整事件，避免实时链路吞 trace
+- ✅ 去掉 `CodexObserver` 对 `awaitWriteFinish` 的依赖，改为由 observer 自己处理增量拼接，降低持续 append 的长会话文件被 watcher 延迟甚至漏掉的概率
+- ✅ 新增回归测试：覆盖“很多更新后的空 `skill_refs` trace 不应把最近技能调用从快照中挤掉”与“partial append 不得导致 observer 吞 trace”
+- 📝 调试经验：如果实时追踪长时间看起来不动，先区分两类假死。`default.ndjson` 在增长、但业务看板没有新行，优先检查最近快照里是否仍保留带 `skill_refs` 的 trace；如果 daemon 日志持续出现 `Recovered missed session file growth during reconciliation`，说明 watcher 正在退化为补偿扫描模式，需要重点检查 observer 的增量读取和文件监听策略
 - ✅ 修复 `CodexObserver` 的会话恢复断流问题：新增“最近活跃 session 增长补偿轮询”，即使 watcher 漏掉 `change` 事件，也会按字节偏移补读新增 trace
 - ✅ 修复重复 `add` 事件被直接短路的问题：同一路径再次出现时，会先比较文件大小和已处理偏移，必要时补读增量，而不是无条件跳过
 - ✅ 修复“episode 只增长上下文但 probe 永不触发”的业务链断点：`ShadowManager.processTrace()` 现在会在 `recordContextTrace()` 之后重新评估 probe 触发条件

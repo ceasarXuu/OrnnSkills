@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, afterEach } from 'vitest';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { readProjectSnapshotVersion, readRecentTraces } from '../../src/dashboard/data-reader.js';
+import { readProjectSnapshot, readProjectSnapshotVersion, readRecentTraces } from '../../src/dashboard/data-reader.js';
 
 describe('dashboard data reader snapshot version', () => {
   const testDir = join(tmpdir(), 'ornn-dashboard-data-reader-' + Date.now());
@@ -102,5 +102,41 @@ describe('dashboard data reader snapshot version', () => {
 
     const after = readProjectSnapshotVersion(testDir);
     expect(after).not.toBe(before);
+  });
+
+  it('keeps recent skill-referenced traces in snapshot even after many newer untagged traces', () => {
+    const tracePath = join(testDir, '.ornn', 'state', 'session-a.ndjson');
+    const lines: string[] = [
+      JSON.stringify({
+        trace_id: 'skill-trace-1',
+        runtime: 'codex',
+        session_id: 'session-a',
+        turn_id: 'turn-1',
+        event_type: 'tool_call',
+        timestamp: '2026-04-12T02:00:00.000Z',
+        status: 'success',
+        skill_refs: ['test-driven-development'],
+      }),
+    ];
+
+    for (let index = 0; index < 260; index += 1) {
+      lines.push(JSON.stringify({
+        trace_id: `trace-${index}`,
+        runtime: 'codex',
+        session_id: 'session-a',
+        turn_id: `turn-${index + 2}`,
+        event_type: 'tool_result',
+        timestamp: `2026-04-12T02:${String(Math.floor(index / 60)).padStart(2, '0')}:${String(index % 60).padStart(2, '0')}.000Z`,
+        status: 'success',
+        skill_refs: [],
+      }));
+    }
+
+    writeFileSync(tracePath, lines.join('\n') + '\n', 'utf-8');
+
+    const snapshot = readProjectSnapshot(testDir);
+    expect(snapshot.recentTraces.some((trace) => trace.trace_id === 'skill-trace-1')).toBe(true);
+    expect(snapshot.recentTraces.some((trace) => Array.isArray(trace.skill_refs) && trace.skill_refs.includes('test-driven-development'))).toBe(true);
+    expect(snapshot.recentTraces[0]?.trace_id).toBe('trace-259');
   });
 });

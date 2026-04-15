@@ -231,4 +231,41 @@ describe('CodexObserver', () => {
     expect(emittedTexts).toEqual(['first', 'second']);
     expect((observer as any).processedByteOffset.get(sessionPath)).toBe(statSync(sessionPath).size);
   });
+
+  it('buffers partial appended lines so realtime change handling does not lose traces', () => {
+    const sessionsDir = join(testDir, 'sessions');
+    mkdirSync(join(sessionsDir, '2026', '04', '12'), { recursive: true });
+    const sessionPath = join(sessionsDir, '2026', '04', '12', 'recent.jsonl');
+    writeFileSync(
+      sessionPath,
+      '{"timestamp":"2026-04-12T01:00:00.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"first"}]}}\n',
+      'utf-8',
+    );
+
+    const observer = new CodexObserver(sessionsDir);
+    const emittedTexts: string[] = [];
+
+    (observer as any).emitPreprocessedTraces = (_sessionId: string, traces: Array<{ content?: string }>) => {
+      emittedTexts.push(...traces.map((trace) => String(trace.content ?? '')));
+    };
+
+    (observer as any).processSessionFileInternal(sessionPath);
+
+    appendFileSync(
+      sessionPath,
+      '{"timestamp":"2026-04-12T02:00:00.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"sec',
+      'utf-8',
+    );
+    (observer as any).handleFileChange(sessionPath);
+
+    appendFileSync(
+      sessionPath,
+      'ond"}]}}\n',
+      'utf-8',
+    );
+    (observer as any).handleFileChange(sessionPath);
+
+    expect(emittedTexts).toEqual(['first', 'second']);
+    expect((observer as any).processedByteOffset.get(sessionPath)).toBe(statSync(sessionPath).size);
+  });
 });

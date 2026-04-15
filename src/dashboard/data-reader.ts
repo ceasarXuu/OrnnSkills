@@ -107,6 +107,9 @@ interface CachedAgentUsageStats {
 }
 
 const agentUsageStatsCache = new Map<string, CachedAgentUsageStats>();
+const SNAPSHOT_RECENT_TRACE_LIMIT = 50;
+const SNAPSHOT_SKILL_CONTEXT_LIMIT = 24;
+const SNAPSHOT_SKILL_CONTEXT_SCAN_LINES = 4000;
 
 function listTraceNdjsonPaths(projectRoot: string): string[] {
   const stateDir = join(projectRoot, '.ornn', 'state');
@@ -415,12 +418,12 @@ function readFileSignature(filePath: string): string {
   }
 }
 
-export function readRecentTraces(projectRoot: string, limit = 50): TraceEntry[] {
+function collectRecentTraceCandidates(projectRoot: string, maxLinesPerFile: number): TraceEntry[] {
   const tracePaths = listTraceNdjsonPaths(projectRoot);
   const traces = new Map<string, TraceEntry>();
 
   for (const ndjsonPath of tracePaths) {
-    const lines = tailNdjson(ndjsonPath, Math.max(limit * 4, 200));
+    const lines = tailNdjson(ndjsonPath, maxLinesPerFile);
     for (const line of lines) {
       try {
         const raw = JSON.parse(line) as Partial<TraceEntry> & { skill_refs?: string[] };
@@ -442,8 +445,24 @@ export function readRecentTraces(projectRoot: string, limit = 50): TraceEntry[] 
   }
 
   return [...traces.values()]
-    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-    .slice(0, limit);
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+}
+
+export function readRecentTraces(projectRoot: string, limit = 50): TraceEntry[] {
+  return collectRecentTraceCandidates(projectRoot, Math.max(limit * 4, 200)).slice(0, limit);
+}
+
+function readRecentActivityTraces(projectRoot: string): TraceEntry[] {
+  const latestTraces = readRecentTraces(projectRoot, SNAPSHOT_RECENT_TRACE_LIMIT);
+  const existingIds = new Set(latestTraces.map((trace) => trace.trace_id));
+  const skillContext = collectRecentTraceCandidates(projectRoot, SNAPSHOT_SKILL_CONTEXT_SCAN_LINES)
+    .filter((trace) => trace.skill_refs.length > 0 && !existingIds.has(trace.trace_id))
+    .slice(0, SNAPSHOT_SKILL_CONTEXT_LIMIT);
+
+  if (skillContext.length === 0) return latestTraces;
+  return latestTraces
+    .concat(skillContext)
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 }
 
 export function computeTraceStats(traces: TraceEntry[]): TraceStats {
@@ -523,12 +542,12 @@ export function readLogsSince(byteOffset: number): { lines: LogLine[]; newOffset
 // ─── Full Project Snapshot ────────────────────────────────────────────────────
 
 export function readProjectSnapshot(projectRoot: string): ProjectData {
-  const traces = readRecentTraces(projectRoot, 50);
+  const recentTraces = readRecentTraces(projectRoot, SNAPSHOT_RECENT_TRACE_LIMIT);
   return {
     daemon: readDaemonStatus(projectRoot),
     skills: readSkills(projectRoot),
-    traceStats: computeTraceStats(traces),
-    recentTraces: traces,
+    traceStats: computeTraceStats(recentTraces),
+    recentTraces: readRecentActivityTraces(projectRoot),
     decisionEvents: readRecentDecisionEvents(projectRoot),
     agentUsage: readAgentUsageStats(projectRoot),
   };
