@@ -1663,6 +1663,16 @@ function mergeBusinessDetail(primary, supportingValues) {
   return parts.join('\\n');
 }
 
+function shouldMergeSupportingDetailIntoRow(tag, category) {
+  if (category === 'stability_feedback') return false;
+  return (
+    tag === 'analysis_concluded' ||
+    tag === 'analysis_waiting_more_context' ||
+    tag === 'optimization_skipped' ||
+    tag === 'optimization_applied'
+  );
+}
+
 function getActivityScopeId(event) {
   if (!event) return null;
   if (event.windowId) return event.windowId;
@@ -2064,7 +2074,9 @@ function buildActivityRows(projectPath) {
     if (!tag) continue;
     const scopeId = getActivityScopeId(event);
     const category = event.businessCategory || businessCategoryForTag(tag);
-    const feedbackDetails = (event.businessCategory || businessCategoryForTag(tag)) === 'stability_feedback'
+    const feedbackDetails = !shouldMergeSupportingDetailIntoRow(tag, category)
+      ? []
+      : (event.businessCategory || businessCategoryForTag(tag)) === 'stability_feedback'
       ? []
       : collectUniqueText(
         getActivityRelationKeys({

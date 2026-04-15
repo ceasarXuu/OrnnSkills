@@ -1303,6 +1303,54 @@ describe('dashboard ui recovery', () => {
     expect(rows[0]?.detail).toContain('这次调用没有观察到稳定的设计缺陷');
   });
 
+  it('does not merge later skill feedback into analysis_started rows', () => {
+    const { dashboard } = loadDashboardTestHarness({}, { lang: 'zh' });
+    const projectPath = '/tmp/ornn-project';
+
+    dashboard.state.projectData = {
+      [projectPath]: {
+        daemon: {},
+        skills: [{ skillId: 'systematic-debugging', runtime: 'codex' }],
+        traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
+        recentTraces: [],
+        decisionEvents: [
+          {
+            id: 'evt-start-1',
+            timestamp: '2026-04-15T14:51:53.618Z',
+            tag: 'analysis_requested',
+            runtime: 'codex',
+            skillId: 'systematic-debugging',
+            traceId: 'trace-start-1',
+            sessionId: 'session-start-1',
+            status: 'window_ready',
+            windowId: 'scope-start-1',
+            detail: '当前窗口已积累到初始观察量，提交首次窗口分析。',
+            nextAction: '等待这一轮分析返回结果，再决定是继续观察、保持现状还是执行优化。',
+          },
+          {
+            id: 'evt-feedback-1',
+            timestamp: '2026-04-15T14:52:10.000Z',
+            tag: 'skill_feedback',
+            runtime: 'codex',
+            skillId: 'systematic-debugging',
+            traceId: 'trace-start-1',
+            sessionId: 'session-start-1',
+            status: 'no_patch_needed',
+            windowId: 'scope-start-1',
+            detail: '技能‘systematic-debugging’使用正确，无需修改。',
+          },
+        ],
+        agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
+      },
+    };
+
+    const rows = dashboard.buildActivityRows(projectPath);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.tag).toBe('analysis_started');
+    expect(rows[0]?.detail).toBe('当前窗口已积累到初始观察量，提交首次窗口分析。');
+    expect(rows[0]?.nextAction).toBe('等待这一轮分析返回结果，再决定是继续观察、保持现状还是执行优化。');
+  });
+
   it('shows a core-flow interruption row while keeping analysis_failed in stability feedback', () => {
     const { dashboard, getElement } = loadDashboardTestHarness({}, { lang: 'zh' });
     const projectPath = '/tmp/ornn-project';
