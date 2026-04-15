@@ -10,6 +10,7 @@ import { homedir } from "node:os";
 import { parse } from "smol-toml";
 import { logger } from "../utils/logger.js";
 import { createLiteLLMClient } from "../llm/litellm-client.js";
+import { resolveLLMSafetyOptions, type LLMSafetyOptions } from "../llm/request-guard.js";
 
 export interface ProviderConfig {
   provider: string;
@@ -31,6 +32,13 @@ export interface OrnnConfig {
     auto_optimize?: boolean;
     user_confirm?: boolean;
     runtime_sync?: boolean;
+  };
+  llm_safety?: {
+    enabled?: boolean;
+    window_ms?: number;
+    max_requests_per_window?: number;
+    max_concurrent_requests?: number;
+    max_estimated_tokens_per_window?: number;
   };
 }
 
@@ -68,8 +76,10 @@ export function generateConfigContent(
   providers: ProviderConfig[],
   defaultProvider?: string,
   logLevel: string = DEFAULT_LOG_LEVEL,
-  tracking: { autoOptimize?: boolean; userConfirm?: boolean; runtimeSync?: boolean } = {}
+  tracking: { autoOptimize?: boolean; userConfirm?: boolean; runtimeSync?: boolean } = {},
+  llmSafety?: Partial<LLMSafetyOptions>
 ): string {
+  const normalizedSafety = resolveLLMSafetyOptions(llmSafety);
   let config = `[ornn]
 version = "0.1.9"
 log_level = "${logLevel}"
@@ -99,6 +109,13 @@ api_key_env_var = "${provider.apiKeyEnvVar}"
 auto_optimize = ${tracking.autoOptimize ?? true}
 user_confirm = ${tracking.userConfirm ?? false}
 runtime_sync = ${tracking.runtimeSync ?? true}
+
+[llm_safety]
+enabled = ${normalizedSafety.enabled}
+window_ms = ${normalizedSafety.windowMs}
+max_requests_per_window = ${normalizedSafety.maxRequestsPerWindow}
+max_concurrent_requests = ${normalizedSafety.maxConcurrentRequests}
+max_estimated_tokens_per_window = ${normalizedSafety.maxEstimatedTokensPerWindow}
 `;
 
   return config.trim();
@@ -142,6 +159,13 @@ export async function writeConfig(
       autoOptimize: existingConfig?.tracking?.auto_optimize ?? true,
       userConfirm: existingConfig?.tracking?.user_confirm ?? false,
       runtimeSync: existingConfig?.tracking?.runtime_sync ?? true,
+    },
+    {
+      enabled: existingConfig?.llm_safety?.enabled,
+      windowMs: existingConfig?.llm_safety?.window_ms,
+      maxRequestsPerWindow: existingConfig?.llm_safety?.max_requests_per_window,
+      maxConcurrentRequests: existingConfig?.llm_safety?.max_concurrent_requests,
+      maxEstimatedTokensPerWindow: existingConfig?.llm_safety?.max_estimated_tokens_per_window,
     }
   );
 
@@ -276,6 +300,13 @@ export async function setDefaultProvider(
       autoOptimize: config.tracking?.auto_optimize ?? true,
       userConfirm: config.tracking?.user_confirm ?? false,
       runtimeSync: config.tracking?.runtime_sync ?? true,
+    },
+    {
+      enabled: config.llm_safety?.enabled,
+      windowMs: config.llm_safety?.window_ms,
+      maxRequestsPerWindow: config.llm_safety?.max_requests_per_window,
+      maxConcurrentRequests: config.llm_safety?.max_concurrent_requests,
+      maxEstimatedTokensPerWindow: config.llm_safety?.max_estimated_tokens_per_window,
     }
   );
 
@@ -297,6 +328,7 @@ export interface DashboardConfig {
   autoOptimize: boolean;
   userConfirm: boolean;
   runtimeSync: boolean;
+  llmSafety: LLMSafetyOptions;
   defaultProvider: string;
   logLevel: string;
   providers: DashboardProviderConfig[];
@@ -351,6 +383,13 @@ async function readLegacyProjectDashboardConfig(projectPath: string): Promise<Da
     autoOptimize: config.tracking?.auto_optimize ?? true,
     userConfirm: config.tracking?.user_confirm ?? false,
     runtimeSync: config.tracking?.runtime_sync ?? true,
+    llmSafety: resolveLLMSafetyOptions({
+      enabled: config.llm_safety?.enabled,
+      windowMs: config.llm_safety?.window_ms,
+      maxRequestsPerWindow: config.llm_safety?.max_requests_per_window,
+      maxConcurrentRequests: config.llm_safety?.max_concurrent_requests,
+      maxEstimatedTokensPerWindow: config.llm_safety?.max_estimated_tokens_per_window,
+    }),
     defaultProvider: config.llm?.default_provider ?? '',
     logLevel: config.ornn?.log_level ?? DEFAULT_LOG_LEVEL,
     providers: providers.map((provider) => ({
@@ -361,22 +400,77 @@ async function readLegacyProjectDashboardConfig(projectPath: string): Promise<Da
   };
 }
 
+function mergeDashboardConfigs(
+  globalConfig: DashboardConfig,
+  legacyConfig: DashboardConfig
+): { mergedConfig: DashboardConfig; changed: boolean } {
+  const mergedProviders = [...globalConfig.providers];
+  let changed = false;
+
+  for (const legacyProvider of legacyConfig.providers) {
+    const existingIndex = mergedProviders.findIndex((provider) => provider.provider === legacyProvider.provider);
+    if (existingIndex < 0) {
+      mergedProviders.push({ ...legacyProvider });
+      changed = true;
+      continue;
+    }
+
+    const existing = mergedProviders[existingIndex];
+    const nextProvider: DashboardProviderConfig = { ...existing };
+    if (!nextProvider.modelName && legacyProvider.modelName) {
+      nextProvider.modelName = legacyProvider.modelName;
+      changed = true;
+    }
+    if (!nextProvider.apiKeyEnvVar && legacyProvider.apiKeyEnvVar) {
+      nextProvider.apiKeyEnvVar = legacyProvider.apiKeyEnvVar;
+      changed = true;
+    }
+    if ((!nextProvider.apiKey || !nextProvider.apiKey.trim()) && legacyProvider.apiKey?.trim()) {
+      nextProvider.apiKey = legacyProvider.apiKey.trim();
+      nextProvider.hasApiKey = true;
+      changed = true;
+    } else if (!nextProvider.hasApiKey && legacyProvider.hasApiKey) {
+      nextProvider.hasApiKey = true;
+      changed = true;
+    }
+    mergedProviders[existingIndex] = nextProvider;
+  }
+
+  let defaultProvider = globalConfig.defaultProvider;
+  if (!defaultProvider && legacyConfig.defaultProvider) {
+    defaultProvider = legacyConfig.defaultProvider;
+    changed = true;
+  }
+
+  if (mergedProviders.length === 0 && legacyConfig.providers.length > 0) {
+    changed = true;
+  }
+
+  return {
+    mergedConfig: {
+      ...globalConfig,
+      defaultProvider,
+      providers: mergedProviders,
+    },
+    changed,
+  };
+}
+
 export async function readDashboardConfig(projectPath?: string): Promise<DashboardConfig> {
   const config = await readTomlConfigFile(GLOBAL_DASHBOARD_CONFIG_PATH());
-  if (!config && projectPath) {
-    const legacyConfig = await readLegacyProjectDashboardConfig(projectPath);
-    if (legacyConfig) {
-      logger.info("Migrating legacy project dashboard config into global config", { projectPath });
-      await writeDashboardConfig(undefined, legacyConfig);
-      return legacyConfig;
-    }
-  }
   const providers = normalizeProvidersFromConfig(config);
   const envVars = await readEnvFile(GLOBAL_DASHBOARD_ENV_PATH());
-  return {
+  const globalConfig: DashboardConfig = {
     autoOptimize: config?.tracking?.auto_optimize ?? true,
     userConfirm: config?.tracking?.user_confirm ?? false,
     runtimeSync: config?.tracking?.runtime_sync ?? true,
+    llmSafety: resolveLLMSafetyOptions({
+      enabled: config?.llm_safety?.enabled,
+      windowMs: config?.llm_safety?.window_ms,
+      maxRequestsPerWindow: config?.llm_safety?.max_requests_per_window,
+      maxConcurrentRequests: config?.llm_safety?.max_concurrent_requests,
+      maxEstimatedTokensPerWindow: config?.llm_safety?.max_estimated_tokens_per_window,
+    }),
     defaultProvider: config?.llm?.default_provider ?? '',
     logLevel: config?.ornn?.log_level ?? DEFAULT_LOG_LEVEL,
     providers: providers.map((provider) => ({
@@ -385,6 +479,32 @@ export async function readDashboardConfig(projectPath?: string): Promise<Dashboa
       hasApiKey: Boolean(envVars[provider.apiKeyEnvVar] || process.env[provider.apiKeyEnvVar]),
     })),
   };
+
+  if (!projectPath) {
+    return globalConfig;
+  }
+
+  const legacyConfig = await readLegacyProjectDashboardConfig(projectPath);
+  if (!config && legacyConfig) {
+    logger.info("Migrating legacy project dashboard config into global config", { projectPath });
+    await writeDashboardConfig(undefined, legacyConfig);
+    return legacyConfig;
+  }
+
+  if (!legacyConfig) {
+    return globalConfig;
+  }
+
+  const { mergedConfig, changed } = mergeDashboardConfigs(globalConfig, legacyConfig);
+  if (changed) {
+    logger.info("Promoting legacy project dashboard provider config into global config", {
+      projectPath,
+      providerCount: mergedConfig.providers.length,
+      defaultProvider: mergedConfig.defaultProvider,
+    });
+    await writeDashboardConfig(undefined, mergedConfig);
+  }
+  return mergedConfig;
 }
 
 async function writeEnvVarToPath(
@@ -440,7 +560,8 @@ export async function writeDashboardConfig(
       autoOptimize: payload.autoOptimize,
       userConfirm: payload.userConfirm,
       runtimeSync: payload.runtimeSync,
-    }
+    },
+    payload.llmSafety
   );
   await writeFile(GLOBAL_DASHBOARD_CONFIG_PATH(), content, "utf-8");
 

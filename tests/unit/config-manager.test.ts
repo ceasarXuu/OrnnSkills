@@ -303,6 +303,13 @@ api_key_env_var = "DEEPSEEK_API_KEY"
 auto_optimize = true
 user_confirm = false
 runtime_sync = true
+
+[llm_safety]
+enabled = false
+window_ms = 45000
+max_requests_per_window = 9
+max_concurrent_requests = 1
+max_estimated_tokens_per_window = 12345
 `,
       'utf-8'
     );
@@ -315,6 +322,13 @@ runtime_sync = true
     const config = await readDashboardConfig(testDir);
     expect(config.defaultProvider).toBe('openai');
     expect(config.logLevel).toBe('debug');
+    expect(config.llmSafety).toEqual({
+      enabled: false,
+      windowMs: 45000,
+      maxRequestsPerWindow: 9,
+      maxConcurrentRequests: 1,
+      maxEstimatedTokensPerWindow: 12345,
+    });
     expect(config.providers).toHaveLength(2);
     expect(config.providers[0]?.apiKey).toBe('openai-secret');
     expect(config.providers[1]?.apiKey).toBe('deepseek-secret');
@@ -337,6 +351,13 @@ runtime_sync = true
       autoOptimize: true,
       userConfirm: false,
       runtimeSync: true,
+      llmSafety: {
+        enabled: false,
+        windowMs: 45000,
+        maxRequestsPerWindow: 9,
+        maxConcurrentRequests: 1,
+        maxEstimatedTokensPerWindow: 12345,
+      },
       defaultProvider: 'deepseek',
       logLevel: 'warn',
       providers: [
@@ -349,9 +370,23 @@ runtime_sync = true
     const parsed = parse(rawConfig) as {
       llm?: { default_provider?: string };
       ornn?: { log_level?: string };
+      llm_safety?: {
+        enabled?: boolean;
+        window_ms?: number;
+        max_requests_per_window?: number;
+        max_concurrent_requests?: number;
+        max_estimated_tokens_per_window?: number;
+      };
     };
     expect(parsed.llm?.default_provider).toBe('deepseek');
     expect(parsed.ornn?.log_level).toBe('warn');
+    expect(parsed.llm_safety).toEqual({
+      enabled: false,
+      window_ms: 45000,
+      max_requests_per_window: 9,
+      max_concurrent_requests: 1,
+      max_estimated_tokens_per_window: 12345,
+    });
     } finally {
       process.env.HOME = oldHome;
       vi.resetModules();
@@ -387,6 +422,13 @@ api_key_env_var = "DEEPSEEK_API_KEY"
 auto_optimize = true
 user_confirm = false
 runtime_sync = true
+
+[llm_safety]
+enabled = true
+window_ms = 30000
+max_requests_per_window = 5
+max_concurrent_requests = 1
+max_estimated_tokens_per_window = 9000
 `,
         'utf-8'
       );
@@ -395,6 +437,13 @@ runtime_sync = true
       const config = await readDashboardConfig(testDir);
       expect(config.defaultProvider).toBe('deepseek');
       expect(config.logLevel).toBe('error');
+      expect(config.llmSafety).toEqual({
+        enabled: true,
+        windowMs: 30000,
+        maxRequestsPerWindow: 5,
+        maxConcurrentRequests: 1,
+        maxEstimatedTokensPerWindow: 9000,
+      });
       expect(config.providers).toHaveLength(1);
       expect(config.providers[0]?.apiKey).toBe('legacy-project-secret');
 
@@ -405,6 +454,80 @@ runtime_sync = true
       const migratedConfig = readFileSync(join(globalHome, '.ornn', 'config', 'settings.toml'), 'utf-8');
       expect(migratedConfig).toContain('default_provider = "deepseek"');
       expect(migratedConfig).toContain('log_level = "error"');
+      expect(migratedConfig).toContain('[llm_safety]');
+      expect(migratedConfig).toContain('max_estimated_tokens_per_window = 9000');
+    } finally {
+      process.env.HOME = oldHome;
+      vi.resetModules();
+    }
+  });
+
+  it('should promote legacy project provider config into global config when global config exists but has no providers', async () => {
+    const oldHome = process.env.HOME;
+    const globalHome = join(testDir, 'global-home-promote-empty');
+    mkdirSync(join(globalHome, '.ornn', 'config'), { recursive: true });
+    mkdirSync(join(testDir, '.ornn', 'config'), { recursive: true });
+    process.env.HOME = globalHome;
+    vi.resetModules();
+
+    try {
+      const { readDashboardConfig } = await import('../../src/config/manager.js');
+      writeFileSync(
+        join(globalHome, '.ornn', 'config', 'settings.toml'),
+        `[ornn]
+version = "0.1.9"
+log_level = "info"
+project_path = "${globalHome}/.ornn"
+
+[tracking]
+auto_optimize = true
+user_confirm = false
+runtime_sync = true
+`,
+        'utf-8'
+      );
+
+      writeFileSync(
+        join(testDir, '.ornn', 'config', 'settings.toml'),
+        `[ornn]
+version = "0.1.9"
+log_level = "error"
+project_path = "${testDir}"
+
+[llm]
+default_provider = "deepseek"
+
+[providers.deepseek]
+provider = "deepseek"
+model_name = "deepseek/deepseek-reasoner"
+api_key_env_var = "DEEPSEEK_API_KEY"
+
+[tracking]
+auto_optimize = true
+user_confirm = false
+runtime_sync = true
+`,
+        'utf-8'
+      );
+      writeFileSync(join(testDir, '.env.local'), 'DEEPSEEK_API_KEY=project-secret\n', 'utf-8');
+
+      const config = await readDashboardConfig(testDir);
+      expect(config.defaultProvider).toBe('deepseek');
+      expect(config.providers).toHaveLength(1);
+      expect(config.providers[0]).toMatchObject({
+        provider: 'deepseek',
+        modelName: 'deepseek/deepseek-reasoner',
+        apiKeyEnvVar: 'DEEPSEEK_API_KEY',
+        apiKey: 'project-secret',
+        hasApiKey: true,
+      });
+
+      const migratedConfig = readFileSync(join(globalHome, '.ornn', 'config', 'settings.toml'), 'utf-8');
+      expect(migratedConfig).toContain('default_provider = "deepseek"');
+      expect(migratedConfig).toContain('[providers.deepseek]');
+      expect(readFileSync(join(globalHome, '.ornn', 'config', '.env.local'), 'utf-8')).toContain(
+        'DEEPSEEK_API_KEY=project-secret'
+      );
     } finally {
       process.env.HOME = oldHome;
       vi.resetModules();
