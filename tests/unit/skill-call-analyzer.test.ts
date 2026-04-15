@@ -106,6 +106,49 @@ describe('SkillCallAnalyzer', () => {
     expect(result.success).toBe(false);
     expect(result.error).toBe('invalid_analysis_json');
     expect(result.userMessage).toContain('required JSON format');
+    expect(result.technicalDetail).toContain('Raw model response excerpt');
+    expect(result.technicalDetail).toContain('not json');
+  });
+
+  it('recovers a valid json object even when malformed brace text appears before it', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: [
+                '先说明一下：{bad json}',
+                '最终输出如下：',
+                '{"decision":"no_optimization","reason":"当前无需修改","confidence":0.92,"evidence":[]}',
+              ].join('\n'),
+            },
+          },
+        ],
+        usage: {
+          prompt_tokens: 10,
+          completion_tokens: 20,
+          total_tokens: 30,
+        },
+        model: 'gpt-4o-mini',
+      }),
+    }));
+
+    const analyzer = createSkillCallAnalyzer();
+    const result = await analyzer.analyzeWindow('/tmp/project', {
+      windowId: 'window-2b',
+      skillId: 'test-skill',
+      runtime: 'codex',
+      sessionId: 'session-1',
+      closeReason: 'completed',
+      startedAt: '2026-04-10T00:00:00.000Z',
+      lastTraceAt: '2026-04-10T00:01:00.000Z',
+      traces: [],
+    } as never, 'content');
+
+    expect(result.success).toBe(true);
+    expect(result.decision).toBe('no_optimization');
+    expect(result.evaluation?.reason).toBe('当前无需修改');
   });
 
   it('retries deepseek json-mode calls when the first response has empty content', async () => {

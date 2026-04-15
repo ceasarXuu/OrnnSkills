@@ -979,6 +979,44 @@ describe('dashboard ui recovery', () => {
     expect(detail).toContain('原始技术信息: invalid_analysis_json | Empty content in LLM response');
   });
 
+  it('shows raw model response excerpts in analysis failure detail when parsing fails', async () => {
+    const { dashboard, getElement } = loadDashboardTestHarness({}, { lang: 'zh' });
+    const projectPath = '/tmp/ornn-project';
+
+    dashboard.state.selectedMainTab = 'activity';
+    dashboard.state.projectData = {
+      [projectPath]: {
+        daemon: {},
+        skills: [{ skillId: 'systematic-debugging', runtime: 'codex' }],
+        traceStats: { total: 1, byRuntime: { codex: 1 }, byStatus: { failed: 1 }, byEventType: { status: 1 } },
+        recentTraces: [],
+        decisionEvents: [{
+          id: 'evt-failure-raw',
+          timestamp: '2026-04-10T05:23:01.000Z',
+          tag: 'analysis_failed',
+          traceId: 'trace-failed-raw-1',
+          sessionId: 'session-failed-raw-1',
+          runtime: 'codex',
+          skillId: 'systematic-debugging',
+          status: 'failed',
+          windowId: 'scope-failed-raw-1',
+          detail: '模型返回了内容，但格式不符合系统要求，所以这轮分析结果无法解析。',
+          reason: 'invalid_analysis_json',
+          evidence: {
+            rawEvidence: 'invalid_analysis_json\nRaw model response excerpt:\n先说明一下：{bad json}\n最终输出如下：not-json',
+          },
+        }],
+        agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
+      },
+    };
+
+    dashboard.buildActivityRows(projectPath);
+    await dashboard.openActivityDetail(projectPath, 'decision:evt-failure-raw');
+    const detail = getElement('eventModalContent').textContent;
+    expect(detail).toContain('Raw model response excerpt');
+    expect(detail).toContain('先说明一下：{bad json}');
+  });
+
   it('filters out unknown skill refs such as repo-x from the business activity table', () => {
     const { dashboard } = loadDashboardTestHarness();
     const projectPath = '/tmp/ornn-project';

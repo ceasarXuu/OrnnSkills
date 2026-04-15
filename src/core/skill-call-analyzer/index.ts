@@ -9,6 +9,7 @@ import {
   normalizeNarrativeArray,
   normalizeNarrativeString,
 } from '../llm-localization/index.js';
+import { extractJsonObject } from '../../utils/json-response.js';
 import type {
   ChangeType,
   EvaluationResult,
@@ -76,6 +77,12 @@ function describeChangeType(changeType: ChangeType, lang: Language): string {
 
 function truncate(value: string, maxLength: number): string {
   return value.length <= maxLength ? value : `${value.slice(0, maxLength)}...`;
+}
+
+function buildRawResponseExcerpt(raw: string): string {
+  const normalized = String(raw || '').trim();
+  if (!normalized) return '';
+  return truncate(normalized, 1200);
 }
 
 function summarizeTrace(trace: Trace, lang: Language): string {
@@ -200,15 +207,6 @@ function buildPrompt(
   return { systemPrompt, userPrompt };
 }
 
-function extractJsonObject(raw: string): string | null {
-  const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  if (fenced) return fenced[1].trim();
-  const start = raw.indexOf('{');
-  const end = raw.lastIndexOf('}');
-  if (start >= 0 && end > start) return raw.slice(start, end + 1);
-  return null;
-}
-
 function normalizeDecision(value: unknown): WindowAnalysisDecision {
   switch (value) {
     case 'no_optimization':
@@ -321,10 +319,14 @@ function buildEvaluation(
 
 function describeAnalysisFailure(
   rawError: string,
-  lang: Language
+  lang: Language,
+  options?: {
+    rawResponse?: string | null;
+  },
 ): { errorCode: string; userMessage: string; technicalDetail: string } {
   const isZh = lang === 'zh';
   const normalized = String(rawError || '').trim();
+  const rawResponseExcerpt = buildRawResponseExcerpt(options?.rawResponse || '');
 
   if (normalized === 'provider_not_configured') {
     return {
@@ -337,12 +339,15 @@ function describeAnalysisFailure(
   }
 
   if (normalized === 'invalid_analysis_json') {
+    const technicalDetail = rawResponseExcerpt
+      ? [normalized, 'Raw model response excerpt:', rawResponseExcerpt].join('\n')
+      : normalized;
     return {
       errorCode: 'invalid_analysis_json',
       userMessage: isZh
         ? '模型返回了内容，但格式不符合系统要求，所以这轮分析结果无法解析。'
         : 'The model replied, but the response did not match the required JSON format, so the analysis could not be parsed.',
-      technicalDetail: normalized,
+      technicalDetail,
     };
   }
 
@@ -450,12 +455,13 @@ export class SkillCallAnalyzer {
       });
       const jsonText = extractJsonObject(raw);
       if (!jsonText) {
-        const failure = describeAnalysisFailure('invalid_analysis_json', lang);
+        const failure = describeAnalysisFailure('invalid_analysis_json', lang, { rawResponse: raw });
         logger.warn('Skill call analysis failed to return JSON', {
           projectPath,
           windowId: window.windowId,
           skillId: window.skillId,
           model,
+          rawResponseExcerpt: buildRawResponseExcerpt(raw),
         });
         return {
           success: false,

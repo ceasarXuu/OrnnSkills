@@ -5,6 +5,7 @@ import { recordAgentUsage } from '../agent-usage/index.js';
 import { readProjectLanguage } from '../../dashboard/language-state.js';
 import type { Language } from '../../dashboard/i18n.js';
 import { normalizeNarrativeArray, normalizeNarrativeString } from '../llm-localization/index.js';
+import { extractJsonObject } from '../../utils/json-response.js';
 import type { DecisionEventEvidence, EvaluationResult, Trace } from '../../types/index.js';
 
 const logger = createChildLogger('decision-explainer');
@@ -145,15 +146,6 @@ function buildPrompt(
       ].join('\n');
 
   return { systemPrompt, userPrompt };
-}
-
-function extractJsonObject(raw: string): string | null {
-  const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  if (fenced) return fenced[1].trim();
-  const start = raw.indexOf('{');
-  const end = raw.lastIndexOf('}');
-  if (start >= 0 && end > start) return raw.slice(start, end + 1);
-  return null;
 }
 
 function parseResponse(

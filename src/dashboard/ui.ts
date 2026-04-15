@@ -1681,6 +1681,7 @@ function describeAnalysisFailure(row) {
   const technical = [
     row && (row.rawReason || row.reason),
     row && (row.rawDetail || row.detail),
+    row && row.evidence && typeof row.evidence === 'object' ? row.evidence.rawEvidence : null,
   ]
     .filter((item, index, list) => item && list.indexOf(item) === index)
     .join(' | ');
