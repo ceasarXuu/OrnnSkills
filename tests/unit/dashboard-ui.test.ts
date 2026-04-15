@@ -1072,12 +1072,16 @@ describe('dashboard ui recovery', () => {
     expect(html).not.toContain('>patch_applied<');
   });
 
-  it('renders activity timestamps in local system time instead of raw UTC slices', () => {
+  it('renders activity timestamps as local full datetime instead of raw UTC slices', () => {
     const { dashboard, getElement } = loadDashboardTestHarness({}, { lang: 'zh' });
     const projectPath = '/tmp/ornn-project';
     const iso = '2026-04-10T00:05:06.000Z';
     const date = new Date(iso);
-    const expectedLocalTime = [
+    const expectedLocalDatetime = [
+      date.getFullYear(),
+      String(date.getMonth() + 1).padStart(2, '0'),
+      String(date.getDate()).padStart(2, '0'),
+    ].join('-') + ' ' + [
       String(date.getHours()).padStart(2, '0'),
       String(date.getMinutes()).padStart(2, '0'),
       String(date.getSeconds()).padStart(2, '0'),
@@ -1108,8 +1112,8 @@ describe('dashboard ui recovery', () => {
 
     dashboard.renderMainPanel(projectPath);
     const html = getElement('mainPanel').innerHTML;
-    expect(html).toContain(expectedLocalTime);
-    expect(html).not.toContain('>00:05:06<');
+    expect(html).toContain(expectedLocalDatetime);
+    expect(html).not.toContain('>2026-04-10T00:05:06.000Z<');
   });
 
   it('degrades to a project-level fallback when main panel rendering throws', () => {

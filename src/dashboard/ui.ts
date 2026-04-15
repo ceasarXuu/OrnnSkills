@@ -1732,9 +1732,12 @@ function persistActivityColumnWidths() {
   } catch {}
 }
 
+const DEFAULT_ACTIVITY_TIME_COLUMN_WIDTH = 172;
+
 function getActivityColumnWidth(columnKey, fallbackWidth) {
   const width = Number(state.activityColumnWidths?.[columnKey]);
   if (!Number.isFinite(width) || width <= 0) return fallbackWidth;
+  if (columnKey === 'time' && width < fallbackWidth) return fallbackWidth;
   return width;
 }
 
@@ -1769,9 +1772,13 @@ function formatEventTimestamp(iso) {
   if (!iso) return '—';
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) {
-    return String(iso).slice(11, 19) || '—';
+    return String(iso) || '—';
   }
   return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+  ].join('-') + ' ' + [
     String(date.getHours()).padStart(2, '0'),
     String(date.getMinutes()).padStart(2, '0'),
     String(date.getSeconds()).padStart(2, '0'),
@@ -1796,7 +1803,7 @@ function buildActivityDetail(row) {
   if (row.tag === 'analysis_failed') {
     const failure = describeAnalysisFailure(row);
     const lines = [
-      t('traceTime') + ': ' + (row.timestamp || '—'),
+      t('traceTime') + ': ' + formatEventTimestamp(row.timestamp),
       t('traceRuntime') + ': ' + (row.runtime || t('activityHostFallback')),
       t('traceEvent') + ': ' + businessEventLabel(row.tag),
       t('activitySkillLabel') + ': ' + (row.skillId || '—'),
@@ -1861,7 +1868,7 @@ function buildActivityDetail(row) {
     }
   }
   const lines = [
-    t('traceTime') + ': ' + (row.timestamp || '—'),
+    t('traceTime') + ': ' + formatEventTimestamp(row.timestamp),
     t('traceRuntime') + ': ' + (row.runtime || t('activityHostFallback')),
     t('traceEvent') + ': ' + businessEventLabel(row.tag),
     t('activitySkillLabel') + ': ' + (row.skillId || '—'),
@@ -1908,7 +1915,7 @@ function buildRawTraceDetail(row) {
   if (!trace) return t('activityDetailEmpty');
   const isZh = currentLang === 'zh';
   const lines = [
-    t('traceTime') + ': ' + (trace.timestamp || '—'),
+    t('traceTime') + ': ' + formatEventTimestamp(trace.timestamp),
     t('traceRuntime') + ': ' + (trace.runtime || t('activityHostFallback')),
     t('traceEvent') + ': ' + summarizeTraceEventType(trace),
     t('traceStatus') + ': ' + (trace.status || t('activityStatusFallback')),
@@ -2164,7 +2171,7 @@ function renderBusinessEvents(projectPath) {
     \${filtered.length === 0 ? \`<div class="empty-state">\${t('activityEmpty')}</div>\` : \`<div class="trace-table-wrap">
       <table class="activity-table">
         <thead><tr>
-          <th style="\${getActivityColumnStyle('time', 92)}">\${t('traceTime')}<span class="column-resizer" onmousedown="startActivityColumnResize(event,'time')"></span></th>
+          <th style="\${getActivityColumnStyle('time', DEFAULT_ACTIVITY_TIME_COLUMN_WIDTH)}">\${t('traceTime')}<span class="column-resizer" onmousedown="startActivityColumnResize(event,'time')"></span></th>
           <th style="\${getActivityColumnStyle('host', 96)}">\${t('traceRuntime')}<span class="column-resizer" onmousedown="startActivityColumnResize(event,'host')"></span></th>
           <th style="\${getActivityColumnStyle('event', 128)}">\${t('traceEvent')}<span class="column-resizer" onmousedown="startActivityColumnResize(event,'event')"></span></th>
           <th style="\${getActivityColumnStyle('skill', 220)}">\${t('activitySkillLabel')}<span class="column-resizer" onmousedown="startActivityColumnResize(event,'skill')"></span></th>
@@ -2174,7 +2181,7 @@ function renderBusinessEvents(projectPath) {
         </tr></thead>
         <tbody>
           \${filtered.slice(0, 80).map((e) => \`<tr>
-            <td style="color:var(--muted);\${getActivityColumnStyle('time', 92)}">\${formatEventTimestamp(e.timestamp)}</td>
+            <td style="color:var(--muted);\${getActivityColumnStyle('time', DEFAULT_ACTIVITY_TIME_COLUMN_WIDTH)}">\${formatEventTimestamp(e.timestamp)}</td>
             <td style="\${getActivityColumnStyle('host', 96)}">\${escHtml(e.runtime || t('activityHostFallback'))}</td>
             <td style="\${getActivityColumnStyle('event', 128)}">\${escHtml(businessEventLabel(e.tag))}</td>
             <td style="\${getActivityColumnStyle('skill', 220)}">\${renderActivitySkillCell(projectPath, e)}</td>
@@ -3619,7 +3626,7 @@ function renderRecentTraces(traces) {
   if (!rows.length) return '';
   return \`<table class="activity-table">
     <thead><tr>
-      <th style="\${getActivityColumnStyle('time', 92)}">\${t('traceTime')}<span class="column-resizer" onmousedown="startActivityColumnResize(event,'time')"></span></th>
+      <th style="\${getActivityColumnStyle('time', DEFAULT_ACTIVITY_TIME_COLUMN_WIDTH)}">\${t('traceTime')}<span class="column-resizer" onmousedown="startActivityColumnResize(event,'time')"></span></th>
       <th style="\${getActivityColumnStyle('host', 96)}">\${t('traceRuntime')}<span class="column-resizer" onmousedown="startActivityColumnResize(event,'host')"></span></th>
       <th style="\${getActivityColumnStyle('event', 128)}">\${t('traceEvent')}<span class="column-resizer" onmousedown="startActivityColumnResize(event,'event')"></span></th>
       <th style="\${getActivityColumnStyle('status', 120)}">\${t('traceStatus')}<span class="column-resizer" onmousedown="startActivityColumnResize(event,'status')"></span></th>
@@ -3630,7 +3637,7 @@ function renderRecentTraces(traces) {
       <th style="width:120px;min-width:120px;">\${t('traceAction')}</th>
     </tr></thead>
     <tbody>\${rows.slice(0, 50).map((row) => \`<tr>
-      <td style="color:var(--muted);\${getActivityColumnStyle('time', 92)}">\${formatEventTimestamp(row.timestamp)}</td>
+      <td style="color:var(--muted);\${getActivityColumnStyle('time', DEFAULT_ACTIVITY_TIME_COLUMN_WIDTH)}">\${formatEventTimestamp(row.timestamp)}</td>
       <td style="\${getActivityColumnStyle('host', 96)}">\${escHtml(row.runtime || t('activityHostFallback'))}</td>
       <td style="\${getActivityColumnStyle('event', 128)}">\${escHtml(summarizeTraceEventType(row.rawTrace))}</td>
       <td style="color:var(--muted);\${getActivityColumnStyle('status', 120)}">\${escHtml(row.status || t('activityStatusFallback'))}</td>
