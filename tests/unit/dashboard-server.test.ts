@@ -292,4 +292,34 @@ describe('dashboard server sse bootstrap', () => {
       await dashboard.stop();
     }
   });
+
+  it('passes projectPath query to global config and provider health endpoints for legacy fallback', async () => {
+    const port = await getFreePort();
+    const projectPath = '/tmp/legacy-project';
+    mocks.readDashboardConfig.mockResolvedValue({
+      autoOptimize: true,
+      userConfirm: false,
+      runtimeSync: true,
+      defaultProvider: 'deepseek',
+      logLevel: 'info',
+      providers: [{ provider: 'deepseek', modelName: 'deepseek/deepseek-chat', apiKeyEnvVar: 'DEEPSEEK_API_KEY', hasApiKey: true }],
+    });
+    mocks.checkProvidersConnectivity.mockResolvedValue([]);
+
+    const { createDashboardServer } = await import('../../src/dashboard/server.js');
+    const dashboard = createDashboardServer(port, 'en');
+    await dashboard.start();
+
+    try {
+      const configResponse = await fetch(`http://127.0.0.1:${port}/api/config?projectPath=${encodeURIComponent(projectPath)}`);
+      expect(configResponse.ok).toBe(true);
+      expect(mocks.readDashboardConfig).toHaveBeenCalledWith(projectPath);
+
+      await fetch(`http://127.0.0.1:${port}/api/provider-health?projectPath=${encodeURIComponent(projectPath)}`);
+      expect(mocks.readDashboardConfig).toHaveBeenCalledWith(projectPath);
+      expect(mocks.checkProvidersConnectivity).toHaveBeenCalledWith(projectPath, expect.any(Array));
+    } finally {
+      await dashboard.stop();
+    }
+  });
 });

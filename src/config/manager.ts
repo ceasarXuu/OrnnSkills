@@ -38,6 +38,8 @@ const DEFAULT_LOG_LEVEL = "info";
 const GLOBAL_DASHBOARD_CONFIG_DIR = () => join(homedir(), ".ornn", "config");
 const GLOBAL_DASHBOARD_CONFIG_PATH = () => join(GLOBAL_DASHBOARD_CONFIG_DIR(), "settings.toml");
 const GLOBAL_DASHBOARD_ENV_PATH = () => join(GLOBAL_DASHBOARD_CONFIG_DIR(), ".env.local");
+const PROJECT_DASHBOARD_CONFIG_PATH = (projectPath: string) => join(projectPath, ".ornn", "config", "settings.toml");
+const PROJECT_DASHBOARD_ENV_PATH = (projectPath: string) => join(projectPath, ".env.local");
 
 /**
  * Read existing config file
@@ -337,9 +339,38 @@ function normalizeProvidersFromConfig(config: OrnnConfig | null): ProviderConfig
   });
 }
 
+async function readLegacyProjectDashboardConfig(projectPath: string): Promise<DashboardConfig | null> {
+  const config = await readTomlConfigFile(PROJECT_DASHBOARD_CONFIG_PATH(projectPath));
+  const providers = normalizeProvidersFromConfig(config);
+  if (!config || providers.length === 0) {
+    return null;
+  }
+
+  const envVars = await readEnvFile(PROJECT_DASHBOARD_ENV_PATH(projectPath));
+  return {
+    autoOptimize: config.tracking?.auto_optimize ?? true,
+    userConfirm: config.tracking?.user_confirm ?? false,
+    runtimeSync: config.tracking?.runtime_sync ?? true,
+    defaultProvider: config.llm?.default_provider ?? '',
+    logLevel: config.ornn?.log_level ?? DEFAULT_LOG_LEVEL,
+    providers: providers.map((provider) => ({
+      ...provider,
+      apiKey: envVars[provider.apiKeyEnvVar] || '',
+      hasApiKey: Boolean(envVars[provider.apiKeyEnvVar] || process.env[provider.apiKeyEnvVar]),
+    })),
+  };
+}
+
 export async function readDashboardConfig(projectPath?: string): Promise<DashboardConfig> {
-  void projectPath;
   const config = await readTomlConfigFile(GLOBAL_DASHBOARD_CONFIG_PATH());
+  if (!config && projectPath) {
+    const legacyConfig = await readLegacyProjectDashboardConfig(projectPath);
+    if (legacyConfig) {
+      logger.info("Migrating legacy project dashboard config into global config", { projectPath });
+      await writeDashboardConfig(undefined, legacyConfig);
+      return legacyConfig;
+    }
+  }
   const providers = normalizeProvidersFromConfig(config);
   const envVars = await readEnvFile(GLOBAL_DASHBOARD_ENV_PATH());
   return {

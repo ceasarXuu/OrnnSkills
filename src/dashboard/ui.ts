@@ -1515,7 +1515,8 @@ async function ensureProviderHealth(projectPath, force = false) {
   const scopeId = getConfigScopeId();
   if (!force && state.providerHealthByProject[scopeId]) return;
   try {
-    const data = await fetchJsonWithTimeout('/api/provider-health', 20000);
+    const enc = encodeURIComponent(projectPath || '');
+    const data = await fetchJsonWithTimeout('/api/provider-health?projectPath=' + enc, 20000);
     state.providerHealthByProject[scopeId] = data.health || null;
   } catch (e) {
     console.warn('[dashboard] failed to load provider health', { projectPath, error: String(e) });
@@ -3861,11 +3862,12 @@ async function ensureProjectConfig(projectPath) {
   state.configLoadErrorByProject[scopeId] = '';
   try {
     let data = null;
+    const enc = encodeURIComponent(projectPath || '');
     try {
-      data = await fetchJsonWithTimeout('/api/config', 6000);
+      data = await fetchJsonWithTimeout('/api/config?projectPath=' + enc, 6000);
     } catch (firstErr) {
       console.warn('[dashboard] first config fetch failed, retrying', { projectPath, error: String(firstErr) });
-      data = await fetchJsonWithTimeout('/api/config', 12000);
+      data = await fetchJsonWithTimeout('/api/config?projectPath=' + enc, 12000);
     }
     state.configByProject[scopeId] = data.config || {};
     state.configLoadErrorByProject[scopeId] = '';

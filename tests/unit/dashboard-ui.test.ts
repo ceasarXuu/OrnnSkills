@@ -378,8 +378,8 @@ describe('dashboard ui recovery', () => {
 
     const fetchCalls = getFetchCalls();
     expect(fetchCalls).not.toContain('/api/providers/catalog');
-    expect(fetchCalls).toContain('/api/provider-health');
-    expect(fetchCalls).toContain('/api/config');
+    expect(fetchCalls).toContain(`/api/provider-health?projectPath=${encodedPath}`);
+    expect(fetchCalls).toContain(`/api/config?projectPath=${encodedPath}`);
   });
 
   it('reuses one global config payload when switching projects on the config tab', async () => {

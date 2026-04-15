@@ -357,4 +357,57 @@ runtime_sync = true
       vi.resetModules();
     }
   });
+
+  it('should migrate legacy project dashboard config into global config when global config is missing', async () => {
+    const oldHome = process.env.HOME;
+    const globalHome = join(testDir, 'global-home-migrate');
+    mkdirSync(join(globalHome, '.ornn'), { recursive: true });
+    mkdirSync(join(testDir, '.ornn', 'config'), { recursive: true });
+    process.env.HOME = globalHome;
+    vi.resetModules();
+
+    try {
+      const { readDashboardConfig } = await import('../../src/config/manager.js');
+      writeFileSync(
+        join(testDir, '.ornn', 'config', 'settings.toml'),
+        `[ornn]
+version = "0.1.9"
+log_level = "error"
+project_path = "${testDir}"
+
+[llm]
+default_provider = "deepseek"
+
+[providers.deepseek]
+provider = "deepseek"
+model_name = "deepseek/deepseek-chat"
+api_key_env_var = "DEEPSEEK_API_KEY"
+
+[tracking]
+auto_optimize = true
+user_confirm = false
+runtime_sync = true
+`,
+        'utf-8'
+      );
+      writeFileSync(join(testDir, '.env.local'), 'DEEPSEEK_API_KEY=legacy-project-secret\n', 'utf-8');
+
+      const config = await readDashboardConfig(testDir);
+      expect(config.defaultProvider).toBe('deepseek');
+      expect(config.logLevel).toBe('error');
+      expect(config.providers).toHaveLength(1);
+      expect(config.providers[0]?.apiKey).toBe('legacy-project-secret');
+
+      expect(existsSync(join(globalHome, '.ornn', 'config', 'settings.toml'))).toBe(true);
+      expect(readFileSync(join(globalHome, '.ornn', 'config', '.env.local'), 'utf-8')).toContain(
+        'DEEPSEEK_API_KEY=legacy-project-secret'
+      );
+      const migratedConfig = readFileSync(join(globalHome, '.ornn', 'config', 'settings.toml'), 'utf-8');
+      expect(migratedConfig).toContain('default_provider = "deepseek"');
+      expect(migratedConfig).toContain('log_level = "error"');
+    } finally {
+      process.env.HOME = oldHome;
+      vi.resetModules();
+    }
+  });
 });

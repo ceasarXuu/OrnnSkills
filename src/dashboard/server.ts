@@ -469,8 +469,10 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
       // ── API: Global dashboard config ──
       if (path === '/api/config' && method === 'GET') {
         const started = Date.now();
-        const config = await readDashboardConfig(undefined);
+        const projectPath = url.searchParams.get('projectPath') || undefined;
+        const config = await readDashboardConfig(projectPath);
         logger.info('Dashboard global config loaded', {
+          projectPath,
           providerCount: config.providers.length,
           durationMs: Date.now() - started,
         });
@@ -543,8 +545,10 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
 
       if (path === '/api/provider-health' && method === 'GET') {
         const started = Date.now();
-        const health = await getProviderHealthSummary(undefined);
+        const projectPath = url.searchParams.get('projectPath') || undefined;
+        const health = await getProviderHealthSummary(projectPath);
         logger.info('Dashboard global provider health fetched', {
+          projectPath,
           level: health.level,
           code: health.code,
           durationMs: Date.now() - started,
