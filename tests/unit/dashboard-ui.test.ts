@@ -820,6 +820,7 @@ describe('dashboard ui recovery', () => {
     expect(html).toContain('class="cost-shell"');
     expect(html).toContain('class="cost-hero"');
     expect(html).toContain('class="cost-rail"');
+    expect(html).not.toContain('class="cost-hero-pill"');
   });
 
   it('renders the richer cost tab with fully localized English copy', () => {
@@ -914,6 +915,7 @@ describe('dashboard ui recovery', () => {
     expect(html).toContain('class="cost-shell"');
     expect(html).toContain('class="cost-hero"');
     expect(html).toContain('class="cost-rail"');
+    expect(html).not.toContain('class="cost-hero-pill"');
     expect(html).toContain(
       'Calls, input tokens, output tokens, total tokens, average latency, latest call, and rollups by model, scope, and skill.'
     );

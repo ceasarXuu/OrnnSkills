@@ -390,23 +390,6 @@ export function getDashboardHtml(_port: number, lang: Language = 'en', buildId =
     line-height: 1.6;
     color: var(--text);
   }
-  .cost-hero-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 14px;
-  }
-  .cost-hero-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 5px 9px;
-    border-radius: 999px;
-    border: 1px solid rgba(88,166,255,.2);
-    background: rgba(15,23,30,.72);
-    color: var(--text);
-    font-size: 10px;
-  }
   .cost-summary-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2608,8 +2591,6 @@ function renderCostPanel(projectPath) {
     (row) => row.detail && Number(row.detail.outputCostPerReasoningToken) > 0
   );
   const leadModel = modelRows[0] || null;
-  const leadScope = scopeRows[0] || null;
-  const leadSkill = skillRows[0] || null;
 
   function renderSummaryCard(label, value, sub) {
     return '<div class="cost-summary-card">' +
@@ -2617,10 +2598,6 @@ function renderCostPanel(projectPath) {
       '<div class="cost-summary-value">' + escHtml(value) + '</div>' +
       '<div class="cost-summary-sub">' + escHtml(sub) + '</div>' +
     '</div>';
-  }
-
-  function renderHeroPill(text) {
-    return '<span class="cost-hero-pill">' + escHtml(text) + '</span>';
   }
 
   function renderModelStat(label, value, sub) {
@@ -2672,12 +2649,6 @@ function renderCostPanel(projectPath) {
         '<div class="cost-eyebrow">' + escHtml(t('costEstimated')) + '</div>' +
         '<div class="cost-hero-value">' + escHtml(pricedModelCount > 0 ? formatUsd(totalEstimatedSpend) : '—') + '</div>' +
         '<div class="cost-hero-copy">' + escHtml(pricedModelCount > 0 ? t('costEstimatedSub') : t('costUnknownPricing')) + '</div>' +
-        '<div class="cost-hero-meta">' +
-          renderHeroPill(formatPlainNumber(modelRows.length) + ' ' + t('costModelCount')) +
-          renderHeroPill(t('costCalls') + ' · ' + formatPlainNumber(usage.callCount)) +
-          (leadScope ? renderHeroPill(leadScope.key + ' · ' + formatUsageCompact(leadScope.bucket.totalTokens || 0)) : '') +
-          (leadSkill ? renderHeroPill(leadSkill.key + ' · ' + formatUsageCompact(leadSkill.bucket.totalTokens || 0)) : '') +
-        '</div>' +
       '</div>' +
       '<div class="cost-summary-grid">' +
         renderSummaryCard(t('costInputTokens'), formatUsageCompact(usage.promptTokens), t('costInputTokensSub')) +
