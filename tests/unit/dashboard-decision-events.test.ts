@@ -520,32 +520,82 @@ describe('dashboard decision event reader', () => {
   });
 
   it('prefers runtime pid detection over stale checkpoint running flags', () => {
-    const projectRoot = join(tmpdir(), `ornn-dashboard-daemon-running-flag-${Date.now()}`);
-    testRoots.push(projectRoot);
-    mkdirSync(join(projectRoot, '.ornn', 'state'), { recursive: true });
+    const oldHome = process.env.HOME;
+    const fakeHome = join(tmpdir(), `ornn-dashboard-stale-pid-home-${Date.now()}`);
+    process.env.HOME = fakeHome;
 
-    writeFileSync(
-      join(projectRoot, '.ornn', 'state', 'daemon-checkpoint.json'),
-      JSON.stringify({
-        isRunning: true,
-        pid: 999999,
-        startedAt: '2026-04-10T22:00:00.000Z',
-        processedTraces: 12,
-        lastCheckpointAt: '2026-04-10T22:39:24.975Z',
-        retryQueueSize: 0,
-        optimizationStatus: {
-          currentState: 'idle',
-          currentSkillId: null,
-          lastOptimizationAt: null,
-          lastError: null,
-          queueSize: 0,
-        },
-      }),
-      'utf-8'
-    );
+    try {
+      const projectRoot = join(tmpdir(), `ornn-dashboard-daemon-running-flag-${Date.now()}`);
+      testRoots.push(projectRoot);
+      testRoots.push(fakeHome);
+      mkdirSync(join(projectRoot, '.ornn', 'state'), { recursive: true });
+      mkdirSync(join(fakeHome, '.ornn'), { recursive: true });
 
-    const daemon = readDaemonStatus(projectRoot);
-    expect(daemon.pid).toBeNull();
-    expect(daemon.isRunning).toBe(false);
+      writeFileSync(
+        join(projectRoot, '.ornn', 'state', 'daemon-checkpoint.json'),
+        JSON.stringify({
+          isRunning: true,
+          pid: 999999,
+          startedAt: '2026-04-10T22:00:00.000Z',
+          processedTraces: 12,
+          lastCheckpointAt: '2026-04-10T22:39:24.975Z',
+          retryQueueSize: 0,
+          optimizationStatus: {
+            currentState: 'idle',
+            currentSkillId: null,
+            lastOptimizationAt: null,
+            lastError: null,
+            queueSize: 0,
+          },
+        }),
+        'utf-8'
+      );
+
+      const daemon = readDaemonStatus(projectRoot);
+      expect(daemon.pid).toBeNull();
+      expect(daemon.isRunning).toBe(false);
+    } finally {
+      process.env.HOME = oldHome;
+    }
+  });
+
+  it('falls back to the global pid file when project pid file is absent', () => {
+    const oldHome = process.env.HOME;
+    const fakeHome = join(tmpdir(), `ornn-dashboard-global-pid-${Date.now()}`);
+    process.env.HOME = fakeHome;
+
+    try {
+      const projectRoot = join(tmpdir(), `ornn-dashboard-daemon-global-pid-${Date.now()}`);
+      testRoots.push(projectRoot);
+      testRoots.push(fakeHome);
+      mkdirSync(join(projectRoot, '.ornn', 'state'), { recursive: true });
+      mkdirSync(join(fakeHome, '.ornn'), { recursive: true });
+
+      writeFileSync(join(fakeHome, '.ornn', 'daemon.pid'), String(process.pid), 'utf-8');
+      writeFileSync(
+        join(projectRoot, '.ornn', 'state', 'daemon-checkpoint.json'),
+        JSON.stringify({
+          isRunning: false,
+          startedAt: '2026-04-10T22:00:00.000Z',
+          processedTraces: 12,
+          lastCheckpointAt: '2026-04-10T22:39:24.975Z',
+          retryQueueSize: 0,
+          optimizationStatus: {
+            currentState: 'idle',
+            currentSkillId: null,
+            lastOptimizationAt: null,
+            lastError: null,
+            queueSize: 0,
+          },
+        }),
+        'utf-8'
+      );
+
+      const daemon = readDaemonStatus(projectRoot);
+      expect(daemon.pid).toBe(process.pid);
+      expect(daemon.isRunning).toBe(true);
+    } finally {
+      process.env.HOME = oldHome;
+    }
   });
 });

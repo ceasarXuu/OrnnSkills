@@ -104,6 +104,28 @@ describe('dashboard data reader snapshot version', () => {
     expect(after).not.toBe(before);
   });
 
+  it('changes snapshot version when the global daemon pid file changes', async () => {
+    const oldHome = process.env.HOME;
+    const fakeHome = join(testDir, 'global-home-snapshot-version');
+    mkdirSync(join(fakeHome, '.ornn'), { recursive: true });
+    process.env.HOME = fakeHome;
+
+    try {
+      const pidPath = join(fakeHome, '.ornn', 'daemon.pid');
+      writeFileSync(pidPath, '', 'utf-8');
+
+      const before = readProjectSnapshotVersion(testDir);
+
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      writeFileSync(pidPath, String(process.pid), 'utf-8');
+
+      const after = readProjectSnapshotVersion(testDir);
+      expect(after).not.toBe(before);
+    } finally {
+      process.env.HOME = oldHome;
+    }
+  });
+
   it('keeps recent skill-referenced traces in snapshot even after many newer untagged traces', () => {
     const tracePath = join(testDir, '.ornn', 'state', 'session-a.ndjson');
     const lines: string[] = [

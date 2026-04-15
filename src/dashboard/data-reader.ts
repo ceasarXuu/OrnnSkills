@@ -118,6 +118,10 @@ const SNAPSHOT_DECISION_EVENT_LIMIT = 150;
 const SNAPSHOT_SKILL_CONTEXT_LIMIT = 24;
 const SNAPSHOT_SKILL_CONTEXT_SCAN_LINES = 4000;
 
+function getGlobalDaemonPidPath(): string {
+  return join(homedir(), '.ornn', 'daemon.pid');
+}
+
 function listTraceNdjsonPaths(projectRoot: string): string[] {
   const stateDir = join(projectRoot, '.ornn', 'state');
   if (!existsSync(stateDir)) return [];
@@ -171,7 +175,8 @@ function isProcessRunning(pid: number): boolean {
 
 export function readDaemonStatus(projectRoot: string): DaemonStatus {
   const checkpointPath = join(projectRoot, '.ornn', 'state', 'daemon-checkpoint.json');
-  const pidPath = join(projectRoot, '.ornn', 'daemon.pid');
+  const projectPidPath = join(projectRoot, '.ornn', 'daemon.pid');
+  const pidPath = existsSync(projectPidPath) ? projectPidPath : getGlobalDaemonPidPath();
 
   let checkpoint: Omit<DaemonStatus, 'isRunning' | 'pid'> = {
     startedAt: null,
@@ -575,6 +580,7 @@ export function readProjectSnapshotVersion(projectRoot: string): string {
     .join(',');
   const parts = [
     readFileSignature(join(projectRoot, '.ornn', 'daemon.pid')),
+    readFileSignature(getGlobalDaemonPidPath()),
     readFileSignature(join(stateDir, 'daemon-checkpoint.json')),
     readFileSignature(join(stateDir, 'task-episodes.json')),
     traceSignatures || 'missing',
