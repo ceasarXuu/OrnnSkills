@@ -16,13 +16,17 @@ import {
   addProject,
   type RegisteredProject,
 } from './projects-registry.js';
-import { writeProjectLanguage } from './language-state.js';
+import { readProjectLanguage, writeProjectLanguage } from './language-state.js';
 import {
   readDaemonStatus,
   readSkills,
   readSkillContent,
   readSkillVersion,
   readRecentTraces,
+  readRecentDecisionEvents,
+  readTaskEpisodeSnapshot,
+  readAgentUsageRecords,
+  readTracesByIds,
   computeTraceStats,
   readProjectSnapshot,
   readProjectSnapshotVersion,
@@ -39,6 +43,7 @@ import type { RuntimeType } from '../types/index.js';
 import { createSkillDeployer } from '../core/skill-deployer/index.js';
 import { readDashboardConfig, writeDashboardConfig, checkProvidersConnectivity } from '../config/manager.js';
 import { getLiteLLMCatalog } from '../config/litellm-catalog.js';
+import { buildActivityScopeDetailFromData } from './activity-scope-reader.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -678,6 +683,41 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
         if (subPath === '/traces' && method === 'GET') {
           const traces = readRecentTraces(projectPath, 50);
           json(res, { traces, stats: computeTraceStats(traces) });
+          return;
+        }
+
+        const activityScopeMatch = subPath.match(/^\/activity-scopes\/([^/]+)$/);
+        if (activityScopeMatch && method === 'GET') {
+          const scopeId = decodeURIComponent(activityScopeMatch[1]);
+          const snapshot = readTaskEpisodeSnapshot(projectPath);
+          const episode = snapshot.episodes.find((item) => item.episodeId === scopeId);
+          if (!episode) {
+            notFound(res);
+            return;
+          }
+
+          const lang = await readProjectLanguage(projectPath, currentLang);
+          const detail = buildActivityScopeDetailFromData({
+            lang,
+            projectName: projectPath.split('/').filter(Boolean).pop() || projectPath,
+            episode,
+            decisionEvents: readRecentDecisionEvents(projectPath, 800),
+            agentUsageRecords: readAgentUsageRecords(projectPath, 800),
+            traces: readTracesByIds(projectPath, episode.traceRefs),
+          });
+
+          if (!detail) {
+            notFound(res);
+            return;
+          }
+
+          logger.debug('Dashboard activity scope detail loaded', {
+            projectPath,
+            scopeId,
+            status: detail.status,
+            timelineLength: detail.timeline.length,
+          });
+          json(res, { detail });
           return;
         }
 

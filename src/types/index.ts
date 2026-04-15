@@ -175,6 +175,9 @@ export interface AgentUsageRecord {
   scope: AgentUsageScope;
   eventId: string;
   skillId?: string | null;
+  episodeId?: string | null;
+  triggerTraceId?: string | null;
+  windowId?: string | null;
   model: string;
   promptTokens: number;
   completionTokens: number;

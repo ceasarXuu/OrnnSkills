@@ -14,12 +14,17 @@ import {
   readSync,
   closeSync,
 } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { homedir } from 'node:os';
 import type { ShadowEntry } from '../core/shadow-registry/index.js';
 import type { DecisionEventRecord } from '../core/decision-events/index.js';
 import type { AgentUsageSummary } from '../core/agent-usage/index.js';
-import type { AgentUsageRecord } from '../types/index.js';
+import type { TaskEpisodeSnapshot } from '../core/task-episode/index.js';
+import type { AgentUsageRecord, Trace } from '../types/index.js';
+import {
+  buildActivityScopeSummariesFromData,
+  type ActivityScopeSummary,
+} from './activity-scope-reader.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -75,6 +80,7 @@ export interface ProjectData {
   traceStats: TraceStats;
   recentTraces: TraceEntry[];
   decisionEvents: DecisionEventRecord[];
+  activityScopes: ActivityScopeSummary[];
   agentUsage: AgentUsageStats;
 }
 
@@ -543,12 +549,19 @@ export function readLogsSince(byteOffset: number): { lines: LogLine[]; newOffset
 
 export function readProjectSnapshot(projectRoot: string): ProjectData {
   const recentTraces = readRecentTraces(projectRoot, SNAPSHOT_RECENT_TRACE_LIMIT);
+  const decisionEvents = readRecentDecisionEvents(projectRoot, 400);
+  const taskEpisodes = readTaskEpisodeSnapshot(projectRoot);
   return {
     daemon: readDaemonStatus(projectRoot),
     skills: readSkills(projectRoot),
     traceStats: computeTraceStats(recentTraces),
     recentTraces: readRecentActivityTraces(projectRoot),
-    decisionEvents: readRecentDecisionEvents(projectRoot),
+    decisionEvents,
+    activityScopes: buildActivityScopeSummariesFromData({
+      projectName: basename(projectRoot),
+      episodes: taskEpisodes.episodes.slice(-150),
+      decisionEvents,
+    }).slice(0, 150),
     agentUsage: readAgentUsageStats(projectRoot),
   };
 }
@@ -584,6 +597,12 @@ export function readRecentDecisionEvents(projectRoot: string, limit = 50): Decis
         id: String(raw.id),
         timestamp: String(raw.timestamp ?? ''),
         tag: String(raw.tag),
+        businessCategory: raw.businessCategory ?? null,
+        businessTag: raw.businessTag ?? null,
+        episodeId: raw.episodeId ?? null,
+        inputSummary: raw.inputSummary ?? null,
+        judgment: raw.judgment ?? null,
+        nextAction: raw.nextAction ?? null,
         skillId: raw.skillId ?? null,
         runtime: raw.runtime ?? null,
         windowId: raw.windowId ?? null,
@@ -611,6 +630,29 @@ export function readRecentDecisionEvents(projectRoot: string, limit = 50): Decis
   return events
     .sort((a, b) => String(b.timestamp).localeCompare(String(a.timestamp)))
     .slice(0, limit);
+}
+
+export function readTaskEpisodeSnapshot(projectRoot: string): TaskEpisodeSnapshot {
+  const snapshotPath = join(projectRoot, '.ornn', 'state', 'task-episodes.json');
+  if (!existsSync(snapshotPath)) {
+    return {
+      updatedAt: new Date().toISOString(),
+      episodes: [],
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(readFileSync(snapshotPath, 'utf-8')) as Partial<TaskEpisodeSnapshot>;
+    return {
+      updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : new Date().toISOString(),
+      episodes: Array.isArray(parsed.episodes) ? parsed.episodes : [],
+    };
+  } catch {
+    return {
+      updatedAt: new Date().toISOString(),
+      episodes: [],
+    };
+  }
 }
 
 function emptyAgentUsageStats(): AgentUsageStats {
@@ -702,6 +744,99 @@ function readAgentUsageStatsFromNdjson(filePath: string): AgentUsageStats {
   } catch {
     return emptyAgentUsageStats();
   }
+}
+
+export function readAgentUsageRecords(projectRoot: string, limit = 400): AgentUsageRecord[] {
+  const filePath = join(projectRoot, '.ornn', 'state', 'agent-usage.ndjson');
+  if (!existsSync(filePath)) return [];
+
+  const lines = tailNdjson(filePath, Math.max(limit * 2, 400));
+  const records: AgentUsageRecord[] = [];
+  for (const line of lines) {
+    try {
+      const raw = JSON.parse(line) as Partial<AgentUsageRecord>;
+      if (!raw.id || !raw.timestamp || !raw.scope || !raw.eventId || !raw.model) continue;
+      records.push({
+        id: String(raw.id),
+        timestamp: String(raw.timestamp),
+        scope: raw.scope,
+        eventId: String(raw.eventId),
+        skillId: typeof raw.skillId === 'string' ? raw.skillId : null,
+        episodeId: typeof raw.episodeId === 'string' ? raw.episodeId : null,
+        triggerTraceId: typeof raw.triggerTraceId === 'string' ? raw.triggerTraceId : null,
+        windowId: typeof raw.windowId === 'string' ? raw.windowId : null,
+        model: String(raw.model),
+        promptTokens: typeof raw.promptTokens === 'number' ? raw.promptTokens : 0,
+        completionTokens: typeof raw.completionTokens === 'number' ? raw.completionTokens : 0,
+        totalTokens: typeof raw.totalTokens === 'number' ? raw.totalTokens : 0,
+        durationMs: typeof raw.durationMs === 'number' ? raw.durationMs : 0,
+      });
+    } catch {
+      // ignore malformed rows
+    }
+  }
+
+  return records
+    .sort((a, b) => String(a.timestamp).localeCompare(String(b.timestamp)))
+    .slice(-limit);
+}
+
+function parseTraceRecord(line: string): Trace | null {
+  try {
+    const raw = JSON.parse(line) as Partial<Trace>;
+    if (!raw.trace_id || !raw.timestamp || !raw.runtime || !raw.session_id || !raw.turn_id || !raw.event_type || !raw.status) {
+      return null;
+    }
+    return {
+      trace_id: String(raw.trace_id),
+      runtime: raw.runtime,
+      session_id: String(raw.session_id),
+      turn_id: String(raw.turn_id),
+      event_type: raw.event_type,
+      timestamp: String(raw.timestamp),
+      user_input: typeof raw.user_input === 'string' ? raw.user_input : undefined,
+      assistant_output: typeof raw.assistant_output === 'string' ? raw.assistant_output : undefined,
+      tool_name: typeof raw.tool_name === 'string' ? raw.tool_name : undefined,
+      tool_args: raw.tool_args && typeof raw.tool_args === 'object' ? raw.tool_args : undefined,
+      tool_result: raw.tool_result && typeof raw.tool_result === 'object' ? raw.tool_result : undefined,
+      files_changed: Array.isArray(raw.files_changed) ? raw.files_changed.map((item) => String(item)) : undefined,
+      skill_refs: Array.isArray(raw.skill_refs) ? raw.skill_refs.map((item) => String(item)) : undefined,
+      status: raw.status,
+      metadata: raw.metadata && typeof raw.metadata === 'object' ? raw.metadata : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function readTracesByIds(projectRoot: string, traceIds: string[]): Trace[] {
+  const wanted = new Set(traceIds.filter(Boolean));
+  if (wanted.size === 0) return [];
+
+  const traces = new Map<string, Trace>();
+  for (const filePath of listTraceNdjsonPaths(projectRoot)) {
+    let content = '';
+    try {
+      content = readFileSync(filePath, 'utf-8');
+    } catch {
+      continue;
+    }
+
+    for (const line of content.split(/\r?\n/)) {
+      if (!line.trim()) continue;
+      const trace = parseTraceRecord(line);
+      if (!trace || !wanted.has(trace.trace_id)) continue;
+      traces.set(trace.trace_id, trace);
+      if (traces.size >= wanted.size) {
+        break;
+      }
+    }
+    if (traces.size >= wanted.size) {
+      break;
+    }
+  }
+
+  return [...traces.values()].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
 }
 
 function emptyUsageBucket(): AgentUsageBucket {

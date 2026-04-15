@@ -237,6 +237,22 @@ export interface I18nStrings {
   activityDetailInput: string;
   activityDetailSummary: string;
   activityDetailNextStep: string;
+  activityProject: string;
+  activityScopeStatusObserving: string;
+  activityScopeStatusOptimized: string;
+  activityScopeStatusNoOptimization: string;
+  activityScopeTimelineTitle: string;
+  activityScopeNodeSkillCalled: string;
+  activityScopeNodeAnalysisSubmitted: string;
+  activityScopeNodeAnalysisResult: string;
+  activityScopeNodeOptimizationCompleted: string;
+  activityScopeNodeNoOptimization: string;
+  activityScopeTraceCount: string;
+  activityScopeCharCount: string;
+  activityScopeModel: string;
+  activityScopeSubmittedTraceText: string;
+  activityScopeDetailLoading: string;
+  activityScopeDetailLoadFailed: string;
 
   // Cost Panel
   costEmpty: string;
@@ -575,6 +591,22 @@ const en: I18nStrings = {
   activityDetailInput: 'Input',
   activityDetailSummary: 'Summary',
   activityDetailNextStep: 'Next Step',
+  activityProject: 'Project',
+  activityScopeStatusObserving: 'Observing',
+  activityScopeStatusOptimized: 'Optimized',
+  activityScopeStatusNoOptimization: 'No Optimization Needed',
+  activityScopeTimelineTitle: 'Scope Timeline',
+  activityScopeNodeSkillCalled: 'Skill Called',
+  activityScopeNodeAnalysisSubmitted: 'Analysis Submitted',
+  activityScopeNodeAnalysisResult: 'Analysis Result',
+  activityScopeNodeOptimizationCompleted: 'Optimization Completed',
+  activityScopeNodeNoOptimization: 'No Optimization',
+  activityScopeTraceCount: 'Trace Count',
+  activityScopeCharCount: 'Characters',
+  activityScopeModel: 'Model',
+  activityScopeSubmittedTraceText: 'Submitted Traces',
+  activityScopeDetailLoading: 'Loading scope timeline...',
+  activityScopeDetailLoadFailed: 'Failed to load scope timeline.',
 
   // Cost Panel
   costEmpty: 'No agent usage has been recorded yet.',
@@ -913,6 +945,22 @@ const zh: I18nStrings = {
   activityDetailInput: '输入',
   activityDetailSummary: '说明',
   activityDetailNextStep: '下一步',
+  activityProject: '项目',
+  activityScopeStatusObserving: '观察中',
+  activityScopeStatusOptimized: '优化完成',
+  activityScopeStatusNoOptimization: '无需优化',
+  activityScopeTimelineTitle: 'Scope 时间线',
+  activityScopeNodeSkillCalled: '技能调用',
+  activityScopeNodeAnalysisSubmitted: '提交分析',
+  activityScopeNodeAnalysisResult: '分析结果',
+  activityScopeNodeOptimizationCompleted: '优化完成',
+  activityScopeNodeNoOptimization: '无需优化',
+  activityScopeTraceCount: 'Trace 数',
+  activityScopeCharCount: '字符数',
+  activityScopeModel: '分析模型',
+  activityScopeSubmittedTraceText: '提交分析的 Trace',
+  activityScopeDetailLoading: '正在加载 scope 时间线...',
+  activityScopeDetailLoadFailed: '加载 scope 时间线失败。',
 
   // Cost Panel
   costEmpty: '当前还没有记录到 agent 调用成本数据。',

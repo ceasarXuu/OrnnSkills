@@ -168,12 +168,18 @@ export class ShadowManager {
       this.shadowRegistry.incrementTraceCount(skillId, (runtime ?? trace.runtime) as RuntimeType);
     }
 
-    const eventContext = buildActivityEventContext({ shadowId, trace, traces: recentTraces });
+    const baseEventContext = buildActivityEventContext({ shadowId, trace, traces: recentTraces });
     const episode = this.taskEpisodes.recordTrace(trace, {
-      skillId: eventContext.skillId,
+      skillId: baseEventContext.skillId,
       shadowId,
-      runtime: eventContext.runtime,
+      runtime: baseEventContext.runtime,
     }, recentTraces);
+    const eventContext = buildActivityEventContext({
+      episodeId: episode.episodeId,
+      shadowId,
+      trace,
+      traces: recentTraces,
+    });
     await this.maybeRunEpisodeProbe(episode, shadowId, trace, recentTraces, eventContext);
   }
 
@@ -197,10 +203,12 @@ export class ShadowManager {
     context: ActivityEventContext
   ): SkillCallWindow {
     return createSkillCallWindow({
+      episodeId: context.episodeId ?? episode.episodeId,
       windowId: context.windowId,
       skillId: context.skillId,
       runtime: context.runtime,
       sessionId: context.sessionId,
+      triggerTraceId: context.traceId,
       closeReason: 'window_threshold_reached',
       startedAt: episode.startedAt,
       lastTraceAt: traces[traces.length - 1]?.timestamp ?? episode.lastActivityAt,
@@ -224,6 +232,7 @@ export class ShadowManager {
     const context =
       eventContext ??
       buildActivityEventContext({
+        episodeId: episode.episodeId,
         shadowId,
         trace,
         traces: sessionTraces,
@@ -355,6 +364,7 @@ export class ShadowManager {
           return {
             traces,
             context: buildActivityEventContext({
+              episodeId: episode.episodeId,
               shadowId,
               trace: traces[traces.length - 1]!,
               traces,
@@ -736,10 +746,12 @@ export class ShadowManager {
       analyzeWindow: this.skillCallAnalyzer.analyzeWindow.bind(this.skillCallAnalyzer),
       projectPath: this.projectRoot,
       window: createSkillCallWindow({
+        episodeId: scope.episodeId ?? undefined,
         windowId: `manual::${eventContext.windowId}`,
         skillId,
         runtime,
         sessionId: eventContext.sessionId,
+        triggerTraceId: eventContext.traceId,
         closeReason: 'manual_trigger',
         startedAt: traces[0]?.timestamp,
         lastTraceAt: traces[traces.length - 1]?.timestamp,

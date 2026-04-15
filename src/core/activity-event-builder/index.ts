@@ -5,6 +5,7 @@ import { runtimeFromShadowId, skillIdFromShadowId } from '../../utils/parse.js';
 import type { PatchContextIssueCode } from '../window-analysis-outcome/index.js';
 
 export interface ActivityEventContext {
+  episodeId?: string | null;
   skillId: string;
   runtime: RuntimeType;
   windowId: string;
@@ -61,17 +62,19 @@ export function describePatchContextIssue(issue: PatchContextIssueCode): string 
 }
 
 export function buildActivityEventContext(input: {
+  episodeId?: string | null;
   shadowId: string;
   trace: Trace;
   traces: Trace[];
 }): ActivityEventContext {
-  const { shadowId, trace, traces } = input;
+  const { shadowId, trace, traces, episodeId = null } = input;
   const skillId = skillIdFromShadowId(shadowId) ?? trace.metadata?.skill_id?.toString() ?? shadowId.split('@')[0];
   const runtime = (runtimeFromShadowId(shadowId) ?? trace.runtime ?? 'codex') as RuntimeType;
   const sessionIds = [...new Set(traces.map((item) => item.session_id).filter(Boolean))];
   const sessionId = trace.session_id || sessionIds[0] || 'unknown-session';
 
   return {
+    episodeId,
     skillId,
     runtime,
     windowId: `${sessionId}::${skillId}`,
@@ -95,6 +98,7 @@ export function buildEvaluationResultEvent(input: {
     tag: 'evaluation_result',
     businessCategory: businessMeta.businessCategory,
     businessTag: businessMeta.businessTag,
+    episodeId: context.episodeId ?? null,
     inputSummary: buildWindowInputSummary(context),
     judgment: detail,
     nextAction: businessMeta.nextAction,
@@ -128,6 +132,7 @@ export function buildAnalysisRequestedEvent(input: {
     tag: 'analysis_requested',
     businessCategory: 'core_flow',
     businessTag: 'analysis_started',
+    episodeId: context.episodeId ?? null,
     inputSummary: buildWindowInputSummary(context),
     judgment: detail,
     nextAction: '等待本轮分析返回结果，再决定是继续观察、保持现状还是执行优化。',
@@ -159,6 +164,7 @@ export function buildAnalysisFailedEvent(input: {
     tag: 'analysis_failed',
     businessCategory: 'stability_feedback',
     businessTag: 'analysis_failed',
+    episodeId: context.episodeId ?? null,
     inputSummary: buildWindowInputSummary(context),
     judgment: detail,
     nextAction: '优先排查分析链路、模型服务或协议问题，而不是直接修改技能内容。',
@@ -195,6 +201,7 @@ export function buildSkillFeedbackEvent(input: {
     tag: 'skill_feedback',
     businessCategory: 'supporting_detail',
     businessTag: 'analysis_support',
+    episodeId: context.episodeId ?? null,
     inputSummary: buildWindowInputSummary(context),
     judgment: explanation.summary,
     nextAction: explanation.recommendedAction,
@@ -233,6 +240,7 @@ export function buildPatchAppliedEvent(input: {
     tag: 'patch_applied',
     businessCategory: 'core_flow',
     businessTag: 'optimization_applied',
+    episodeId: context.episodeId ?? null,
     inputSummary: buildWindowInputSummary(context),
     judgment: detail,
     nextAction: '后续调用会继续验证这次优化是否有效，并在必要时开启下一轮观察。',

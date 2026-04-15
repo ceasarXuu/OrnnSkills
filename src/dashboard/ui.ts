@@ -276,6 +276,8 @@ export function getDashboardHtml(_port: number, lang: Language = 'en', buildId =
     word-break: break-word;
   }
   .activity-table tr:last-child td { border-bottom: none; }
+  .activity-scope-row { cursor: pointer; }
+  .activity-scope-row:hover td { background: rgba(88,166,255,.06); }
   .column-resizer {
     position: absolute;
     top: 0;
@@ -330,6 +332,140 @@ export function getDashboardHtml(_port: number, lang: Language = 'en', buildId =
     padding: 0;
   }
   .detail-copy-btn:hover, .detail-view-btn:hover { text-decoration: underline; }
+  .activity-scope-status {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 10px;
+    line-height: 1.4;
+    border: 1px solid transparent;
+    white-space: nowrap;
+  }
+  .activity-scope-status-observing {
+    color: #7bb7ff;
+    background: rgba(88,166,255,.14);
+    border-color: rgba(88,166,255,.25);
+  }
+  .activity-scope-status-optimized {
+    color: var(--green);
+    background: rgba(57,211,83,.12);
+    border-color: rgba(57,211,83,.22);
+  }
+  .activity-scope-status-no_optimization {
+    color: #d2a8ff;
+    background: rgba(188,140,255,.12);
+    border-color: rgba(188,140,255,.22);
+  }
+  .activity-scope-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .activity-scope-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 10px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: rgba(17,24,39,.55);
+  }
+  .activity-scope-summary-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .activity-scope-summary-label {
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+  }
+  .activity-scope-summary-value {
+    font-size: 12px;
+    color: var(--text);
+    line-height: 1.5;
+    word-break: break-word;
+  }
+  .activity-scope-timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .activity-scope-node {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px;
+    background: rgba(13,17,23,.88);
+  }
+  .activity-scope-node-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: flex-start;
+    margin-bottom: 8px;
+  }
+  .activity-scope-node-title {
+    font-size: 12px;
+    color: var(--text);
+    font-weight: 600;
+  }
+  .activity-scope-node-time {
+    font-size: 10px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .activity-scope-node-summary {
+    font-size: 11px;
+    color: var(--text);
+    line-height: 1.65;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .activity-scope-metrics {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .activity-scope-metric {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    padding: 4px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: rgba(17,24,39,.6);
+    font-size: 10px;
+  }
+  .activity-scope-metric-label { color: var(--muted); }
+  .activity-scope-metric-value { color: var(--text); }
+  .activity-scope-traces {
+    margin-top: 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: rgba(17,24,39,.45);
+  }
+  .activity-scope-traces summary {
+    cursor: pointer;
+    padding: 10px 12px;
+    color: var(--blue);
+    font-size: 11px;
+    user-select: none;
+  }
+  .activity-scope-traces pre,
+  .activity-detail-text {
+    margin: 0;
+    padding: 0 12px 12px;
+    font-family: var(--font);
+    font-size: 11px;
+    line-height: 1.65;
+    color: var(--text);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .activity-detail-text { padding: 0; }
   .activity-node-cell {
     display: flex;
     flex-direction: column;
@@ -790,7 +926,7 @@ export function getDashboardHtml(_port: number, lang: Language = 'en', buildId =
     </div>
     <div class="modal-body" style="grid-template-columns: 1fr;">
       <div class="modal-content" style="border-right:none;">
-        <pre id="eventModalContent">${t.activityDetailEmpty}</pre>
+        <div id="eventModalContent"><pre class="activity-detail-text">${t.activityDetailEmpty}</pre></div>
       </div>
     </div>
   </div>
@@ -842,6 +978,7 @@ async function persistDashboardLanguage(lang, projectPath) {
 async function switchLang(lang) {
   currentLang = lang === 'zh' ? 'zh' : 'en';
   document.documentElement.lang = currentLang;
+  invalidateActivityScopeDetails();
   // Update active button
   document.querySelectorAll('.lang-btn').forEach(btn => {
     btn.classList.toggle('active', btn.textContent.trim() === (currentLang === 'en' ? 'EN' : '中文'));
@@ -892,6 +1029,7 @@ const state = {
   activityTagFilter: 'core_flow',
   activityRowsByProject: {},
   rawActivityRowsByProject: {},
+  activityScopeDetailsByProject: {},
   activityColumnWidths: loadSavedActivityColumnWidths(),
   lastCopiedActivityText: '',
   providerHealthByProject: {},
@@ -1059,6 +1197,9 @@ function handleUpdate(data) {
   }
   if (data.projectData) {
     state.projectData = { ...state.projectData, ...data.projectData };
+    for (const projectPath of Object.keys(data.projectData)) {
+      invalidateActivityScopeDetails(projectPath);
+    }
     if (state.selectedProjectId && Object.prototype.hasOwnProperty.call(data.projectData, state.selectedProjectId)) {
       shouldRerenderMain = true;
     }
@@ -1937,6 +2078,184 @@ function formatEventTimestamp(iso) {
   ].join(':');
 }
 
+function getProjectName(projectPath) {
+  if (!projectPath) return '—';
+  const normalized = String(projectPath).replace(/[\\/]+$/, '');
+  const parts = normalized.split(/[\\/]/).filter(Boolean);
+  return parts[parts.length - 1] || normalized || '—';
+}
+
+function localizeActivityScopeStatus(status) {
+  switch (status) {
+  case 'optimized':
+    return t('activityScopeStatusOptimized');
+  case 'no_optimization':
+    return t('activityScopeStatusNoOptimization');
+  case 'observing':
+  default:
+    return t('activityScopeStatusObserving');
+  }
+}
+
+function buildScopeActivityRows(projectPath) {
+  const pd = state.projectData[projectPath] || {};
+  const scopes = Array.isArray(pd.activityScopes) ? pd.activityScopes : [];
+  const rows = scopes.map((scope) => ({
+    id: 'scope:' + scope.scopeId,
+    kind: 'scope',
+    scopeId: scope.scopeId,
+    timestamp: scope.createdAt || '',
+    updatedAt: scope.updatedAt || scope.createdAt || '',
+    runtime: scope.runtime || t('activityHostFallback'),
+    skillId: scope.skillId || null,
+    projectName: scope.projectName || getProjectName(projectPath),
+    rawStatus: scope.status || 'observing',
+    status: localizeActivityScopeStatus(scope.status),
+    sessionId: scope.sessionId || null,
+  })).sort((a, b) => String(b.timestamp).localeCompare(String(a.timestamp)));
+
+  state.activityRowsByProject[projectPath] = rows;
+  return rows;
+}
+
+function isScopeActivityRow(row) {
+  return Boolean(row && row.kind === 'scope' && row.scopeId);
+}
+
+function getScopeDetailCache(projectPath) {
+  if (!state.activityScopeDetailsByProject[projectPath]) {
+    state.activityScopeDetailsByProject[projectPath] = {};
+  }
+  return state.activityScopeDetailsByProject[projectPath];
+}
+
+function invalidateActivityScopeDetails(projectPath) {
+  if (projectPath) {
+    delete state.activityScopeDetailsByProject[projectPath];
+    return;
+  }
+  state.activityScopeDetailsByProject = {};
+}
+
+function formatScopeTimelineNodeLabel(nodeType) {
+  switch (nodeType) {
+  case 'skill_called':
+    return t('activityScopeNodeSkillCalled');
+  case 'analysis_submitted':
+    return t('activityScopeNodeAnalysisSubmitted');
+  case 'analysis_result':
+    return t('activityScopeNodeAnalysisResult');
+  case 'optimization_completed':
+    return t('activityScopeNodeOptimizationCompleted');
+  case 'no_optimization':
+    return t('activityScopeNodeNoOptimization');
+  default:
+    return t('activityDetailFallback');
+  }
+}
+
+function renderScopeDetailValue(value) {
+  return value ? escHtml(String(value)) : escHtml(t('activityDetailFallback'));
+}
+
+function renderScopeStatusBadge(rawStatus) {
+  const normalized = rawStatus === 'optimized' || rawStatus === 'no_optimization'
+    ? rawStatus
+    : 'observing';
+  return '<span class="activity-scope-status activity-scope-status-' + normalized + '">' +
+    escHtml(localizeActivityScopeStatus(normalized)) +
+    '</span>';
+}
+
+function renderScopeMetric(label, value) {
+  return '<span class="activity-scope-metric">' +
+    '<span class="activity-scope-metric-label">' + escHtml(label) + '</span>' +
+    '<span class="activity-scope-metric-value">' + escHtml(value) + '</span>' +
+    '</span>';
+}
+
+function renderActivityScopeTimelineNode(node) {
+  const metrics = [];
+  if (node.traceCount != null) {
+    metrics.push(renderScopeMetric(t('activityScopeTraceCount'), String(node.traceCount) + (currentLang === 'zh' ? ' 条 trace' : ' traces')));
+  }
+  if (node.charCount != null) {
+    metrics.push(renderScopeMetric(t('activityScopeCharCount'), String(node.charCount) + (currentLang === 'zh' ? ' 字符' : ' chars')));
+  }
+  if (node.model) {
+    metrics.push(renderScopeMetric(t('activityScopeModel'), String(node.model)));
+  }
+
+  return '<div class="activity-scope-node">' +
+    '<div class="activity-scope-node-head">' +
+      '<div class="activity-scope-node-title">' + escHtml(formatScopeTimelineNodeLabel(node.type)) + '</div>' +
+      '<div class="activity-scope-node-time">' + escHtml(formatEventTimestamp(node.timestamp)) + '</div>' +
+    '</div>' +
+    '<div class="activity-scope-node-summary">' + escHtml(node.summary || t('activityDetailFallback')) + '</div>' +
+    (metrics.length > 0 ? ('<div class="activity-scope-metrics">' + metrics.join('') + '</div>') : '') +
+    (node.traceText
+      ? '<details class="activity-scope-traces"><summary>' + escHtml(t('activityScopeSubmittedTraceText')) + '</summary><pre>' + escHtml(node.traceText) + '</pre></details>'
+      : '') +
+    '</div>';
+}
+
+function renderActivityScopeDetail(detail) {
+  const timeline = Array.isArray(detail?.timeline) ? detail.timeline : [];
+  return '<div class="activity-scope-detail">' +
+    '<div class="activity-scope-summary">' +
+      '<div class="activity-scope-summary-item"><span class="activity-scope-summary-label">' + escHtml(t('traceTime')) + '</span><span class="activity-scope-summary-value">' + escHtml(formatEventTimestamp(detail.createdAt)) + '</span></div>' +
+      '<div class="activity-scope-summary-item"><span class="activity-scope-summary-label">' + escHtml(t('activitySkillLabel')) + '</span><span class="activity-scope-summary-value">' + renderScopeDetailValue(detail.skillId || '—') + '</span></div>' +
+      '<div class="activity-scope-summary-item"><span class="activity-scope-summary-label">' + escHtml(t('traceRuntime')) + '</span><span class="activity-scope-summary-value">' + renderScopeDetailValue(detail.runtime || t('activityHostFallback')) + '</span></div>' +
+      '<div class="activity-scope-summary-item"><span class="activity-scope-summary-label">' + escHtml(t('activityProject')) + '</span><span class="activity-scope-summary-value">' + renderScopeDetailValue(detail.projectName || '—') + '</span></div>' +
+      '<div class="activity-scope-summary-item"><span class="activity-scope-summary-label">' + escHtml(t('traceStatus')) + '</span><span class="activity-scope-summary-value">' + renderScopeStatusBadge(detail.status) + '</span></div>' +
+      '<div class="activity-scope-summary-item"><span class="activity-scope-summary-label">' + escHtml(t('traceScope')) + '</span><span class="activity-scope-summary-value">' + renderScopeDetailValue(detail.scopeId || '—') + '</span></div>' +
+    '</div>' +
+    '<div class="activity-scope-timeline">' +
+      timeline.map((node) => renderActivityScopeTimelineNode(node)).join('') +
+    '</div>' +
+  '</div>';
+}
+
+function buildActivityScopeDetailText(detail) {
+  if (!detail) return t('activityDetailEmpty');
+  const lines = [
+    t('traceTime') + ': ' + formatEventTimestamp(detail.createdAt),
+    t('activitySkillLabel') + ': ' + (detail.skillId || '—'),
+    t('traceRuntime') + ': ' + (detail.runtime || t('activityHostFallback')),
+    t('activityProject') + ': ' + (detail.projectName || '—'),
+    t('traceStatus') + ': ' + localizeActivityScopeStatus(detail.status),
+    t('traceScope') + ': ' + (detail.scopeId || '—'),
+    '',
+    t('activityScopeTimelineTitle') + ':',
+  ];
+
+  for (const node of Array.isArray(detail.timeline) ? detail.timeline : []) {
+    lines.push(
+      formatScopeTimelineNodeLabel(node.type) + ' | ' + formatEventTimestamp(node.timestamp),
+      node.summary || t('activityDetailFallback')
+    );
+    if (node.traceCount != null) lines.push(t('activityScopeTraceCount') + ': ' + node.traceCount);
+    if (node.charCount != null) lines.push(t('activityScopeCharCount') + ': ' + node.charCount);
+    if (node.model) lines.push(t('activityScopeModel') + ': ' + node.model);
+    if (node.traceText) {
+      lines.push(t('activityScopeSubmittedTraceText') + ':', node.traceText);
+    }
+    lines.push('');
+  }
+
+  return lines.join('\\n').trim();
+}
+
+async function fetchActivityScopeDetail(projectPath, scopeId) {
+  const cache = getScopeDetailCache(projectPath);
+  if (cache[scopeId]) return cache[scopeId];
+  const encodedProjectPath = encodeURIComponent(projectPath);
+  const encodedScopeId = encodeURIComponent(scopeId);
+  const response = await fetchJsonWithTimeout('/api/projects/' + encodedProjectPath + '/activity-scopes/' + encodedScopeId, 12000);
+  cache[scopeId] = response.detail || null;
+  return cache[scopeId];
+}
+
 function summarizeTraceEventType(trace) {
   if (!trace) return t('activityDetailFallback');
   if (trace.event_type === 'tool_call') return t('activityTraceToolCall');
@@ -2074,6 +2393,15 @@ function buildRawTraceDetail(row) {
 
 function buildActivityRows(projectPath) {
   const pd = state.projectData[projectPath] || {};
+  if (Array.isArray(pd.activityScopes) && pd.activityScopes.length > 0) {
+    const scopeRows = buildScopeActivityRows(projectPath);
+    console.debug('[dashboard] activity scope rows rebuilt', {
+      projectPath,
+      rowCount: scopeRows.length,
+    });
+    return scopeRows;
+  }
+
   const traces = Array.isArray(pd.recentTraces) ? pd.recentTraces : [];
   const decisionEvents = Array.isArray(pd.decisionEvents) ? pd.decisionEvents : [];
   const knownSkills = new Set(
@@ -2210,9 +2538,20 @@ function getActivityRow(projectPath, rowId) {
   return rows.find((row) => row.id === rowId) || null;
 }
 
+function setEventModalContentHtml(html) {
+  const el = document.getElementById('eventModalContent');
+  if (!el) return;
+  el.innerHTML = html;
+  if (typeof HTMLElement === 'undefined' || !(el instanceof HTMLElement)) {
+    el.textContent = String(html).replace(/<[^>]+>/g, '');
+  }
+}
+
 async function copyActivityDetail(projectPath, rowId) {
   const row = getActivityRow(projectPath, rowId);
-  const text = buildActivityDetail(row);
+  const text = isScopeActivityRow(row)
+    ? buildActivityScopeDetailText(await fetchActivityScopeDetail(projectPath, row.scopeId))
+    : buildActivityDetail(row);
   state.lastCopiedActivityText = text;
   if (navigator.clipboard && navigator.clipboard.writeText) {
     await navigator.clipboard.writeText(text);
@@ -2221,10 +2560,32 @@ async function copyActivityDetail(projectPath, rowId) {
 
 async function openActivityDetail(projectPath, rowId) {
   const row = getActivityRow(projectPath, rowId);
+  if (isScopeActivityRow(row)) {
+    document.getElementById('eventModalTitle').textContent = (row.skillId || '—') + ' · ' + t('activityScopeTimelineTitle');
+    setEventModalContentHtml('<pre class="activity-detail-text">' + escHtml(t('activityScopeDetailLoading')) + '</pre>');
+    document.getElementById('eventModal').classList.add('visible');
+    try {
+      const detail = await fetchActivityScopeDetail(projectPath, row.scopeId);
+      if (!detail) {
+        setEventModalContentHtml('<pre class="activity-detail-text">' + escHtml(t('activityDetailEmpty')) + '</pre>');
+        return;
+      }
+      setEventModalContentHtml(renderActivityScopeDetail(detail));
+    } catch (error) {
+      console.warn('[dashboard] failed to load activity scope detail', {
+        projectPath,
+        scopeId: row.scopeId,
+        error: String(error),
+      });
+      setEventModalContentHtml('<pre class="activity-detail-text">' + escHtml(t('activityScopeDetailLoadFailed') + ' ' + String(error)) + '</pre>');
+    }
+    return;
+  }
+
   document.getElementById('eventModalTitle').textContent = row
     ? ((row.rawTrace ? summarizeTraceEventType(row.rawTrace) : businessEventLabel(row.tag)) + ' · ' + (row.skillId || '—'))
     : t('activityDetailTitle');
-  document.getElementById('eventModalContent').textContent = buildActivityDetail(row);
+  setEventModalContentHtml('<pre class="activity-detail-text">' + escHtml(buildActivityDetail(row)) + '</pre>');
   document.getElementById('eventModal').classList.add('visible');
 }
 
@@ -2269,6 +2630,35 @@ function renderActivitySkillCell(projectPath, row) {
 
 function renderBusinessEvents(projectPath) {
   const events = buildActivityRows(projectPath);
+  if (events.length > 0 && events.every((row) => isScopeActivityRow(row))) {
+    return \`
+      <div class="activity-controls">
+        <div class="activity-left"></div>
+        <div style="font-size:10px;color:var(--muted)">\${events.length}</div>
+      </div>
+      <div class="trace-table-wrap">
+        <table class="activity-table">
+          <thead><tr>
+            <th style="\${getActivityColumnStyle('time', DEFAULT_ACTIVITY_TIME_COLUMN_WIDTH)}">\${t('traceTime')}<span class="column-resizer" onmousedown="startActivityColumnResize(event,'time')"></span></th>
+            <th style="\${getActivityColumnStyle('skill', 240)}">\${t('activitySkillLabel')}<span class="column-resizer" onmousedown="startActivityColumnResize(event,'skill')"></span></th>
+            <th style="\${getActivityColumnStyle('host', 110)}">\${t('traceRuntime')}<span class="column-resizer" onmousedown="startActivityColumnResize(event,'host')"></span></th>
+            <th style="\${getActivityColumnStyle('project', 180)}">\${t('activityProject')}<span class="column-resizer" onmousedown="startActivityColumnResize(event,'project')"></span></th>
+            <th style="\${getActivityColumnStyle('status', 140)}">\${t('traceStatus')}<span class="column-resizer" onmousedown="startActivityColumnResize(event,'status')"></span></th>
+          </tr></thead>
+          <tbody>
+            \${events.slice(0, 120).map((row) => \`<tr class="activity-scope-row" onclick="openActivityDetail('\${escJsStr(projectPath)}','\${escJsStr(row.id)}')">
+              <td style="color:var(--muted);\${getActivityColumnStyle('time', DEFAULT_ACTIVITY_TIME_COLUMN_WIDTH)}">\${formatEventTimestamp(row.timestamp)}</td>
+              <td style="\${getActivityColumnStyle('skill', 240)}">\${renderActivitySkillCell(projectPath, row)}</td>
+              <td style="\${getActivityColumnStyle('host', 110)}">\${escHtml(row.runtime || t('activityHostFallback'))}</td>
+              <td style="\${getActivityColumnStyle('project', 180)}">\${escHtml(row.projectName || getProjectName(projectPath))}</td>
+              <td style="\${getActivityColumnStyle('status', 140)}">\${renderScopeStatusBadge(row.rawStatus)}</td>
+            </tr>\`).join('')}
+          </tbody>
+        </table>
+      </div>
+    \`;
+  }
+
   const filters = [
     { id: 'core_flow', label: businessEventLabel('core_flow') },
     { id: 'stability_feedback', label: businessEventLabel('stability_feedback') },
@@ -3789,7 +4179,9 @@ async function viewSkill(projectPath, skillId, runtime = 'codex') {
   document.getElementById('modalContent').value = t('modalLoading');
   try {
     const enc = encodeURIComponent(projectPath);
-    const r = await fetch(\`/api/projects/\${enc}/skills/\${encodeURIComponent(skillId)}?runtime=\${encodeURIComponent(runtime)}\`);
+    const encSkill = encodeURIComponent(skillId);
+    const encRuntime = encodeURIComponent(runtime);
+    const r = await fetch(\`/api/projects/\${enc}/skills/\${encSkill}?runtime=\${encRuntime}\`);
     if (!r.ok) {
       throw new Error(\`HTTP \${r.status}: \${r.statusText}\`);
     }
@@ -3804,13 +4196,13 @@ async function viewSkill(projectPath, skillId, runtime = 'codex') {
     } else {
       versionList.innerHTML = versions.slice().reverse().map(v => {
         const isCurrent = v === Math.max(...versions);
-        return \`<div class="version-item \${isCurrent?'current':''}" onclick="loadVersion('\${enc}','\${encodeURIComponent(skillId)}','\${encodeURIComponent(runtime)}',\${v})">
+        return \`<div class="version-item \${isCurrent?'current':''}" onclick="loadVersion('\${enc}','\${encSkill}','\${encRuntime}',\${v})">
           <div class="version-num">v\${v} \${isCurrent ? '(' + t('modalCurrent') + ')':''}</div>
           <div id="vmeta_\${v}" class="version-meta">\${t('modalClickToLoad')}</div>
         </div>\`;
       }).join('');
-      // Auto-load current version metadata
-      if (versions.length > 0) loadVersionMeta(enc, encodeURIComponent(skillId), encodeURIComponent(runtime), Math.max(...versions));
+      // Preload metadata for every card so the history summary is visible before any click.
+      await Promise.allSettled(versions.map((version) => loadVersionMeta(enc, encSkill, encRuntime, version)));
     }
   } catch (e) {
     console.error('[dashboard] failed to load skill content', { projectPath, skillId, runtime, error: String(e) });

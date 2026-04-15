@@ -54,6 +54,7 @@ describe('activity-event-builder', () => {
     });
 
     expect(context).toEqual({
+      episodeId: null,
       skillId: 'test-skill',
       runtime: 'codex',
       windowId: 'sess-1::test-skill',

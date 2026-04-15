@@ -12,6 +12,7 @@ export interface DecisionEventRecord {
   tag: string;
   businessCategory?: string | null;
   businessTag?: string | null;
+  episodeId?: string | null;
   inputSummary?: string | null;
   judgment?: string | null;
   nextAction?: string | null;
@@ -51,6 +52,7 @@ export class DecisionEventRecorder {
       tag: event.tag,
       businessCategory: event.businessCategory ?? null,
       businessTag: event.businessTag ?? null,
+      episodeId: event.episodeId ?? null,
       inputSummary: event.inputSummary ?? null,
       judgment: event.judgment ?? null,
       nextAction: event.nextAction ?? null,

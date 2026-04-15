@@ -253,7 +253,7 @@ function loadDashboardTestHarness(
   const script = scriptMatch[1]
     .replace(/\binit\(\);\s*$/, '')
     .concat(
-      '\n;globalThis.__dashboardTest = { state, init, switchLang, selectProject, selectMainTab, renderMainPanel, safeRenderMainPanel, buildActivityRows, copyActivityDetail, openActivityDetail, renderCostPanel };'
+      '\n;globalThis.__dashboardTest = { state, init, switchLang, selectProject, selectMainTab, renderMainPanel, safeRenderMainPanel, buildActivityRows, copyActivityDetail, openActivityDetail, renderCostPanel, viewSkill };'
     );
 
   vm.runInNewContext(script, runtime);
@@ -272,6 +272,7 @@ function loadDashboardTestHarness(
         copyActivityDetail: (projectPath: string, rowId: string) => Promise<void>;
         openActivityDetail: (projectPath: string, rowId: string) => Promise<void>;
         renderCostPanel: (projectPath: string) => string;
+        viewSkill: (projectPath: string, skillId: string, runtime?: string) => Promise<void>;
       };
     }).__dashboardTest,
     getElement(id: string) {
@@ -1003,6 +1004,200 @@ describe('dashboard ui recovery', () => {
     const html = getElement('mainPanel').innerHTML;
     expect(html).toContain("onclick=\"viewSkill('/tmp/ornn-project','test-driven-development','codex');event.stopPropagation()\"");
     expect(html).toContain('activity-skill-link');
+  });
+
+  it('renders one business row per activity scope when scope summaries are available', () => {
+    const { dashboard, getElement } = loadDashboardTestHarness({}, { lang: 'zh' });
+    const projectPath = '/tmp/ornn-project';
+
+    getElement('mainPanel');
+    dashboard.state.selectedMainTab = 'activity';
+    dashboard.state.selectedProjectId = projectPath;
+    dashboard.state.projectData = {
+      [projectPath]: {
+        daemon: {},
+        skills: [{ skillId: 'systematic-debugging', runtime: 'codex' }],
+        traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
+        recentTraces: [],
+        decisionEvents: [],
+        activityScopes: [{
+          scopeId: 'scope-ep-1',
+          createdAt: '2026-04-10T05:23:00.000Z',
+          updatedAt: '2026-04-10T05:24:00.000Z',
+          skillId: 'systematic-debugging',
+          runtime: 'codex',
+          projectName: 'OrnnSkills',
+          status: 'observing',
+          sessionId: 'session-1',
+        }],
+        agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
+      },
+    };
+
+    const rows = dashboard.buildActivityRows(projectPath);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      id: 'scope:scope-ep-1',
+      scopeId: 'scope-ep-1',
+      runtime: 'codex',
+      skillId: 'systematic-debugging',
+      projectName: 'OrnnSkills',
+      status: '观察中',
+    });
+
+    dashboard.renderMainPanel(projectPath);
+    const html = getElement('mainPanel').innerHTML;
+    expect(html).toContain('项目');
+    expect(html).toContain('状态');
+    expect(html).toContain('OrnnSkills');
+    expect(html).toContain('观察中');
+    expect(html).toContain("onclick=\"openActivityDetail('/tmp/ornn-project','scope:scope-ep-1')\"");
+    expect(html).toContain("onclick=\"viewSkill('/tmp/ornn-project','systematic-debugging','codex');event.stopPropagation()\"");
+    expect(html).not.toContain('查看详情');
+    expect(html).not.toContain('复制');
+  });
+
+  it('renders scope timeline detail from the activity scope endpoint', async () => {
+    const projectPath = '/tmp/ornn-project';
+    const encodedPath = encodeURIComponent(projectPath);
+    const { dashboard, getElement } = loadDashboardTestHarness({}, {
+      lang: 'zh',
+      fetchMap: {
+        [`/api/projects/${encodedPath}/activity-scopes/${encodeURIComponent('scope-ep-1')}`]: {
+          detail: {
+            scopeId: 'scope-ep-1',
+            createdAt: '2026-04-10T05:23:00.000Z',
+            updatedAt: '2026-04-10T05:24:00.000Z',
+            skillId: 'systematic-debugging',
+            runtime: 'codex',
+            projectName: 'OrnnSkills',
+            status: 'observing',
+            sessionId: 'session-1',
+            timeline: [
+              {
+                id: 'skill-called:trace-1',
+                type: 'skill_called',
+                timestamp: '2026-04-10T05:23:00.000Z',
+                summary: '助手输出: 正在排查问题',
+              },
+              {
+                id: 'analysis-submitted:req-1',
+                type: 'analysis_submitted',
+                timestamp: '2026-04-10T05:23:12.000Z',
+                summary: '当前窗口达到首次分析条件，提交分析。',
+                model: 'deepseek/deepseek-reasoner',
+                traceCount: 3,
+                charCount: 256,
+                traceText: '1. [2026-04-10T05:23:00.000Z] 助手输出: 正在排查问题',
+              },
+              {
+                id: 'analysis-result:evt-1',
+                type: 'analysis_result',
+                timestamp: '2026-04-10T05:23:18.000Z',
+                summary: '当前窗口仍需更多上下文，暂不下结论。',
+                outcome: 'need_more_context',
+              },
+            ],
+          },
+        },
+      },
+    });
+
+    getElement('eventModal');
+    getElement('eventModalTitle');
+    getElement('eventModalContent');
+    dashboard.state.selectedMainTab = 'activity';
+    dashboard.state.selectedProjectId = projectPath;
+    dashboard.state.projectData = {
+      [projectPath]: {
+        daemon: {},
+        skills: [{ skillId: 'systematic-debugging', runtime: 'codex' }],
+        traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
+        recentTraces: [],
+        decisionEvents: [],
+        activityScopes: [{
+          scopeId: 'scope-ep-1',
+          createdAt: '2026-04-10T05:23:00.000Z',
+          updatedAt: '2026-04-10T05:24:00.000Z',
+          skillId: 'systematic-debugging',
+          runtime: 'codex',
+          projectName: 'OrnnSkills',
+          status: 'observing',
+          sessionId: 'session-1',
+        }],
+        agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
+      },
+    };
+
+    dashboard.buildActivityRows(projectPath);
+    await dashboard.openActivityDetail(projectPath, 'scope:scope-ep-1');
+
+    expect(getElement('eventModalTitle').textContent).toContain('systematic-debugging');
+    const html = getElement('eventModalContent').innerHTML;
+    expect(html).toContain('技能调用');
+    expect(html).toContain('提交分析');
+    expect(html).toContain('分析结果');
+    expect(html).toContain('3 条 trace');
+    expect(html).toContain('256 字符');
+    expect(html).toContain('deepseek/deepseek-reasoner');
+    expect(html).toContain('details');
+    expect(html).toContain('1. [2026-04-10T05:23:00.000Z] 助手输出: 正在排查问题');
+    expect(html).toContain('当前窗口仍需更多上下文，暂不下结论。');
+  });
+
+  it('preloads version metadata for every history card when opening the skill modal', async () => {
+    const projectPath = '/tmp/ornn-project';
+    const skillId = 'test-driven-development';
+    const runtimeId = 'codex';
+    const encodedProject = encodeURIComponent(projectPath);
+    const encodedSkill = encodeURIComponent(skillId);
+    const { dashboard, getElement, getFetchCalls } = loadDashboardTestHarness({}, {
+      fetchMap: {
+        [`/api/projects/${encodedProject}/skills/${encodedSkill}?runtime=${runtimeId}`]: {
+          content: '# test-driven-development',
+          versions: [1, 2, 3],
+        },
+        [`/api/projects/${encodedProject}/skills/${encodedSkill}/versions/1?runtime=${runtimeId}`]: {
+          content: 'v1',
+          metadata: {
+            createdAt: '2026-04-06T00:00:00.000Z',
+            reason: 'Bootstrap source sync (project -> project)',
+          },
+        },
+        [`/api/projects/${encodedProject}/skills/${encodedSkill}/versions/2?runtime=${runtimeId}`]: {
+          content: 'v2',
+          metadata: {
+            createdAt: '2026-04-06T00:00:00.000Z',
+            reason: 'Manual edit from dashboard',
+          },
+        },
+        [`/api/projects/${encodedProject}/skills/${encodedSkill}/versions/3?runtime=${runtimeId}`]: {
+          content: 'v3',
+          metadata: {
+            createdAt: '2026-04-06T00:00:00.000Z',
+            reason: 'Manual edit from dashboard',
+          },
+        },
+      },
+    });
+
+    getElement('skillModal');
+    getElement('modalSkillName');
+    getElement('modalSkillStatus');
+    getElement('modalSaveHint');
+    getElement('modalSaveBtn');
+    getElement('modalContent');
+    getElement('versionList');
+
+    await dashboard.viewSkill(projectPath, skillId, runtimeId);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(getFetchCalls()).toContain(`/api/projects/${encodedProject}/skills/${encodedSkill}/versions/1?runtime=${runtimeId}`);
+    expect(getFetchCalls()).toContain(`/api/projects/${encodedProject}/skills/${encodedSkill}/versions/2?runtime=${runtimeId}`);
+    expect(getFetchCalls()).toContain(`/api/projects/${encodedProject}/skills/${encodedSkill}/versions/3?runtime=${runtimeId}`);
+    expect(getElement('vmeta_1').innerHTML).toContain('Bootstrap source sync');
+    expect(getElement('vmeta_2').innerHTML).toContain('Manual edit from dashboard');
+    expect(getElement('vmeta_3').innerHTML).toContain('Manual edit from dashboard');
   });
 
   it('does not render trace-only skill observation rows in the business activity table', () => {
