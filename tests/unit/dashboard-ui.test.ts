@@ -302,7 +302,7 @@ describe('dashboard ui recovery', () => {
     expect(enHtml).toContain('client errors have been queued for reporting');
   });
 
-  it('does not prefetch config dependencies during initial overview bootstrap', async () => {
+  it('warms the provider catalog during initial overview bootstrap without touching config-only dependencies', async () => {
     const projectPath = '/tmp/ornn-project';
     const encodedPath = encodeURIComponent(projectPath);
     const { dashboard, getFetchCalls } = loadDashboardTestHarness({}, {
@@ -334,12 +334,12 @@ describe('dashboard ui recovery', () => {
     const fetchCalls = getFetchCalls();
     expect(fetchCalls).toContain('/api/projects');
     expect(fetchCalls).toContain(`/api/projects/${encodedPath}/snapshot`);
-    expect(fetchCalls).not.toContain('/api/providers/catalog');
+    expect(fetchCalls).toContain('/api/providers/catalog');
     expect(fetchCalls.some((url) => url.includes('/provider-health'))).toBe(false);
     expect(fetchCalls.some((url) => url.endsWith('/config'))).toBe(false);
   });
 
-  it('loads config dependencies lazily after switching to the config tab', async () => {
+  it('loads config-only dependencies lazily after switching to the config tab', async () => {
     const projectPath = '/tmp/ornn-project';
     const encodedPath = encodeURIComponent(projectPath);
     const { dashboard, getFetchCalls, clearFetchCalls } = loadDashboardTestHarness({}, {
@@ -374,9 +374,105 @@ describe('dashboard ui recovery', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     const fetchCalls = getFetchCalls();
-    expect(fetchCalls).toContain('/api/providers/catalog');
+    expect(fetchCalls).not.toContain('/api/providers/catalog');
     expect(fetchCalls).toContain(`/api/projects/${encodedPath}/provider-health`);
     expect(fetchCalls).toContain(`/api/projects/${encodedPath}/config`);
+  });
+
+  it('rerenders the cost tab as soon as the provider catalog arrives', async () => {
+    const projectPath = '/tmp/ornn-project';
+    const catalogResponse = {
+      providers: [{
+        id: 'deepseek',
+        name: 'deepseek',
+        models: ['deepseek/deepseek-reasoner'],
+        modelDetails: [{
+          id: 'deepseek/deepseek-reasoner',
+          mode: 'chat',
+          maxInputTokens: 64000,
+          maxOutputTokens: 8000,
+          inputCostPerToken: 0.00000055,
+          outputCostPerToken: 0.00000219,
+          supportsReasoning: true,
+          supportsFunctionCalling: true,
+          supportsPromptCaching: false,
+          supportsStructuredOutput: true,
+          supportsVision: false,
+          supportsWebSearch: false,
+        }],
+        defaultModel: 'deepseek/deepseek-reasoner',
+        apiKeyEnvVar: 'DEEPSEEK_API_KEY',
+      }],
+    };
+    let resolveCatalog: ((value: unknown) => void) | null = null;
+    const { dashboard, getElement } = loadDashboardTestHarness({}, {
+      fetchImpl: async (url) => {
+        if (url === '/api/providers/catalog') {
+          const json = await new Promise((resolve) => {
+            resolveCatalog = resolve;
+          });
+          return {
+            ok: true,
+            status: 200,
+            statusText: 'OK',
+            json: async () => json,
+          };
+        }
+        return {
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          json: async () => ({ projects: [] }),
+        };
+      },
+    });
+
+    getElement('mainPanel');
+    dashboard.state.selectedMainTab = 'cost';
+    dashboard.state.selectedProjectId = projectPath;
+    dashboard.state.projectData = {
+      [projectPath]: {
+        daemon: {},
+        skills: [],
+        traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
+        recentTraces: [],
+        decisionEvents: [],
+        agentUsage: {
+          callCount: 12,
+          promptTokens: 120000,
+          completionTokens: 30000,
+          totalTokens: 150000,
+          durationMsTotal: 24000,
+          avgDurationMs: 2000,
+          lastCallAt: '2026-04-10T05:23:00.000Z',
+          byModel: {
+            'deepseek/deepseek-reasoner': {
+              callCount: 12,
+              promptTokens: 120000,
+              completionTokens: 30000,
+              totalTokens: 150000,
+              durationMsTotal: 24000,
+              avgDurationMs: 2000,
+              lastCallAt: '2026-04-10T05:23:00.000Z',
+            },
+          },
+          byScope: {},
+          bySkill: {},
+        },
+      },
+    };
+
+    dashboard.selectMainTab('cost');
+    expect(getElement('mainPanel').innerHTML).toContain('暂无定价');
+
+    resolveCatalog?.(catalogResponse);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const html = getElement('mainPanel').innerHTML;
+    expect(html).toContain('deepseek/deepseek-reasoner');
+    expect(html).toContain('$0.13');
+    expect(html).not.toContain('暂无定价');
   });
 
   it('syncs the selected project language to the backend when the dashboard language changes', async () => {

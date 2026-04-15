@@ -1331,6 +1331,10 @@ async function selectProject(path) {
     }
   }
   safeRenderMainPanel(path, 'selectProject');
+  if (state.providerCatalog.length === 0 && !state.providerCatalogLoading) {
+    console.debug('[dashboard] warming provider catalog', { projectPath: path });
+    void loadProviderCatalog();
+  }
   renderSidebar();
 }
 
@@ -3140,7 +3144,7 @@ async function loadProviderCatalog(force = false) {
   if (!force && state.providerCatalog.length > 0) return;
   state.providerCatalogLoading = true;
   state.providerCatalogError = '';
-  if (state.selectedMainTab === 'config' && state.selectedProjectId) {
+  if ((state.selectedMainTab === 'config' || state.selectedMainTab === 'cost') && state.selectedProjectId) {
     safeRenderMainPanel(state.selectedProjectId, 'scheduleProjectConfigSave.flush');
   }
   try {
@@ -3157,12 +3161,16 @@ async function loadProviderCatalog(force = false) {
     }
     state.providerCatalog = providers;
     state.providerCatalogError = '';
+    console.debug('[dashboard] provider catalog loaded', {
+      providerCount: providers.length,
+      selectedMainTab: state.selectedMainTab,
+    });
   } catch (e) {
     state.providerCatalogError = String(e);
     console.error('[dashboard] provider catalog fetch failed', { error: String(e) });
   } finally {
     state.providerCatalogLoading = false;
-    if (state.selectedMainTab === 'config' && state.selectedProjectId) {
+    if ((state.selectedMainTab === 'config' || state.selectedMainTab === 'cost') && state.selectedProjectId) {
       safeRenderMainPanel(state.selectedProjectId, 'scheduleProjectConfigSave.complete');
     }
   }
