@@ -53,6 +53,7 @@ export class CodexObserver extends BaseObserver {
   private readonly bootstrapTailLineLimit = 10;
   private readonly reconciliationFileLimit = 3;
   private readonly reconciliationIntervalMs = 3000;
+  private readonly reconciliationWarnDeltaBytes = 65536;
   private readonly readChunkSize = 65536;
   private readonly maxMessageChars = 8000;
   private readonly maxStructuredPreviewChars = 4000;
@@ -264,11 +265,20 @@ export class CodexObserver extends BaseObserver {
       }
 
       if (previousOffset === undefined || currentSize !== previousOffset) {
-        logger.warn('Recovered missed session file growth during reconciliation', {
+        const deltaBytes =
+          previousOffset === undefined
+            ? currentSize
+            : Math.max(currentSize - previousOffset, 0);
+        const log =
+          previousOffset !== undefined && deltaBytes <= this.reconciliationWarnDeltaBytes
+            ? logger.debug.bind(logger)
+            : logger.warn.bind(logger);
+        log('Recovered missed session file growth during reconciliation', {
           sessionId,
           path,
           previousOffset: previousOffset ?? 0,
           currentSize,
+          deltaBytes,
         });
         this.processSessionFileInternal(path);
       }

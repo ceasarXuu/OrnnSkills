@@ -4,6 +4,10 @@
 
 ### 2026-04-16
 
+- ✅ 降低 Codex observer 的误报噪音：reconciliation 补偿到小幅 session 文件增长时改记为 debug，仅在缺口较大时保留 warn，避免把 watcher 的正常补偿路径误读为故障
+- ✅ 收紧 dashboard SSE 快照体积：项目 snapshot 中的 `decisionEvents` 上限改为 150，减少多客户端同时推送时的大包告警和浏览器端解析负担
+- 📝 记录运行经验：文件监听系统对活跃日志文件的 append 事件并不提供强一致交付，observer 用 reconciliation 补偿是正常设计；只要补偿增量很小且数据能正确追平，就不该长期以 warn 级别刷屏
+- 📝 记录性能经验：dashboard 的 SSE 快照不能把“活动页未来可能用到的全部事件”都塞进常规广播；像 `decisionEvents` 这类可增长对象必须给快照单独设体积预算，否则连接数一上来就会把同一份大 payload 成倍放大
 - ✅ 补齐 dashboard 全局配置迁移兼容：当 `~/.ornn/config/settings.toml` 尚不存在时，dashboard/后端现在会优先接住当前项目历史上的 `.ornn/config/settings.toml` 与 `.env.local`，并自动迁移到全局配置目录，避免架构升级后用户原有模型配置“看起来消失”
 - 📝 记录迁移经验：把项目级配置改成全局配置时，不能只改“新路径写到哪里”，还必须补上“旧路径第一次如何被发现和迁移”。否则代码虽然语义上已经全局化，用户体验上却会直接表现为“之前配好的模型没了”
 - 📝 记录环境经验：本地源码变更后如果需要让全局 `ornn` 立即生效，稳定做法是先执行 `npm run build`，再执行 `npm install -g .`；这样会把当前仓库最新 `dist` 产物重新安装到全局包目录，而不依赖旧的 `npm link` 软链状态

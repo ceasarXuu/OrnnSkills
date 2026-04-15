@@ -114,6 +114,7 @@ interface CachedAgentUsageStats {
 
 const agentUsageStatsCache = new Map<string, CachedAgentUsageStats>();
 const SNAPSHOT_RECENT_TRACE_LIMIT = 50;
+const SNAPSHOT_DECISION_EVENT_LIMIT = 150;
 const SNAPSHOT_SKILL_CONTEXT_LIMIT = 24;
 const SNAPSHOT_SKILL_CONTEXT_SCAN_LINES = 4000;
 
@@ -549,7 +550,7 @@ export function readLogsSince(byteOffset: number): { lines: LogLine[]; newOffset
 
 export function readProjectSnapshot(projectRoot: string): ProjectData {
   const recentTraces = readRecentTraces(projectRoot, SNAPSHOT_RECENT_TRACE_LIMIT);
-  const decisionEvents = readRecentDecisionEvents(projectRoot, 400);
+  const decisionEvents = readRecentDecisionEvents(projectRoot, SNAPSHOT_DECISION_EVENT_LIMIT);
   const taskEpisodes = readTaskEpisodeSnapshot(projectRoot);
   return {
     daemon: readDaemonStatus(projectRoot),

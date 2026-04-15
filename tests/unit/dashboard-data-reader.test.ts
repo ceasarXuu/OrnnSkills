@@ -139,4 +139,23 @@ describe('dashboard data reader snapshot version', () => {
     expect(snapshot.recentTraces.some((trace) => Array.isArray(trace.skill_refs) && trace.skill_refs.includes('test-driven-development'))).toBe(true);
     expect(snapshot.recentTraces[0]?.trace_id).toBe('trace-259');
   });
+
+  it('caps snapshot decision events to keep sse payloads bounded', () => {
+    const decisionEventsPath = join(testDir, '.ornn', 'state', 'decision-events.ndjson');
+    const rows: string[] = [];
+    for (let index = 0; index < 220; index += 1) {
+      rows.push(JSON.stringify({
+        id: `evt-${index}`,
+        timestamp: `2026-04-12T03:${String(Math.floor(index / 60)).padStart(2, '0')}:${String(index % 60).padStart(2, '0')}.000Z`,
+        tag: 'evaluation_result',
+        detail: `detail-${index}`.repeat(20),
+      }));
+    }
+    writeFileSync(decisionEventsPath, rows.join('\n') + '\n', 'utf-8');
+
+    const snapshot = readProjectSnapshot(testDir);
+
+    expect(snapshot.decisionEvents).toHaveLength(150);
+    expect(snapshot.decisionEvents[0]?.id).toBe('evt-219');
+  });
 });
