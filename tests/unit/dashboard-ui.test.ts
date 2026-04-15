@@ -154,6 +154,13 @@ function loadDashboardTestHarness(
           autoOptimize: true,
           userConfirm: false,
           runtimeSync: true,
+          llmSafety: {
+            enabled: true,
+            windowMs: 60000,
+            maxRequestsPerWindow: 12,
+            maxConcurrentRequests: 2,
+            maxEstimatedTokensPerWindow: 48000,
+          },
           defaultProvider: '',
           logLevel: 'info',
           providers: [],
@@ -253,7 +260,7 @@ function loadDashboardTestHarness(
   const script = scriptMatch[1]
     .replace(/\binit\(\);\s*$/, '')
     .concat(
-      '\n;globalThis.__dashboardTest = { state, init, switchLang, selectProject, selectMainTab, renderMainPanel, safeRenderMainPanel, buildActivityRows, copyActivityDetail, openActivityDetail, renderCostPanel, viewSkill };'
+      '\n;globalThis.__dashboardTest = { state, init, switchLang, selectProject, selectMainTab, renderMainPanel, safeRenderMainPanel, renderSidebar, buildActivityRows, copyActivityDetail, openActivityDetail, renderCostPanel, viewSkill };'
     );
 
   vm.runInNewContext(script, runtime);
@@ -268,6 +275,7 @@ function loadDashboardTestHarness(
         selectMainTab: (tab: string) => void;
         renderMainPanel: (projectPath: string) => void;
         safeRenderMainPanel: (projectPath: string, source?: string) => boolean;
+        renderSidebar: () => void;
         buildActivityRows: (projectPath: string) => Array<Record<string, any>>;
         copyActivityDetail: (projectPath: string, rowId: string) => Promise<void>;
         openActivityDetail: (projectPath: string, rowId: string) => Promise<void>;
@@ -380,6 +388,56 @@ describe('dashboard ui recovery', () => {
     expect(fetchCalls).not.toContain('/api/providers/catalog');
     expect(fetchCalls).toContain(`/api/provider-health?projectPath=${encodedPath}`);
     expect(fetchCalls).toContain(`/api/config?projectPath=${encodedPath}`);
+  });
+
+  it('keeps the running status visible in the sidebar for unselected projects', () => {
+    const { dashboard, getElement } = loadDashboardTestHarness({}, { lang: 'zh' });
+
+    getElement('projectList');
+    dashboard.state.projects = [
+      { path: '/Users/xuzhang/OrnnSkills', name: 'OrnnSkills', isRunning: true, skillCount: 105 },
+      { path: '/Users/xuzhang/mili', name: 'mili', isRunning: false, skillCount: 0 },
+    ];
+    dashboard.state.selectedProjectId = '/Users/xuzhang/mili';
+    dashboard.state.projectData = {
+      '/Users/xuzhang/OrnnSkills': {
+        daemon: { isRunning: true },
+        skills: new Array(105).fill(null).map((_, index) => ({ skillId: 'skill-' + index, runtime: 'codex' })),
+      },
+      '/Users/xuzhang/mili': {
+        daemon: { isRunning: false },
+        skills: [],
+      },
+    };
+
+    dashboard.renderSidebar();
+
+    const html = getElement('projectList').innerHTML;
+    expect(html).toContain('● 运行中 · 105 个技能');
+    expect(html).toContain('style="color:var(--green)"');
+  });
+
+  it('falls back to project list status when an unselected project snapshot is not loaded yet', () => {
+    const { dashboard, getElement } = loadDashboardTestHarness({}, { lang: 'zh' });
+
+    getElement('projectList');
+    dashboard.state.projects = [
+      { path: '/Users/xuzhang/OrnnSkills', name: 'OrnnSkills', isRunning: true, skillCount: 105 },
+      { path: '/Users/xuzhang/mili', name: 'mili', isRunning: true, skillCount: 111 },
+    ];
+    dashboard.state.selectedProjectId = '/Users/xuzhang/OrnnSkills';
+    dashboard.state.projectData = {
+      '/Users/xuzhang/OrnnSkills': {
+        daemon: { isRunning: true },
+        skills: new Array(105).fill(null).map((_, index) => ({ skillId: 'skill-' + index, runtime: 'codex' })),
+      },
+    };
+
+    dashboard.renderSidebar();
+
+    const html = getElement('projectList').innerHTML;
+    expect(html).toContain('mili');
+    expect(html).toContain('● 运行中 · 111 个技能');
   });
 
   it('reuses one global config payload when switching projects on the config tab', async () => {
@@ -969,9 +1027,56 @@ describe('dashboard ui recovery', () => {
     );
   });
 
-  it('renders copy and detail actions for activity rows and copies readable detail text', async () => {
-    const { dashboard, getElement, getCopiedText } = loadDashboardTestHarness();
+  it('renders scope activity detail and copies readable scope timeline text', async () => {
     const projectPath = '/tmp/ornn-project';
+    const encodedPath = encodeURIComponent(projectPath);
+    const { dashboard, getElement, getCopiedText } = loadDashboardTestHarness({}, {
+      fetchMap: {
+        [`/api/projects/${encodedPath}/activity-scopes/${encodeURIComponent('scope-123')}`]: {
+          detail: {
+            scopeId: 'scope-123',
+            createdAt: '2026-04-10T05:23:00.000Z',
+            updatedAt: '2026-04-10T05:24:00.000Z',
+            skillId: 'test-driven-development',
+            runtime: 'codex',
+            projectName: 'ornn-project',
+            status: 'no_optimization',
+            sessionId: 'session-zh',
+            timeline: [
+              {
+                id: 'skill-called:1',
+                type: 'skill_called',
+                timestamp: '2026-04-10T05:23:00.000Z',
+                summary: '助手输出: 开始执行测试驱动开发。',
+              },
+              {
+                id: 'analysis-submitted:1',
+                type: 'analysis_submitted',
+                timestamp: '2026-04-10T05:23:08.000Z',
+                summary: '当前窗口已提交分析。',
+                model: 'deepseek/deepseek-reasoner',
+                traceCount: 4,
+                charCount: 128,
+                traceText: '1. [2026-04-10T05:23:00.000Z] 助手输出: 开始执行测试驱动开发。',
+              },
+              {
+                id: 'analysis-result:1',
+                type: 'analysis_result',
+                timestamp: '2026-04-10T05:23:10.000Z',
+                summary: '系统已经完成本轮分析。',
+                outcome: 'no_optimization',
+              },
+              {
+                id: 'no-optimization:1',
+                type: 'no_optimization',
+                timestamp: '2026-04-10T05:23:10.000Z',
+                summary: '无需优化，关闭本轮 scope。',
+              },
+            ],
+          },
+        },
+      },
+    });
 
     getElement('mainPanel');
     getElement('eventModalTitle');
@@ -986,15 +1091,16 @@ describe('dashboard ui recovery', () => {
         skills: [{ skillId: 'test-driven-development', runtime: 'codex' }],
         traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
         recentTraces: [],
-        decisionEvents: [{
-          id: 'evt-1',
-          timestamp: '2026-04-10T05:23:00.000Z',
-          tag: 'evaluation_result',
-          runtime: 'codex',
+        decisionEvents: [],
+        activityScopes: [{
+          scopeId: 'scope-123',
+          createdAt: '2026-04-10T05:23:00.000Z',
+          updatedAt: '2026-04-10T05:24:00.000Z',
           skillId: 'test-driven-development',
-          status: 'no_patch_needed',
-          windowId: 'scope-123',
-          detail: '系统已经完成本轮分析。',
+          runtime: 'codex',
+          projectName: 'ornn-project',
+          status: 'no_optimization',
+          sessionId: 'session-zh',
         }],
         agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
       },
@@ -1002,25 +1108,23 @@ describe('dashboard ui recovery', () => {
 
     dashboard.renderMainPanel(projectPath);
     const html = getElement('mainPanel').innerHTML;
-    expect(html).toContain('>节点<');
-    expect(html).toContain("startActivityColumnResize(event,'node')");
-    expect(html).not.toContain("startActivityColumnResize(event,'status')");
-    expect(html).toContain('复制');
-    expect(html).toContain('查看详情');
+    expect(html).toContain('>状态<');
+    expect(html).toContain("startActivityColumnResize(event,'status')");
+    expect(html).toContain('无需优化');
+    expect(html).not.toContain('复制');
+    expect(html).not.toContain('查看详情');
 
-    await dashboard.copyActivityDetail(projectPath, 'decision:evt-1');
+    await dashboard.copyActivityDetail(projectPath, 'scope:scope-123');
     expect(getCopiedText()).toContain('test-driven-development');
     expect(getCopiedText()).toContain('scope-123');
-    expect(getCopiedText()).toContain('节点: 分析结论 / 无需优化');
-    expect(getCopiedText()).toContain('说明: 系统已经完成本轮分析。');
-    expect(getCopiedText()).not.toContain('判断:');
-    expect(getCopiedText()).not.toContain('输出:');
+    expect(getCopiedText()).toContain('Scope 时间线');
+    expect(getCopiedText()).toContain('系统已经完成本轮分析。');
 
-    await dashboard.openActivityDetail(projectPath, 'decision:evt-1');
+    await dashboard.openActivityDetail(projectPath, 'scope:scope-123');
     expect(getElement('eventModalContent').textContent).toContain('系统已经完成本轮分析。');
   });
 
-  it('renders clickable skill cells in activity rows that open the skill modal', () => {
+  it('renders clickable skill cells in scope activity rows that open the skill modal', () => {
     const { dashboard, getElement } = loadDashboardTestHarness({}, { lang: 'zh' });
     const projectPath = '/tmp/ornn-project';
 
@@ -1033,15 +1137,16 @@ describe('dashboard ui recovery', () => {
         skills: [{ skillId: 'test-driven-development', runtime: 'codex' }],
         traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
         recentTraces: [],
-        decisionEvents: [{
-          id: 'evt-click-skill-1',
-          timestamp: '2026-04-10T05:23:00.000Z',
-          tag: 'evaluation_result',
-          runtime: 'codex',
+        decisionEvents: [],
+        activityScopes: [{
+          scopeId: 'scope-click-skill-1',
+          createdAt: '2026-04-10T05:23:00.000Z',
+          updatedAt: '2026-04-10T05:24:00.000Z',
           skillId: 'test-driven-development',
-          status: 'no_patch_needed',
-          windowId: 'scope-click-skill-1',
-          detail: 'done',
+          runtime: 'codex',
+          projectName: 'ornn-project',
+          status: 'observing',
+          sessionId: 'session-click',
         }],
         agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
       },
@@ -1080,7 +1185,6 @@ describe('dashboard ui recovery', () => {
         agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
       },
     };
-
     const rows = dashboard.buildActivityRows(projectPath);
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({
@@ -1102,6 +1206,45 @@ describe('dashboard ui recovery', () => {
     expect(html).toContain("onclick=\"viewSkill('/tmp/ornn-project','systematic-debugging','codex');event.stopPropagation()\"");
     expect(html).not.toContain('查看详情');
     expect(html).not.toContain('复制');
+  });
+
+  it('keeps the new scope layout even when a project currently has no derived activity scopes', () => {
+    const { dashboard, getElement } = loadDashboardTestHarness({}, { lang: 'zh' });
+    const projectPath = '/tmp/ornn-project';
+
+    getElement('mainPanel');
+    dashboard.state.selectedMainTab = 'activity';
+    dashboard.state.selectedProjectId = projectPath;
+    dashboard.state.projectData = {
+      [projectPath]: {
+        daemon: {},
+        skills: [{ skillId: 'systematic-debugging', runtime: 'codex' }],
+        traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
+        recentTraces: [],
+        decisionEvents: [{
+          id: 'evt-failed-1',
+          timestamp: '2026-04-10T05:23:18.000Z',
+          tag: 'analysis_failed',
+          runtime: 'codex',
+          skillId: 'systematic-debugging',
+          status: 'failed',
+          windowId: 'scope-failed-1',
+          detail: '当前项目没有可用的模型服务配置，所以这轮分析没有开始。',
+        }],
+        activityScopes: [],
+        agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
+      },
+    };
+
+    const rows = dashboard.buildActivityRows(projectPath);
+    expect(rows).toEqual([]);
+
+    dashboard.renderMainPanel(projectPath);
+    const html = getElement('mainPanel').innerHTML;
+    expect(html).toContain('暂无追踪活动。');
+    expect(html).toContain('0</div>');
+    expect(html).not.toContain('分析链路异常');
+    expect(html).not.toContain('节点');
   });
 
   it('renders scope timeline detail from the activity scope endpoint', async () => {
@@ -1247,264 +1390,6 @@ describe('dashboard ui recovery', () => {
     expect(getElement('vmeta_3').innerHTML).toContain('Manual edit from dashboard');
   });
 
-  it('does not render trace-only skill observation rows in the business activity table', () => {
-    const { dashboard } = loadDashboardTestHarness();
-    const projectPath = '/tmp/ornn-project';
-
-    dashboard.state.projectData = {
-      [projectPath]: {
-        daemon: {},
-        skills: [{ skillId: 'test-driven-development', runtime: 'codex' }],
-        traceStats: { total: 1, byRuntime: { codex: 1 }, byStatus: { success: 1 }, byEventType: { tool_call: 1 } },
-        recentTraces: [{
-          trace_id: 'trace-1',
-          session_id: 'session-1',
-          runtime: 'codex',
-          timestamp: '2026-04-10T05:23:00.000Z',
-          event_type: 'tool_call',
-          skill_refs: ['test-driven-development'],
-          status: 'success',
-        }],
-        decisionEvents: [{
-          id: 'evt-1',
-          timestamp: '2026-04-10T05:23:01.000Z',
-          tag: 'evaluation_result',
-          traceId: 'trace-1',
-          sessionId: 'session-1',
-          runtime: 'codex',
-          skillId: 'test-driven-development',
-          status: 'no_patch_needed',
-          windowId: 'scope-trace-1',
-          detail: 'same trace scope',
-        }],
-        agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
-      },
-    };
-
-    const rows = dashboard.buildActivityRows(projectPath);
-    expect(rows.find((row) => row.tag === 'skill_observed')).toBeUndefined();
-    expect(rows).toHaveLength(1);
-    expect(rows[0]?.tag).toBe('analysis_concluded');
-    expect(rows[0]?.scopeId).toBe('scope-trace-1');
-  });
-
-  it('renders user-friendly analysis failure detail while preserving technical info in the modal', async () => {
-    const { dashboard, getElement } = loadDashboardTestHarness({}, { lang: 'zh' });
-    const projectPath = '/tmp/ornn-project';
-
-    dashboard.state.selectedMainTab = 'activity';
-    dashboard.state.projectData = {
-      [projectPath]: {
-        daemon: {},
-        skills: [{ skillId: 'vercel-react-best-practices', runtime: 'codex' }],
-        traceStats: { total: 1, byRuntime: { codex: 1 }, byStatus: { failed: 1 }, byEventType: { status: 1 } },
-        recentTraces: [],
-        decisionEvents: [{
-          id: 'evt-failure',
-          timestamp: '2026-04-10T05:23:01.000Z',
-          tag: 'analysis_failed',
-          traceId: 'trace-failed-1',
-          sessionId: 'session-failed-1',
-          runtime: 'codex',
-          skillId: 'vercel-react-best-practices',
-          status: 'failed',
-          windowId: 'scope-failed-1',
-          detail: 'Empty content in LLM response',
-          reason: 'invalid_analysis_json',
-        }],
-        agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
-      },
-    };
-
-    dashboard.state.activityTagFilter = 'stability_feedback';
-    dashboard.renderMainPanel(projectPath);
-    const html = getElement('mainPanel').innerHTML;
-    expect(html).toContain('模型返回了内容，但格式不符合系统要求');
-    expect(html).not.toContain('Empty content in LLM response');
-
-    await dashboard.openActivityDetail(projectPath, 'decision:evt-failure');
-    const detail = getElement('eventModalContent').textContent;
-    expect(detail).toContain('节点: 分析链路异常 / 失败');
-    expect(detail).toContain('说明: 模型返回了内容，但格式不符合系统要求');
-    expect(detail).toContain('对结果的影响: 这更像是分析链路的输出格式异常');
-    expect(detail).toContain('下一步: 建议保留这次原始返回并继续观察');
-    expect(detail).toContain('原始技术信息: invalid_analysis_json | Empty content in LLM response');
-  });
-
-  it('shows raw model response excerpts in analysis failure detail when parsing fails', async () => {
-    const { dashboard, getElement } = loadDashboardTestHarness({}, { lang: 'zh' });
-    const projectPath = '/tmp/ornn-project';
-
-    dashboard.state.selectedMainTab = 'activity';
-    dashboard.state.projectData = {
-      [projectPath]: {
-        daemon: {},
-        skills: [{ skillId: 'systematic-debugging', runtime: 'codex' }],
-        traceStats: { total: 1, byRuntime: { codex: 1 }, byStatus: { failed: 1 }, byEventType: { status: 1 } },
-        recentTraces: [],
-        decisionEvents: [{
-          id: 'evt-failure-raw',
-          timestamp: '2026-04-10T05:23:01.000Z',
-          tag: 'analysis_failed',
-          traceId: 'trace-failed-raw-1',
-          sessionId: 'session-failed-raw-1',
-          runtime: 'codex',
-          skillId: 'systematic-debugging',
-          status: 'failed',
-          windowId: 'scope-failed-raw-1',
-          detail: '模型返回了内容，但格式不符合系统要求，所以这轮分析结果无法解析。',
-          reason: 'invalid_analysis_json',
-          evidence: {
-            rawEvidence: 'invalid_analysis_json\nRaw model response excerpt:\n先说明一下：{bad json}\n最终输出如下：not-json',
-          },
-        }],
-        agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
-      },
-    };
-
-    dashboard.buildActivityRows(projectPath);
-    await dashboard.openActivityDetail(projectPath, 'decision:evt-failure-raw');
-    const detail = getElement('eventModalContent').textContent;
-    expect(detail).toContain('Raw model response excerpt');
-    expect(detail).toContain('先说明一下：{bad json}');
-  });
-
-  it('filters out unknown skill refs such as repo-x from the business activity table', () => {
-    const { dashboard } = loadDashboardTestHarness();
-    const projectPath = '/tmp/ornn-project';
-
-    dashboard.state.projectData = {
-      [projectPath]: {
-        daemon: {},
-        skills: [{ skillId: 'test-driven-development', runtime: 'codex' }],
-        traceStats: { total: 1, byRuntime: { codex: 1 }, byStatus: { success: 1 }, byEventType: { tool_call: 1 } },
-        recentTraces: [{
-          trace_id: 'trace-1',
-          session_id: 'session-1',
-          runtime: 'codex',
-          timestamp: '2026-04-10T05:23:00.000Z',
-          event_type: 'tool_call',
-          skill_refs: ['repo-x'],
-          status: 'success',
-        }],
-        decisionEvents: [],
-        agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
-      },
-    };
-
-    const rows = dashboard.buildActivityRows(projectPath);
-    expect(rows.find((row) => row.skillId === 'repo-x')).toBeUndefined();
-  });
-
-  it('normalizes legacy skill_evaluation events into localized evaluation rows', () => {
-    const { dashboard } = loadDashboardTestHarness({}, { lang: 'zh' });
-    const projectPath = '/tmp/ornn-project';
-
-    dashboard.state.projectData = {
-      [projectPath]: {
-        daemon: {},
-        skills: [{ skillId: 'test-driven-development', runtime: 'codex' }],
-        traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
-        recentTraces: [],
-        decisionEvents: [{
-          id: 'legacy-eval-1',
-          timestamp: '2026-04-10T05:23:00.000Z',
-          tag: 'skill_evaluation',
-          runtime: 'codex',
-          skillId: 'test-driven-development',
-          status: 'needs_patch',
-          windowId: 'scope-legacy-1',
-          detail: '需要补丁',
-        }],
-        agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
-      },
-    };
-
-    const rows = dashboard.buildActivityRows(projectPath);
-    expect(rows[0]?.tag).toBe('analysis_concluded');
-    expect(rows[0]?.detail).toContain('需要补丁');
-  });
-
-  it('renders localized patch_applied activity rows instead of raw event ids', () => {
-    const { dashboard, getElement } = loadDashboardTestHarness({}, { lang: 'zh' });
-    const projectPath = '/tmp/ornn-project';
-
-    getElement('mainPanel');
-    dashboard.state.selectedMainTab = 'activity';
-    dashboard.state.selectedProjectId = projectPath;
-    dashboard.state.projectData = {
-      [projectPath]: {
-        daemon: {},
-        skills: [{ skillId: 'test-driven-development', runtime: 'codex' }],
-        traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
-        recentTraces: [],
-        decisionEvents: [{
-          id: 'patch-activity-1',
-          timestamp: '2026-04-10T05:24:00.000Z',
-          tag: 'patch_applied',
-          runtime: 'codex',
-          skillId: 'test-driven-development',
-          status: 'success',
-          windowId: 'scope-patch-1',
-          changeType: 'add_fallback',
-          linesAdded: 12,
-          linesRemoved: 3,
-        }],
-        agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
-      },
-    };
-
-    dashboard.renderMainPanel(projectPath);
-    const html = getElement('mainPanel').innerHTML;
-    expect(html).toContain('优化已应用');
-    expect(html).toContain('本轮优化已经写回');
-    expect(html).toContain('add_fallback');
-    expect(html).not.toContain('>patch_applied<');
-  });
-
-  it('renders activity timestamps as local full datetime instead of raw UTC slices', () => {
-    const { dashboard, getElement } = loadDashboardTestHarness({}, { lang: 'zh' });
-    const projectPath = '/tmp/ornn-project';
-    const iso = '2026-04-10T00:05:06.000Z';
-    const date = new Date(iso);
-    const expectedLocalDatetime = [
-      date.getFullYear(),
-      String(date.getMonth() + 1).padStart(2, '0'),
-      String(date.getDate()).padStart(2, '0'),
-    ].join('-') + ' ' + [
-      String(date.getHours()).padStart(2, '0'),
-      String(date.getMinutes()).padStart(2, '0'),
-      String(date.getSeconds()).padStart(2, '0'),
-    ].join(':');
-
-    getElement('mainPanel');
-    dashboard.state.selectedMainTab = 'activity';
-    dashboard.state.selectedProjectId = projectPath;
-    dashboard.state.projectData = {
-      [projectPath]: {
-        daemon: {},
-        skills: [{ skillId: 'test-driven-development', runtime: 'codex' }],
-        traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
-        recentTraces: [],
-        decisionEvents: [{
-          id: 'evt-local-time-1',
-          timestamp: iso,
-          tag: 'evaluation_result',
-          runtime: 'codex',
-          skillId: 'test-driven-development',
-          status: 'no_patch_needed',
-          windowId: 'scope-local-time-1',
-          detail: 'done',
-        }],
-        agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
-      },
-    };
-
-    dashboard.renderMainPanel(projectPath);
-    const html = getElement('mainPanel').innerHTML;
-    expect(html).toContain(expectedLocalDatetime);
-    expect(html).not.toContain('>2026-04-10T00:05:06.000Z<');
-  });
 
   it('degrades to a project-level fallback when main panel rendering throws', () => {
     const { dashboard, getElement } = loadDashboardTestHarness({}, { lang: 'zh' });
@@ -1558,305 +1443,9 @@ describe('dashboard ui recovery', () => {
     expect(html).toContain('test');
   });
 
-  it('keeps explanation-only skill_feedback out of the main business timeline', () => {
-    const { dashboard } = loadDashboardTestHarness({
-      'ornn-dashboard-activity-columns': JSON.stringify({ detail: 640 }),
-    });
-    const projectPath = '/tmp/ornn-project';
-
-    dashboard.state.projectData = {
-      [projectPath]: {
-        daemon: {},
-        skills: [{ skillId: 'test-driven-development', runtime: 'codex' }],
-        traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
-        recentTraces: [],
-        decisionEvents: [
-          {
-            id: 'evt-1',
-            timestamp: '2026-04-10T05:23:00.000Z',
-            tag: 'skill_feedback',
-            runtime: 'codex',
-            skillId: 'test-driven-development',
-            status: 'no_patch_needed',
-            windowId: 'scope-1',
-            detail: 'same conclusion',
-          },
-          {
-            id: 'evt-2',
-            timestamp: '2026-04-10T05:23:05.000Z',
-            tag: 'skill_feedback',
-            runtime: 'codex',
-            skillId: 'test-driven-development',
-            status: 'no_patch_needed',
-            windowId: 'scope-1',
-            detail: 'same conclusion',
-          },
-          {
-            id: 'evt-3',
-            timestamp: '2026-04-10T05:23:25.000Z',
-            tag: 'skill_feedback',
-            runtime: 'codex',
-            skillId: 'test-driven-development',
-            status: 'no_patch_needed',
-            windowId: 'scope-1',
-            detail: 'same conclusion',
-          },
-        ],
-        agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
-      },
-    };
-
-    const rows = dashboard.buildActivityRows(projectPath);
-    expect(rows.filter((row) => row.tag === 'skill_feedback')).toHaveLength(0);
-  });
-
-  it('merges skill feedback into the analysis conclusion row instead of rendering it separately', () => {
-    const { dashboard } = loadDashboardTestHarness({}, { lang: 'zh' });
-    const projectPath = '/tmp/ornn-project';
-
-    dashboard.state.projectData = {
-      [projectPath]: {
-        daemon: {},
-        skills: [{ skillId: 'test-driven-development', runtime: 'codex' }],
-        traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
-        recentTraces: [],
-        decisionEvents: [
-          {
-            id: 'evt-eval-1',
-            timestamp: '2026-04-10T05:23:00.000Z',
-            tag: 'evaluation_result',
-            runtime: 'codex',
-            skillId: 'test-driven-development',
-            status: 'no_patch_needed',
-            windowId: 'scope-merge-1',
-            detail: '窗口分析结论：当前无需修改。',
-          },
-          {
-            id: 'evt-feedback-1',
-            timestamp: '2026-04-10T05:23:01.000Z',
-            tag: 'skill_feedback',
-            runtime: 'codex',
-            skillId: 'test-driven-development',
-            status: 'no_patch_needed',
-            windowId: 'scope-merge-1',
-            detail: '这次调用没有观察到稳定的设计缺陷。',
-          },
-        ],
-        agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
-      },
-    };
-
-    const rows = dashboard.buildActivityRows(projectPath);
-    expect(rows).toHaveLength(1);
-    expect(rows[0]?.tag).toBe('analysis_concluded');
-    expect(rows[0]?.detail).toContain('窗口分析结论');
-    expect(rows[0]?.detail).toContain('这次调用没有观察到稳定的设计缺陷');
-  });
-
-  it('deduplicates merged skill feedback when it repeats the same conclusion text', () => {
-    const { dashboard } = loadDashboardTestHarness({}, { lang: 'zh' });
-    const projectPath = '/tmp/ornn-project';
-    const repeated =
-      '技能内容完整且设计良好，时间线显示助手正确触发并遵循测试驱动开发流程，工具调用和执行结果均正常，未发现技能设计问题、宿主故障或工具故障。';
-
-    dashboard.state.projectData = {
-      [projectPath]: {
-        daemon: {},
-        skills: [{ skillId: 'test-driven-development', runtime: 'codex' }],
-        traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
-        recentTraces: [],
-        decisionEvents: [
-          {
-            id: 'evt-eval-dedupe-1',
-            timestamp: '2026-04-16T00:52:51.000Z',
-            tag: 'evaluation_result',
-            runtime: 'codex',
-            skillId: 'test-driven-development',
-            status: 'no_patch_needed',
-            windowId: 'scope-dedupe-1',
-            detail: `窗口分析结论：${repeated}`,
-          },
-          {
-            id: 'evt-feedback-dedupe-1',
-            timestamp: '2026-04-16T00:52:52.000Z',
-            tag: 'skill_feedback',
-            runtime: 'codex',
-            skillId: 'test-driven-development',
-            status: 'no_patch_needed',
-            windowId: 'scope-dedupe-1',
-            detail: repeated,
-          },
-        ],
-        agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
-      },
-    };
-
-    const rows = dashboard.buildActivityRows(projectPath);
-    expect(rows).toHaveLength(1);
-    expect(rows[0]?.detail).toBe(`窗口分析结论：${repeated}`);
-  });
-
-  it('does not merge later skill feedback into analysis_started rows', () => {
-    const { dashboard } = loadDashboardTestHarness({}, { lang: 'zh' });
-    const projectPath = '/tmp/ornn-project';
-
-    dashboard.state.projectData = {
-      [projectPath]: {
-        daemon: {},
-        skills: [{ skillId: 'systematic-debugging', runtime: 'codex' }],
-        traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
-        recentTraces: [],
-        decisionEvents: [
-          {
-            id: 'evt-start-1',
-            timestamp: '2026-04-15T14:51:53.618Z',
-            tag: 'analysis_requested',
-            runtime: 'codex',
-            skillId: 'systematic-debugging',
-            traceId: 'trace-start-1',
-            sessionId: 'session-start-1',
-            status: 'window_ready',
-            windowId: 'scope-start-1',
-            detail: '当前窗口已积累到初始观察量，提交首次窗口分析。',
-            nextAction: '等待这一轮分析返回结果，再决定是继续观察、保持现状还是执行优化。',
-          },
-          {
-            id: 'evt-feedback-1',
-            timestamp: '2026-04-15T14:52:10.000Z',
-            tag: 'skill_feedback',
-            runtime: 'codex',
-            skillId: 'systematic-debugging',
-            traceId: 'trace-start-1',
-            sessionId: 'session-start-1',
-            status: 'no_patch_needed',
-            windowId: 'scope-start-1',
-            detail: '技能‘systematic-debugging’使用正确，无需修改。',
-          },
-        ],
-        agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
-      },
-    };
-
-    const rows = dashboard.buildActivityRows(projectPath);
-    expect(rows).toHaveLength(1);
-    expect(rows[0]?.tag).toBe('analysis_started');
-    expect(rows[0]?.detail).toBe('当前窗口已积累到初始观察量，提交首次窗口分析。');
-    expect(rows[0]?.nextAction).toBe('等待这一轮分析返回结果，再决定是继续观察、保持现状还是执行优化。');
-  });
-
-  it('shows a core-flow interruption row while keeping analysis_failed in stability feedback', () => {
-    const { dashboard, getElement } = loadDashboardTestHarness({}, { lang: 'zh' });
-    const projectPath = '/tmp/ornn-project';
-
-    getElement('mainPanel');
-    dashboard.state.selectedMainTab = 'activity';
-    dashboard.state.selectedProjectId = projectPath;
-    dashboard.state.projectData = {
-      [projectPath]: {
-        daemon: {},
-        skills: [{ skillId: 'vercel-react-best-practices', runtime: 'codex' }],
-        traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
-        recentTraces: [],
-        decisionEvents: [{
-          id: 'evt-failure-core-filter',
-          timestamp: '2026-04-10T05:23:01.000Z',
-          tag: 'analysis_failed',
-          traceId: 'trace-failed-1',
-          sessionId: 'session-failed-1',
-          runtime: 'codex',
-          skillId: 'vercel-react-best-practices',
-          status: 'failed',
-          windowId: 'scope-failed-1',
-          detail: 'invalid_analysis_json',
-          reason: 'invalid_analysis_json',
-        }],
-        agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
-      },
-    };
-
-    dashboard.renderMainPanel(projectPath);
-    const html = getElement('mainPanel').innerHTML;
-    expect(html).toContain('核心流程');
-    expect(html).toContain('分析中断');
-    expect(html).toContain('格式不符合系统要求');
-    expect(html).not.toContain('analysis_failed');
-
-    dashboard.state.activityTagFilter = 'stability_feedback';
-    dashboard.renderMainPanel(projectPath);
-    const stabilityHtml = getElement('mainPanel').innerHTML;
-    expect(stabilityHtml).toContain('分析链路异常');
-  });
-
-  it('uses localized business statuses instead of raw internal status enums in activity rows', () => {
-    const { dashboard } = loadDashboardTestHarness({}, { lang: 'zh' });
-    const projectPath = '/tmp/ornn-project';
-
-    dashboard.state.projectData = {
-      [projectPath]: {
-        daemon: {},
-        skills: [{ skillId: 'test-driven-development', runtime: 'codex' }],
-        traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
-        recentTraces: [],
-        decisionEvents: [{
-          id: 'evt-analysis-start-1',
-          timestamp: '2026-04-10T05:23:00.000Z',
-          tag: 'analysis_requested',
-          runtime: 'codex',
-          skillId: 'test-driven-development',
-          status: 'episode_ready',
-          windowId: 'scope-status-1',
-          detail: '时机探测已通过，开始深度分析本次调用窗口。',
-        }],
-        agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
-      },
-    };
-
-    const rows = dashboard.buildActivityRows(projectPath);
-    expect(rows).toHaveLength(1);
-    expect(rows[0]?.tag).toBe('analysis_started');
-    expect(rows[0]?.status).toBe('分析中');
-    expect(rows[0]?.status).not.toBe('episode_ready');
-  });
-
-  it('prefers canonical business fields from backend instead of inferring from raw event tags', () => {
-    const { dashboard } = loadDashboardTestHarness({}, { lang: 'zh' });
-    const projectPath = '/tmp/ornn-project';
-
-    dashboard.state.projectData = {
-      [projectPath]: {
-        daemon: {},
-        skills: [{ skillId: 'test-driven-development', runtime: 'codex' }],
-        traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
-        recentTraces: [],
-        decisionEvents: [{
-          id: 'evt-canonical-1',
-          timestamp: '2026-04-10T05:23:00.000Z',
-          tag: 'opaque_internal_event',
-          runtime: 'codex',
-          skillId: 'test-driven-development',
-          status: 'completed',
-          windowId: 'scope-canonical-1',
-          detail: 'raw detail should not drive UI semantics',
-          judgment: '后端已经直接给出业务结论。',
-          nextAction: '继续观察后续调用窗口。',
-          businessCategory: 'core_flow',
-          businessTag: 'analysis_concluded',
-        }],
-        agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
-      },
-    };
-
-    const rows = dashboard.buildActivityRows(projectPath);
-    expect(rows).toHaveLength(1);
-    expect(rows[0]?.tag).toBe('analysis_concluded');
-    expect(rows[0]?.category).toBe('core_flow');
-    expect(rows[0]?.detail).toContain('后端已经直接给出业务结论');
-    expect(rows[0]?.nextAction).toContain('继续观察后续调用窗口');
-  });
-
-  it('uses persisted activity column widths when rendering the table', () => {
+  it('uses persisted activity column widths when rendering the scope table', () => {
     const { dashboard, getElement } = loadDashboardTestHarness({
-      'ornn-dashboard-activity-columns': JSON.stringify({ detail: 640 }),
+      'ornn-dashboard-activity-columns': JSON.stringify({ skill: 640 }),
     });
     const projectPath = '/tmp/ornn-project';
 
@@ -1869,16 +1458,16 @@ describe('dashboard ui recovery', () => {
         skills: [{ skillId: 'test-driven-development', runtime: 'codex' }],
         traceStats: { total: 1, byRuntime: { codex: 1 }, byStatus: { success: 1 }, byEventType: { tool_call: 1 } },
         recentTraces: [],
-        decisionEvents: [{
-          id: 'evt-width-1',
-          timestamp: '2026-04-10T05:23:01.000Z',
-          tag: 'evaluation_result',
-          runtime: 'codex',
+        decisionEvents: [],
+        activityScopes: [{
+          scopeId: 'scope-width-1',
+          createdAt: '2026-04-10T05:23:01.000Z',
+          updatedAt: '2026-04-10T05:24:00.000Z',
           skillId: 'test-driven-development',
+          runtime: 'codex',
+          projectName: 'ornn-project',
+          status: 'no_optimization',
           sessionId: 'session-1',
-          status: 'no_patch_needed',
-          windowId: 'scope-width-1',
-          detail: '窗口分析结论：当前无需修改。',
         }],
         agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
       },
@@ -1918,6 +1507,13 @@ describe('dashboard ui recovery', () => {
         autoOptimize: true,
         userConfirm: false,
         runtimeSync: true,
+        llmSafety: {
+          enabled: true,
+          windowMs: 45000,
+          maxRequestsPerWindow: 7,
+          maxConcurrentRequests: 1,
+          maxEstimatedTokensPerWindow: 16000,
+        },
         defaultProvider: 'deepseek',
         logLevel: 'debug',
         providers: [
@@ -2214,136 +1810,4 @@ describe('dashboard ui recovery', () => {
     expect(html).toContain('display:none;');
   });
 
-  it('localizes activity detail labels and host sync help in Chinese', async () => {
-    const { dashboard, getElement, getCopiedText } = loadDashboardTestHarness({}, { lang: 'zh' });
-    const projectPath = '/tmp/ornn-project';
-
-    getElement('mainPanel');
-    getElement('eventModalTitle');
-    getElement('eventModalContent');
-    getElement('eventModal');
-
-    dashboard.state.selectedMainTab = 'activity';
-    dashboard.state.selectedProjectId = projectPath;
-    dashboard.state.projectData = {
-      [projectPath]: {
-        daemon: {},
-        skills: [{ skillId: 'test-driven-development', runtime: 'codex' }],
-        traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
-        recentTraces: [],
-        decisionEvents: [{
-          id: 'evt-zh-detail',
-          timestamp: '2026-04-10T05:23:00.000Z',
-          tag: 'evaluation_result',
-          runtime: 'codex',
-          skillId: 'test-driven-development',
-          sessionId: 'session-zh',
-          status: 'no_patch_needed',
-          windowId: 'scope-zh',
-          detail: '系统已经完成本轮分析。',
-        }],
-        agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
-      },
-    };
-
-    dashboard.renderMainPanel(projectPath);
-    await dashboard.copyActivityDetail(projectPath, 'decision:evt-zh-detail');
-    expect(getCopiedText()).toContain('技能: test-driven-development');
-    expect(getCopiedText()).toContain('会话 ID: session-zh');
-
-    dashboard.state.selectedMainTab = 'config';
-    dashboard.state.configByProject = {
-      [projectPath]: {
-        autoOptimize: true,
-        userConfirm: false,
-        runtimeSync: true,
-        defaultProvider: '',
-        logLevel: 'info',
-        providers: [],
-      },
-    };
-    dashboard.renderMainPanel(projectPath);
-    const html = getElement('mainPanel').innerHTML;
-    expect(html).toContain('~/.ornn/config/settings.toml');
-    expect(html).toContain('暂无模型服务');
-    expect(html).toContain('只启用其中一个默认模型服务');
-    expect(html).not.toContain('cfg_env');
-    expect(html).not.toContain('tracking.auto_optimize');
-    expect(html).not.toContain('tracking.user_confirm');
-    expect(html).not.toContain('tracking.runtime_sync');
-    expect(html).not.toContain('暂无 providers');
-  });
-
-  it('localizes daemon state activity summaries in both languages', () => {
-    const projectPath = '/tmp/ornn-project';
-    const zhHarness = loadDashboardTestHarness({}, { lang: 'zh' });
-    zhHarness.dashboard.state.projectData = {
-      [projectPath]: {
-        daemon: {},
-        skills: [],
-        traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
-        recentTraces: [],
-        decisionEvents: [{
-          id: 'daemon-zh',
-          timestamp: '2026-04-10T05:23:00.000Z',
-          tag: 'daemon_state',
-          runtime: 'codex',
-          status: 'started',
-        }],
-        agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
-      },
-    };
-    const zhRows = zhHarness.dashboard.buildActivityRows(projectPath);
-    expect(zhRows[0]?.detail).toContain('守护进程已启动');
-
-    const enHarness = loadDashboardTestHarness({}, { lang: 'en' });
-    enHarness.dashboard.state.projectData = {
-      [projectPath]: {
-        daemon: {},
-        skills: [],
-        traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
-        recentTraces: [],
-        decisionEvents: [{
-          id: 'daemon-en',
-          timestamp: '2026-04-10T05:23:00.000Z',
-          tag: 'daemon_state',
-          runtime: 'codex',
-          status: 'stopped',
-        }],
-        agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
-      },
-    };
-    const enRows = enHarness.dashboard.buildActivityRows(projectPath);
-    expect(enRows[0]?.detail).toContain('Daemon stopped');
-  });
-
-  it('falls back to localized zh activity detail when a historical analysis conclusion contains a long english explanation', () => {
-    const { dashboard } = loadDashboardTestHarness({}, { lang: 'zh' });
-    const projectPath = '/tmp/ornn-project';
-
-    dashboard.state.projectData = {
-      [projectPath]: {
-        daemon: {},
-        skills: [{ skillId: 'systematic-debugging', runtime: 'codex' }],
-        traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
-        recentTraces: [],
-        decisionEvents: [{
-          id: 'evt-english-history',
-          timestamp: '2026-04-15T12:28:28.360Z',
-          tag: 'evaluation_result',
-          runtime: 'codex',
-          skillId: 'systematic-debugging',
-          sessionId: 'session-history',
-          status: 'no_patch_needed',
-          windowId: 'scope-history',
-          detail: "窗口分析结论：The skill was correctly invoked and followed, with the assistant performing root cause investigation as per the skill's guidelines, showing no design flaws or optimization needs.",
-        }],
-        agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
-      },
-    };
-
-    const rows = dashboard.buildActivityRows(projectPath);
-    expect(rows[0]?.detail).toContain('窗口分析认为当前技能调用符合预期，暂时无需修改。');
-    expect(rows[0]?.detail).not.toContain('The skill was correctly invoked');
-  });
 });

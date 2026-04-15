@@ -1300,6 +1300,60 @@ function sanitizeProvidersForState(providers) {
   }));
 }
 
+const DEFAULT_LLM_SAFETY_CONFIG = {
+  enabled: true,
+  windowMs: 60000,
+  maxRequestsPerWindow: 12,
+  maxConcurrentRequests: 2,
+  maxEstimatedTokensPerWindow: 48000,
+};
+
+function parsePositiveInteger(value, fallback) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+}
+
+function sanitizeLLMSafetyForState(safety) {
+  const raw = safety && typeof safety === 'object' ? safety : {};
+  return {
+    enabled: raw.enabled !== false,
+    windowMs: parsePositiveInteger(raw.windowMs, DEFAULT_LLM_SAFETY_CONFIG.windowMs),
+    maxRequestsPerWindow: parsePositiveInteger(
+      raw.maxRequestsPerWindow,
+      DEFAULT_LLM_SAFETY_CONFIG.maxRequestsPerWindow
+    ),
+    maxConcurrentRequests: parsePositiveInteger(
+      raw.maxConcurrentRequests,
+      DEFAULT_LLM_SAFETY_CONFIG.maxConcurrentRequests
+    ),
+    maxEstimatedTokensPerWindow: parsePositiveInteger(
+      raw.maxEstimatedTokensPerWindow,
+      DEFAULT_LLM_SAFETY_CONFIG.maxEstimatedTokensPerWindow
+    ),
+  };
+}
+
+function collectLLMSafetyFromConfigEditor(fallbackSafety) {
+  const safeFallback = sanitizeLLMSafetyForState(fallbackSafety);
+  const enabledEl = document.getElementById('cfg_llm_safety_enabled');
+  const windowEl = document.getElementById('cfg_llm_safety_window_ms');
+  const requestEl = document.getElementById('cfg_llm_safety_max_requests');
+  const concurrentEl = document.getElementById('cfg_llm_safety_max_concurrent');
+  const tokenEl = document.getElementById('cfg_llm_safety_max_tokens');
+
+  if (!enabledEl || !windowEl || !requestEl || !concurrentEl || !tokenEl) {
+    return safeFallback;
+  }
+
+  return sanitizeLLMSafetyForState({
+    enabled: !!enabledEl.checked,
+    windowMs: windowEl.value,
+    maxRequestsPerWindow: requestEl.value,
+    maxConcurrentRequests: concurrentEl.value,
+    maxEstimatedTokensPerWindow: tokenEl.value,
+  });
+}
+
 function scheduleBootstrapRecovery() {
   if (bootstrapRecoveryTimer !== null) {
     clearTimeout(bootstrapRecoveryTimer);
@@ -1417,8 +1471,8 @@ function renderSidebar() {
   }
   list.innerHTML = state.projects.map(p => {
     const pd = state.projectData[p.path];
-    const running = pd?.daemon?.isRunning;
-    const skills = pd?.skills?.length ?? 0;
+    const running = pd?.daemon?.isRunning ?? p.isRunning;
+    const skills = pd?.skills?.length ?? p.skillCount ?? 0;
     const dotClass = running === undefined ? 'dot-gray' : running ? 'dot-green' : 'dot-red';
     const statusText = running === undefined ? '' : running ? '● ' + t('sidebarRunning') : '○ ' + t('sidebarStopped');
     const statusColor = running === undefined ? 'color:var(--muted)' : running ? 'color:var(--green)' : 'color:var(--muted)';
@@ -2424,143 +2478,10 @@ function buildRawTraceDetail(row) {
 }
 
 function buildActivityRows(projectPath) {
-  const pd = state.projectData[projectPath] || {};
-  if (Array.isArray(pd.activityScopes) && pd.activityScopes.length > 0) {
-    const scopeRows = buildScopeActivityRows(projectPath);
-    console.debug('[dashboard] activity scope rows rebuilt', {
-      projectPath,
-      rowCount: scopeRows.length,
-    });
-    return scopeRows;
-  }
-
-  const traces = Array.isArray(pd.recentTraces) ? pd.recentTraces : [];
-  const decisionEvents = Array.isArray(pd.decisionEvents) ? pd.decisionEvents : [];
-  const knownSkills = new Set(
-    []
-      .concat(Array.isArray(pd.skills) ? pd.skills.map((skill) => skill.skillId).filter(Boolean) : [])
-      .concat(decisionEvents.map((event) => event.skillId).filter(Boolean))
-  );
-  const runtimeByTraceId = new Map();
-  const scopeByTraceId = new Map();
-  const scopeBySessionSkill = new Map();
-
-  for (const trace of traces) {
-    if (trace.trace_id) runtimeByTraceId.set(trace.trace_id, trace.runtime || null);
-  }
-
-  const feedbackByKey = new Map();
-  for (const event of decisionEvents) {
-    const scopeId = getActivityScopeId(event);
-    if (scopeId && event.traceId) scopeByTraceId.set(event.traceId, scopeId);
-    if (scopeId && event.sessionId && event.skillId) scopeBySessionSkill.set(event.sessionId + '::' + event.skillId, scopeId);
-
-    if (event.businessCategory !== 'supporting_detail' && event.tag !== 'skill_feedback') continue;
-    for (const key of getActivityRelationKeys(event)) {
-      if (!feedbackByKey.has(key)) feedbackByKey.set(key, []);
-      feedbackByKey.get(key).push(event);
-    }
-  }
-
-  const decisionRows = [];
-  for (const event of decisionEvents) {
-    const tag = normalizeDecisionTag(event);
-    if (!tag) continue;
-    const scopeId = getActivityScopeId(event);
-    const category = event.businessCategory || businessCategoryForTag(tag);
-    const feedbackDetails = !shouldMergeSupportingDetailIntoRow(tag, category)
-      ? []
-      : (event.businessCategory || businessCategoryForTag(tag)) === 'stability_feedback'
-      ? []
-      : collectUniqueText(
-        getActivityRelationKeys({
-          windowId: scopeId,
-          traceId: event.traceId,
-          sessionId: event.sessionId,
-          skillId: event.skillId,
-        }).flatMap((key) =>
-          (feedbackByKey.get(key) || []).map((item) =>
-            normalizeActivityNarrative(
-              normalizeDecisionTag(item) || item.tag,
-              item.status,
-              item.judgment || item.detail || item.reason || ''
-            )
-          )
-        )
-      );
-    const primaryDetail = normalizeActivityNarrative(
-      tag,
-      event.status,
-      event.judgment || event.detail || event.reason || formatBusinessEvent({ ...event, tag })
-    );
-    const row = {
-      id: 'decision:' + event.id,
-      timestamp: event.timestamp || '',
-      tag,
-      category,
-      runtime: event.runtime || (event.traceId ? runtimeByTraceId.get(event.traceId) : null) || t('activityHostFallback'),
-      skillId: event.skillId || null,
-      status: localizeActivityStatus(tag, event.status),
-      rawStatus: event.status || null,
-      scopeId: scopeId || null,
-      detail: mergeBusinessDetail(
-        primaryDetail,
-        feedbackDetails
-      ),
-      inputSummary: event.inputSummary || null,
-      nextAction: event.nextAction || null,
-      rawDetail: event.detail || null,
-      rawReason: event.reason || null,
-      evidence: event.evidence || null,
-      sourceLabel: t('activitySourceDecision'),
-      traceId: event.traceId || null,
-      sessionId: event.sessionId || null,
-    };
-
-    if (tag === 'analysis_failed' && category === 'stability_feedback') {
-      const interruption = describeAnalysisInterruption(row);
-      decisionRows.push({
-        ...row,
-        id: 'decision:core-flow:' + event.id,
-        tag: 'analysis_interrupted',
-        category: 'core_flow',
-        status: localizeActivityStatus('analysis_interrupted', 'interrupted'),
-        detail: interruption.summary,
-        nextAction: interruption.nextAction,
-      });
-    }
-
-    decisionRows.push(row);
-  }
-
-  const dedupe = new Map();
-  const rows = decisionRows
-    .sort((a, b) => String(b.timestamp).localeCompare(String(a.timestamp)))
-    .filter((row) => {
-      const dedupeKey = [row.tag, row.skillId || '', row.status || '', row.scopeId || '', row.detail || ''].join('::');
-      const prevTs = dedupe.get(dedupeKey);
-      if (!prevTs) {
-        dedupe.set(dedupeKey, row.timestamp);
-        return true;
-      }
-      const delta = Math.abs(new Date(prevTs).getTime() - new Date(row.timestamp).getTime());
-      if (!Number.isFinite(delta) || delta > 15000) {
-        dedupe.set(dedupeKey, row.timestamp);
-        return true;
-      }
-      return false;
-    })
-    .slice(0, 150);
-
-  state.activityRowsByProject[projectPath] = rows;
-  console.debug('[dashboard] activity rows rebuilt', {
+  const rows = buildScopeActivityRows(projectPath);
+  console.debug('[dashboard] activity scope rows rebuilt', {
     projectPath,
     rowCount: rows.length,
-    decisionCount: decisionRows.length,
-    traceCount: 0,
-    coreFlowCount: rows.filter((row) => (row.category || 'core_flow') === 'core_flow').length,
-    stabilityFeedbackCount: rows.filter((row) => row.category === 'stability_feedback').length,
-    interruptedCount: rows.filter((row) => row.tag === 'analysis_interrupted').length,
   });
   return rows;
 }
@@ -2662,80 +2583,27 @@ function renderActivitySkillCell(projectPath, row) {
 
 function renderBusinessEvents(projectPath) {
   const events = buildActivityRows(projectPath);
-  if (events.length > 0 && events.every((row) => isScopeActivityRow(row))) {
-    return \`
-      <div class="activity-controls">
-        <div class="activity-left"></div>
-        <div style="font-size:10px;color:var(--muted)">\${events.length}</div>
-      </div>
-      <div class="trace-table-wrap">
-        <table class="activity-table">
-          <thead><tr>
-            <th style="\${getActivityColumnStyle('time', DEFAULT_ACTIVITY_TIME_COLUMN_WIDTH)}">\${t('traceTime')}<span class="column-resizer" onmousedown="startActivityColumnResize(event,'time')"></span></th>
-            <th style="\${getActivityColumnStyle('skill', 240)}">\${t('activitySkillLabel')}<span class="column-resizer" onmousedown="startActivityColumnResize(event,'skill')"></span></th>
-            <th style="\${getActivityColumnStyle('host', 110)}">\${t('traceRuntime')}<span class="column-resizer" onmousedown="startActivityColumnResize(event,'host')"></span></th>
-            <th style="\${getActivityColumnStyle('project', 180)}">\${t('activityProject')}<span class="column-resizer" onmousedown="startActivityColumnResize(event,'project')"></span></th>
-            <th style="\${getActivityColumnStyle('status', 140)}">\${t('traceStatus')}<span class="column-resizer" onmousedown="startActivityColumnResize(event,'status')"></span></th>
-          </tr></thead>
-          <tbody>
-            \${events.slice(0, 120).map((row) => \`<tr class="activity-scope-row" onclick="openActivityDetail('\${escJsStr(projectPath)}','\${escJsStr(row.id)}')">
-              <td style="color:var(--muted);\${getActivityColumnStyle('time', DEFAULT_ACTIVITY_TIME_COLUMN_WIDTH)}">\${formatEventTimestamp(row.timestamp)}</td>
-              <td style="\${getActivityColumnStyle('skill', 240)}">\${renderActivitySkillCell(projectPath, row)}</td>
-              <td style="\${getActivityColumnStyle('host', 110)}">\${escHtml(row.runtime || t('activityHostFallback'))}</td>
-              <td style="\${getActivityColumnStyle('project', 180)}">\${escHtml(row.projectName || getProjectName(projectPath))}</td>
-              <td style="\${getActivityColumnStyle('status', 140)}">\${renderScopeStatusBadge(row.rawStatus)}</td>
-            </tr>\`).join('')}
-          </tbody>
-        </table>
-      </div>
-    \`;
-  }
-
-  const filters = [
-    { id: 'core_flow', label: businessEventLabel('core_flow') },
-    { id: 'stability_feedback', label: businessEventLabel('stability_feedback') },
-    { id: 'all', label: businessEventLabel('all') },
-  ];
-  const activeFilter = state.activityTagFilter || 'core_flow';
-  const filtered = activeFilter === 'all'
-    ? events
-    : events.filter((e) => (e.category || businessCategoryForTag(e.tag)) === activeFilter);
-
-  if (events.length === 0) return '<div class="empty-state">' + t('activityEmpty') + '</div>';
-
   return \`
     <div class="activity-controls">
-      <div class="activity-left">
-        \${filters.map((filter) =>
-          \`<button class="tag-chip \${activeFilter === filter.id ? 'active' : ''}" onclick="setActivityTagFilter('\${escJsStr(filter.id)}')">\${escHtml(filter.label)}</button>\`
-        ).join('')}
-      </div>
-      <div style="font-size:10px;color:var(--muted)">\${filtered.length} / \${events.length}</div>
+      <div class="activity-left"></div>
+      <div style="font-size:10px;color:var(--muted)">\${events.length}</div>
     </div>
-    \${filtered.length === 0 ? \`<div class="empty-state">\${t('activityEmpty')}</div>\` : \`<div class="trace-table-wrap">
+    \${events.length === 0 ? \`<div class="empty-state">\${t('activityEmpty')}</div>\` : \`<div class="trace-table-wrap">
       <table class="activity-table">
         <thead><tr>
           <th style="\${getActivityColumnStyle('time', DEFAULT_ACTIVITY_TIME_COLUMN_WIDTH)}">\${t('traceTime')}<span class="column-resizer" onmousedown="startActivityColumnResize(event,'time')"></span></th>
-          <th style="\${getActivityColumnStyle('host', 96)}">\${t('traceRuntime')}<span class="column-resizer" onmousedown="startActivityColumnResize(event,'host')"></span></th>
-          <th style="\${getActivityColumnStyle('node', 188)}">\${t('activityNode')}<span class="column-resizer" onmousedown="startActivityColumnResize(event,'node')"></span></th>
-          <th style="\${getActivityColumnStyle('skill', 220)}">\${t('activitySkillLabel')}<span class="column-resizer" onmousedown="startActivityColumnResize(event,'skill')"></span></th>
-          <th style="\${getActivityColumnStyle('scope', 180)}">\${t('traceScope')}<span class="column-resizer" onmousedown="startActivityColumnResize(event,'scope')"></span></th>
-          <th style="\${getActivityColumnStyle('detail', 520)}">\${t('traceDetail')}<span class="column-resizer" onmousedown="startActivityColumnResize(event,'detail')"></span></th>
+          <th style="\${getActivityColumnStyle('skill', 240)}">\${t('activitySkillLabel')}<span class="column-resizer" onmousedown="startActivityColumnResize(event,'skill')"></span></th>
+          <th style="\${getActivityColumnStyle('host', 110)}">\${t('traceRuntime')}<span class="column-resizer" onmousedown="startActivityColumnResize(event,'host')"></span></th>
+          <th style="\${getActivityColumnStyle('project', 180)}">\${t('activityProject')}<span class="column-resizer" onmousedown="startActivityColumnResize(event,'project')"></span></th>
+          <th style="\${getActivityColumnStyle('status', 140)}">\${t('traceStatus')}<span class="column-resizer" onmousedown="startActivityColumnResize(event,'status')"></span></th>
         </tr></thead>
         <tbody>
-          \${filtered.slice(0, 80).map((e) => \`<tr>
-            <td style="color:var(--muted);\${getActivityColumnStyle('time', DEFAULT_ACTIVITY_TIME_COLUMN_WIDTH)}">\${formatEventTimestamp(e.timestamp)}</td>
-            <td style="\${getActivityColumnStyle('host', 96)}">\${escHtml(e.runtime || t('activityHostFallback'))}</td>
-            <td style="\${getActivityColumnStyle('node', 188)}">\${renderActivityNodeCell(e)}</td>
-            <td style="\${getActivityColumnStyle('skill', 220)}">\${renderActivitySkillCell(projectPath, e)}</td>
-            <td style="\${getActivityColumnStyle('scope', 180)}">\${escHtml(e.scopeId || t('activityScopeFallback'))}</td>
-            <td style="\${getActivityColumnStyle('detail', 520)}">
-              <div class="business-detail-preview">\${escHtml(formatActivityPreview(e))}</div>
-              <div class="business-detail-actions">
-                <button class="detail-copy-btn" onclick="copyActivityDetail('\${escJsStr(projectPath)}','\${escJsStr(e.id)}')">\${t('activityCopy')}</button>
-                <button class="detail-view-btn" onclick="openActivityDetail('\${escJsStr(projectPath)}','\${escJsStr(e.id)}')">\${t('activityViewDetails')}</button>
-              </div>
-            </td>
+          \${events.slice(0, 120).map((row) => \`<tr class="activity-scope-row" onclick="openActivityDetail('\${escJsStr(projectPath)}','\${escJsStr(row.id)}')">
+            <td style="color:var(--muted);\${getActivityColumnStyle('time', DEFAULT_ACTIVITY_TIME_COLUMN_WIDTH)}">\${formatEventTimestamp(row.timestamp)}</td>
+            <td style="\${getActivityColumnStyle('skill', 240)}">\${renderActivitySkillCell(projectPath, row)}</td>
+            <td style="\${getActivityColumnStyle('host', 110)}">\${escHtml(row.runtime || t('activityHostFallback'))}</td>
+            <td style="\${getActivityColumnStyle('project', 180)}">\${escHtml(row.projectName || getProjectName(projectPath))}</td>
+            <td style="\${getActivityColumnStyle('status', 140)}">\${renderScopeStatusBadge(row.rawStatus)}</td>
           </tr>\`).join('')}
         </tbody>
       </table>
@@ -3487,6 +3355,7 @@ function renderConfigPanel(projectPath) {
     autoOptimize: true,
     userConfirm: false,
     runtimeSync: true,
+    llmSafety: DEFAULT_LLM_SAFETY_CONFIG,
     defaultProvider: '',
     logLevel: 'info',
     providers: [],
@@ -3496,6 +3365,7 @@ function renderConfigPanel(projectPath) {
   const configUi = getStoredConfigUi(projectPath);
 
   const providers = Array.isArray(config.providers) ? config.providers : [];
+  const llmSafety = sanitizeLLMSafetyForState(config.llmSafety);
   const activeProviderIndex = getActiveProviderIndex(config.defaultProvider, providers);
   const rowsHtml = providers.length > 0
     ? providers.map((row, index) => renderProviderRow(row, index, activeProviderIndex)).join('')
@@ -3516,6 +3386,32 @@ function renderConfigPanel(projectPath) {
       <div class="config-help">\${t('configProvidersHelp')}</div>
       <div class="config-connectivity" id="cfg_connectivity">
         \${renderConnectivityResultsHtml(configUi.connectivityResults)}
+      </div>
+    </div>
+    <div class="config-field" style="margin-top:14px">
+      <label class="config-label">\${t('configLlmSafetyLabel')}</label>
+      <div class="config-help">\${t('configLlmSafetyHelp')}</div>
+      <div class="providers-editor" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));margin-top:8px">
+        <label class="config-check" style="align-items:flex-start;gap:10px">
+          <input id="cfg_llm_safety_enabled" type="checkbox" \${llmSafety.enabled ? 'checked' : ''} onchange="scheduleProjectConfigSave(150)" />
+          <span>\${t('configLlmSafetyEnabledLabel')}</span>
+        </label>
+        <label>
+          <div class="config-label">\${t('configLlmSafetyWindowLabel')}</div>
+          <input id="cfg_llm_safety_window_ms" class="config-input" type="number" min="1" step="1000" value="\${escHtml(String(llmSafety.windowMs))}" oninput="scheduleProjectConfigSave(500)" />
+        </label>
+        <label>
+          <div class="config-label">\${t('configLlmSafetyRequestsLabel')}</div>
+          <input id="cfg_llm_safety_max_requests" class="config-input" type="number" min="1" step="1" value="\${escHtml(String(llmSafety.maxRequestsPerWindow))}" oninput="scheduleProjectConfigSave(500)" />
+        </label>
+        <label>
+          <div class="config-label">\${t('configLlmSafetyConcurrentLabel')}</div>
+          <input id="cfg_llm_safety_max_concurrent" class="config-input" type="number" min="1" step="1" value="\${escHtml(String(llmSafety.maxConcurrentRequests))}" oninput="scheduleProjectConfigSave(500)" />
+        </label>
+        <label>
+          <div class="config-label">\${t('configLlmSafetyTokensLabel')}</div>
+          <input id="cfg_llm_safety_max_tokens" class="config-input" type="number" min="1" step="1000" value="\${escHtml(String(llmSafety.maxEstimatedTokensPerWindow))}" oninput="scheduleProjectConfigSave(500)" />
+        </label>
       </div>
     </div>
     <div class="config-actions">
@@ -3869,7 +3765,11 @@ async function ensureProjectConfig(projectPath) {
       console.warn('[dashboard] first config fetch failed, retrying', { projectPath, error: String(firstErr) });
       data = await fetchJsonWithTimeout('/api/config?projectPath=' + enc, 12000);
     }
-    state.configByProject[scopeId] = data.config || {};
+    state.configByProject[scopeId] = {
+      ...(data.config || {}),
+      llmSafety: sanitizeLLMSafetyForState(data?.config?.llmSafety),
+      providers: sanitizeProvidersForState(data?.config?.providers),
+    };
     state.configLoadErrorByProject[scopeId] = '';
     if (state.selectedMainTab === 'config' && state.selectedProjectId === projectPath) {
       safeRenderMainPanel(projectPath, 'checkProvidersConnectivity.start');
@@ -3901,6 +3801,7 @@ async function saveProjectConfig(options = {}) {
   try {
     const providers = collectProvidersFromConfigEditor();
     const currentConfig = getStoredConfig(projectPath) || {};
+    const llmSafety = collectLLMSafetyFromConfigEditor(currentConfig.llmSafety);
     const selectedProviderIndex = getSelectedProviderIndexFromEditor(
       providers.length,
       currentConfig.defaultProvider,
@@ -3911,6 +3812,7 @@ async function saveProjectConfig(options = {}) {
         autoOptimize: true,
         userConfirm: false,
         runtimeSync: true,
+        llmSafety,
         defaultProvider: selectedProviderIndex >= 0 ? (providers[selectedProviderIndex]?.provider || '') : '',
         logLevel: currentConfig.logLevel || 'info',
         providers,
@@ -3923,6 +3825,7 @@ async function saveProjectConfig(options = {}) {
     });
     state.configByProject[scopeId] = {
       ...payload.config,
+      llmSafety: sanitizeLLMSafetyForState(payload.config.llmSafety),
       providers: sanitizeProvidersForState(payload.config.providers),
     };
     updateConfigSaveHint(projectPath, auto ? t('configAutoSaved') : t('configSaved'));
@@ -3982,6 +3885,7 @@ async function checkProvidersConnectivity(targetRowIndex = null, btnEl = null) {
       ? [providers[rowIndex]]
       : providers;
     const currentConfig = getStoredConfig(projectPath) || {};
+    const llmSafety = collectLLMSafetyFromConfigEditor(currentConfig.llmSafety);
     const selectedProviderIndex = getSelectedProviderIndexFromEditor(
       providers.length,
       currentConfig.defaultProvider,
@@ -3994,6 +3898,7 @@ async function checkProvidersConnectivity(targetRowIndex = null, btnEl = null) {
     });
     state.configByProject[scopeId] = {
       ...(state.configByProject[scopeId] || {}),
+      llmSafety,
       defaultProvider: selectedProviderIndex >= 0 ? (providers[selectedProviderIndex]?.provider || '') : '',
       providers: sanitizeProvidersForState(providers),
     };
