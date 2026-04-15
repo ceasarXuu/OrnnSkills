@@ -36,9 +36,12 @@ ornn init
 ```
 
 初始化向导会引导你完成：
+
 - 选择 LLM Provider (默认: deepseek)
 - 选择模型 (默认: deepseek-reasoner)
 - 输入 API Key
+
+`ornn init` 还会把当前项目登记到全局项目注册表。后续 `ornn daemon start`/`ornn start` 会统一监控所有已登记项目，不需要在每个项目目录里重复启动守护进程。
 
 #### 3. 启动后台守护进程
 
@@ -47,6 +50,8 @@ ornn daemon start
 ```
 
 守护进程将自动：
+
+- 加载所有已通过 `ornn init` 登记的项目
 - 监听主 Agent (Codex/Claude Code) 的执行
 - 采集 skill 调用轨迹
 - 自动优化 shadow skills
@@ -76,6 +81,7 @@ your-project/.ornn/skills/      ← 项目级影子副本 (自动优化)
 ```
 
 **特点**：
+
 - 每个项目独立的 shadow skill
 - 不污染全局 skill
 - 自动优化，持续改进
@@ -118,6 +124,9 @@ ornn init [options]
   ornn init --force            # 强制重新初始化
 ```
 
+说明:
+初始化会创建 `.ornn/` 并将当前项目写入全局注册表
+
 ### ornn daemon
 
 管理后台守护进程。
@@ -126,12 +135,12 @@ ornn init [options]
 ornn daemon <subcommand>
 
 子命令:
-  start     启动守护进程
+  start     启动全局守护进程（监控所有已登记项目）
   stop      停止守护进程
   status    查看守护进程状态
 
 示例:
-  ornn daemon start            # 启动
+  ornn daemon start            # 启动全局守护进程
   ornn daemon stop             # 停止
   ornn daemon status           # 查看状态
 ```
@@ -227,6 +236,7 @@ ornn skills rollback <skill-id> [options]
 ```
 
 **⚠️ 重要提示**：
+
 - 回滚操作不可逆，请谨慎执行
 - 建议先使用 `ornn skills log` 查看历史
 - 使用 `--snapshot` 更安全，因为它总是指向已验证的版本
@@ -296,6 +306,7 @@ ornn skills sync <skill-id> [options]
 ```
 
 **适用场景**：
+
 - 全局 skill 更新后，想获取新内容
 - 与 origin 差异过大需要重新基准
 
@@ -394,28 +405,33 @@ ornn skills status
 ### 问题1: "daemon not running"
 
 **错误信息**：
+
 ```
 Error: .ornn directory not found
 ```
 
 **解决方案**：
+
 1. 运行 `ornn init` 初始化项目
-2. 运行 `ornn daemon start` 启动守护进程
+2. 运行 `ornn daemon start` 启动全局守护进程
 
 ---
 
 ### 问题2: "Shadow skill not found"
 
 **错误信息**：
+
 ```
 Shadow skill "xxx" not found
 ```
 
 **可能原因**：
+
 1. Skill 尚未被主 Agent 使用过
 2. Skill ID 拼写错误
 
 **解决方案**：
+
 ```bash
 # 1. 检查所有可用的 skills
 ornn skills status
@@ -430,11 +446,13 @@ ornn skills status
 ### 问题3: "Permission denied"
 
 **错误信息**：
+
 ```
 Error: Permission denied
 ```
 
 **解决方案**：
+
 ```bash
 # 确保 .ornn 目录有正确的权限
 chmod -R 755 .ornn/
@@ -445,6 +463,7 @@ chmod -R 755 .ornn/
 ### 问题4: 优化效果不如预期
 
 **诊断步骤**：
+
 ```bash
 # 1. 查看详细的演化日志
 ornn skills log <skill-id> -n 50
@@ -457,6 +476,7 @@ ornn skills status -s <skill-id>
 ```
 
 **解决方案**：
+
 1. 如果优化方向不对，使用 `rollback` 回滚
 2. 使用 `freeze` 暂停自动优化
 3. 手动编辑 `.ornn/skills/<skill-id>/current.md`
@@ -466,11 +486,13 @@ ornn skills status -s <skill-id>
 ### 问题5: API Key 无效
 
 **错误信息**：
+
 ```
 Error: Invalid API key
 ```
 
 **解决方案**：
+
 1. 检查 `.env.local` 文件中的 API Key
 2. 确认 API Key 有效且未过期
 3. 重新运行 `ornn init` 更新配置
@@ -480,10 +502,12 @@ Error: Invalid API key
 ### 问题6: 想查看详细日志
 
 **日志位置**：
+
 - 全局日志: `~/.ornn/logs/`
 - 项目日志: `.ornn/logs/` (如果配置了)
 
 **查看错误日志**：
+
 ```bash
 cat ~/.ornn/logs/error.log
 tail -100 ~/.ornn/logs/error.log

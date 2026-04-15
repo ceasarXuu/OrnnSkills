@@ -4,7 +4,7 @@
  */
 
 import { mkdir, access } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { logger } from '../utils/logger.js';
 import { registerProject } from '../dashboard/projects-registry.js';
 
@@ -16,9 +16,10 @@ export async function initCommand(
   projectPath: string = process.cwd(),
   options: InitOptions = {}
 ): Promise<void> {
+  const normalizedProjectPath = resolve(projectPath);
   logger.info('🚀 Initializing Ornn Skills...');
 
-  const ornnPath = join(projectPath, '.ornn');
+  const ornnPath = join(normalizedProjectPath, '.ornn');
 
   // Check if already initialized
   try {
@@ -26,6 +27,8 @@ export async function initCommand(
     if (options.force) {
       logger.info('Force flag detected. Reinitializing...');
     } else {
+      registerProject(normalizedProjectPath);
+      logger.info(`Project registered: ${normalizedProjectPath}`);
       logger.warn('.ornn directory already exists. Use --force to reinitialize.');
       logger.info('To update configuration, use: ornn config');
       return;
@@ -50,11 +53,11 @@ export async function initCommand(
   }
 
   logger.info('\n✅ Ornn Skills initialized successfully!');
-  logger.info(`Project path: ${projectPath}`);
+  logger.info(`Project path: ${normalizedProjectPath}`);
 
   // Register project in the global dashboard registry
   try {
-    registerProject(projectPath);
+    registerProject(normalizedProjectPath);
   } catch {
     // Non-fatal: dashboard registry is best-effort
   }

@@ -29,6 +29,7 @@ npm install -g ornn-skills
 ### 前置条件
 
 使用 OrnnSkills 之前，请确保：
+
 - 已安装 Node.js 18+
 - 项目中正在运行 Agent（Codex/OpenCode/Claude）
 
@@ -38,7 +39,7 @@ npm install -g ornn-skills
 cd /path/to/your/project
 ```
 
-OrnnSkills 是基于项目运行的，因此需要在你的项目目录中执行命令。
+你只需要在每个希望纳入监控的项目里执行一次 `ornn init`。完成注册后，`ornn start`/`ornn restart` 会以单个全局守护进程的形式运行，并统一监控所有已初始化项目，不需要在每个项目目录里分别启动一遍。
 
 ### 2. 初始化配置
 
@@ -47,7 +48,9 @@ ornn init
 ```
 
 这将：
+
 - 在项目中创建 `.ornn/` 目录
+- 把当前项目注册到 OrnnSkills 的全局项目注册表
 - 生成默认配置文件
 - 扫描并注册全局 skills
 
@@ -58,6 +61,8 @@ ornn start
 ```
 
 启动后台守护进程，它会：
+
+- 加载所有已经通过 `ornn init` 注册的项目
 - 监控你的 Agent 执行 trace
 - 基于真实使用情况自动优化 skills
 - 在后台持续运行
@@ -152,14 +157,14 @@ ornn skills unfreeze <skill-id>
 
 系统使用 6 种策略将 trace 映射到对应的 skill：
 
-| 策略 | 触发条件 | 置信度 | 说明 |
-|------|----------|--------|------|
-| 策略1 | `tool_call` 读取 skill 文件 | 0.95 | 最可靠的映射方式 |
-| 策略2 | `tool_call` 执行 skill 相关操作 | 0.85 | 从工具参数推断 |
-| 策略3 | `file_change` 修改 skill 文件 | 0.9 | 文件变化明确指向 skill |
-| 策略4 | `metadata` 包含 skill_id | 0.98 | 显式的 skill 标识 |
-| 策略5 | `assistant_output` 引用 skill | 0.6 | 从输出内容推断 |
-| 策略6 | `user_input` 请求 skill | 0.5 | 从用户输入推断 |
+| 策略  | 触发条件                        | 置信度 | 说明                   |
+| ----- | ------------------------------- | ------ | ---------------------- |
+| 策略1 | `tool_call` 读取 skill 文件     | 0.95   | 最可靠的映射方式       |
+| 策略2 | `tool_call` 执行 skill 相关操作 | 0.85   | 从工具参数推断         |
+| 策略3 | `file_change` 修改 skill 文件   | 0.9    | 文件变化明确指向 skill |
+| 策略4 | `metadata` 包含 skill_id        | 0.98   | 显式的 skill 标识      |
+| 策略5 | `assistant_output` 引用 skill   | 0.6    | 从输出内容推断         |
+| 策略6 | `user_input` 请求 skill         | 0.5    | 从用户输入推断         |
 
 ### 自动优化闭环
 
@@ -213,23 +218,23 @@ your-project/
 
 ## CLI 命令
 
-| 命令 | 描述 |
-|------|------|
-| `ornn init` | 初始化配置 |
-| `ornn start` | 启动后台守护进程 |
-| `ornn stop` | 停止守护进程 |
-| `ornn daemon` | 管理守护进程（start, stop, status, restart） |
-| `ornn logs` | 查看守护进程日志 |
-| `ornn config` | 管理配置 |
-| `ornn completion` | 生成 shell 补全脚本 |
-| `ornn skills status` | 查看当前项目 shadow skills 状态 |
-| `ornn skills log <skill>` | 查看某个 skill 的演化日志 |
-| `ornn skills diff <skill>` | 查看当前内容与 origin 的 diff |
-| `ornn skills rollback <skill> --to <rev>` | 回滚到指定 revision |
-| `ornn skills freeze <skill>` | 暂停某个 skill 的自动优化 |
-| `ornn skills unfreeze <skill>` | 恢复自动优化 |
-| `ornn skills sync <skill>` | 重新同步 origin |
-| `ornn skills preview <skill>` | 预览优化建议 |
+| 命令                                      | 描述                                         |
+| ----------------------------------------- | -------------------------------------------- |
+| `ornn init`                               | 初始化配置                                   |
+| `ornn start`                              | 启动后台守护进程                             |
+| `ornn stop`                               | 停止守护进程                                 |
+| `ornn daemon`                             | 管理守护进程（start, stop, status, restart） |
+| `ornn logs`                               | 查看守护进程日志                             |
+| `ornn config`                             | 管理配置                                     |
+| `ornn completion`                         | 生成 shell 补全脚本                          |
+| `ornn skills status`                      | 查看当前项目 shadow skills 状态              |
+| `ornn skills log <skill>`                 | 查看某个 skill 的演化日志                    |
+| `ornn skills diff <skill>`                | 查看当前内容与 origin 的 diff                |
+| `ornn skills rollback <skill> --to <rev>` | 回滚到指定 revision                          |
+| `ornn skills freeze <skill>`              | 暂停某个 skill 的自动优化                    |
+| `ornn skills unfreeze <skill>`            | 恢复自动优化                                 |
+| `ornn skills sync <skill>`                | 重新同步 origin                              |
+| `ornn skills preview <skill>`             | 预览优化建议                                 |
 
 ## 自动优化策略
 

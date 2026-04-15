@@ -1,16 +1,14 @@
 import { watch, type FSWatcher } from 'chokidar';
-import { existsSync, writeFileSync, mkdirSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve, sep } from 'node:path';
 import { createChildLogger } from '../utils/logger.js';
 import { createShadowManager } from '../core/shadow-manager/index.js';
 import { createCodexObserver } from '../core/observer/codex-observer.js';
-import { touchProject } from '../dashboard/projects-registry.js';
+import { listProjects, touchProject } from '../dashboard/projects-registry.js';
+import type { Trace } from '../types/index.js';
 
 const logger = createChildLogger('daemon');
 
-/**
- * 守护进程状态
- */
 interface DaemonState {
   isRunning: boolean;
   startedAt: string;
@@ -28,42 +26,39 @@ interface OptimizationStatus {
   queueSize: number;
 }
 
-/**
- * 重试队列条目（优化内存使用）
- */
 interface RetryQueueEntry {
-  traceId: string; // 只存储 trace ID，不存储完整 trace
+  traceId: string;
+  projectRoot: string | null;
   attempts: number;
-  lastErrorMessage?: string; // 只存储错误消息，不存储完整 Error 对象
+  lastErrorMessage?: string;
   addedAt: number;
 }
 
-/**
- * 检查点文件路径
- */
+interface ProjectRuntime {
+  projectRoot: string;
+  shadowManager: ReturnType<typeof createShadowManager>;
+  watcher: FSWatcher | null;
+  processedTraces: number;
+  lastCheckpointAt: string | null;
+  checkpointFlushTimer: NodeJS.Timeout | null;
+}
+
 const CHECKPOINT_FILE = '.ornn/state/daemon-checkpoint.json';
 
-/**
- * 后台守护进程
- * 负责监听文件变化和定时任务
- */
 export class Daemon {
-  private projectRoot: string;
-  private shadowManager;
+  private launchContext: string;
   private codexObserver;
-  private watcher: FSWatcher | null = null;
-  private isRunning: boolean = false;
+  private projectRuntimes: Map<string, ProjectRuntime> = new Map();
+  private isRunning = false;
   private cleanupInterval: NodeJS.Timeout | null = null;
-  private retryQueue: Map<string, RetryQueueEntry> = new Map(); // 使用 Map 避免重复
+  private retryQueue: Map<string, RetryQueueEntry> = new Map();
   private retryInterval: NodeJS.Timeout | null = null;
-  private maxRetries = 3;
-  private retryDelay = 5000; // 5秒
-  private maxQueueSize = 1000; // 最大队列大小
-  private processedTraces: number = 0;
   private checkpointInterval: NodeJS.Timeout | null = null;
-  private checkpointFlushTimer: NodeJS.Timeout | null = null;
-  private startedAt: string = '';
-  private lastCheckpointAt: string | null = null;
+  private registrySyncInterval: NodeJS.Timeout | null = null;
+  private maxRetries = 3;
+  private retryDelay = 5000;
+  private maxQueueSize = 1000;
+  private startedAt = '';
   private optimizationStatus: OptimizationStatus = {
     currentState: 'idle',
     currentSkillId: null,
@@ -73,80 +68,132 @@ export class Daemon {
   };
   private optimizationQueue: string[] = [];
 
-  constructor(projectRoot: string) {
-    this.projectRoot = projectRoot;
-    this.shadowManager = createShadowManager(projectRoot);
+  constructor(launchContext: string) {
+    this.launchContext = resolve(launchContext);
     this.codexObserver = createCodexObserver();
   }
 
-  /**
-   * 启动守护进程
-   */
   async start(): Promise<void> {
     if (this.isRunning) {
       logger.warn('Daemon already running');
       return;
     }
 
-    logger.debug('Starting daemon', { projectRoot: this.projectRoot });
+    logger.debug('Starting daemon', { launchContext: this.launchContext });
 
     try {
-      // 1. 初始化 shadow manager
-      await this.shadowManager.init();
-      logger.debug('Shadow manager initialized');
+      this.startedAt = new Date().toISOString();
 
-      // 2. 设置 trace 回调（带重试机制）
+      await this.syncRegisteredProjects();
+
       this.codexObserver.onTrace((trace) => {
         void this.processTraceWithRetry(trace);
       });
-
-      // 3. 启动 codex observer
       this.codexObserver.start();
       logger.debug('Codex observer started');
 
-      // 4. 监听项目 .sea 目录变化
-      this.startFileWatcher();
-
-      // 5. 启动定时清理任务
-      this.startCleanupTask();
-
-      // 6. 设置状态为运行中
+      this.startMaintenanceTasks();
       this.isRunning = true;
-      this.startedAt = new Date().toISOString();
-
-      // Update global project registry so dashboard can discover this project
-      try {
-        touchProject(this.projectRoot);
-      } catch {
-        // Non-fatal
-      }
-
-      // 7. 注册优雅退出处理
+      await this.saveAllCheckpoints();
       this.registerShutdownHooks();
 
-      logger.debug('Daemon started successfully');
+      logger.info('Daemon started in global mode', {
+        projectCount: this.projectRuntimes.size,
+        projects: Array.from(this.projectRuntimes.keys()),
+      });
     } catch (error) {
-      // 启动失败，清理资源
       this.isRunning = false;
       await this.cleanup();
-
       logger.error('Failed to start daemon', { error });
       throw new Error(`Daemon startup failed: ${String(error)}`);
     }
   }
 
-  /**
-   * 启动文件监听器
-   */
-  private startFileWatcher(): void {
-    const seaDir = join(this.projectRoot, '.sea');
+  private async syncRegisteredProjects(): Promise<void> {
+    const registeredRoots = this.getRegisteredProjectRoots();
+    const nextRoots = new Set(registeredRoots);
 
-    if (!existsSync(seaDir)) {
-      logger.debug('.sea directory not found, skipping file watcher');
+    for (const projectRoot of registeredRoots) {
+      await this.ensureProjectRuntime(projectRoot);
+    }
+
+    for (const projectRoot of Array.from(this.projectRuntimes.keys())) {
+      if (!nextRoots.has(projectRoot)) {
+        await this.removeProjectRuntime(projectRoot);
+      }
+    }
+
+    logger.debug('Synchronized daemon project registry', {
+      projectCount: this.projectRuntimes.size,
+      projects: Array.from(this.projectRuntimes.keys()),
+    });
+  }
+
+  private getRegisteredProjectRoots(): string[] {
+    return listProjects().map((project) => resolve(project.path));
+  }
+
+  private async ensureProjectRuntime(projectRoot: string): Promise<ProjectRuntime> {
+    const normalizedProjectRoot = resolve(projectRoot);
+    const existing = this.projectRuntimes.get(normalizedProjectRoot);
+    if (existing) {
+      return existing;
+    }
+
+    const shadowManager = createShadowManager(normalizedProjectRoot);
+    await shadowManager.init();
+
+    const runtime: ProjectRuntime = {
+      projectRoot: normalizedProjectRoot,
+      shadowManager,
+      watcher: this.startFileWatcher(normalizedProjectRoot),
+      processedTraces: 0,
+      lastCheckpointAt: null,
+      checkpointFlushTimer: null,
+    };
+
+    this.projectRuntimes.set(normalizedProjectRoot, runtime);
+    touchProject(normalizedProjectRoot);
+    await this.saveCheckpointForProject(normalizedProjectRoot);
+
+    logger.info('Registered project runtime for daemon monitoring', {
+      projectRoot: normalizedProjectRoot,
+    });
+
+    return runtime;
+  }
+
+  private async removeProjectRuntime(projectRoot: string): Promise<void> {
+    const runtime = this.projectRuntimes.get(projectRoot);
+    if (!runtime) {
       return;
     }
 
-    this.watcher = watch(seaDir, {
+    try {
+      if (runtime.watcher) {
+        await runtime.watcher.close();
+      }
+      if (runtime.checkpointFlushTimer) {
+        clearTimeout(runtime.checkpointFlushTimer);
+      }
+      await this.saveCheckpointForProject(projectRoot);
+      await runtime.shadowManager.close();
+    } finally {
+      this.projectRuntimes.delete(projectRoot);
+    }
+
+    logger.info('Removed project runtime from daemon monitoring', { projectRoot });
+  }
+
+  private startFileWatcher(projectRoot: string): FSWatcher | null {
+    const seaDir = join(projectRoot, '.sea');
+
+    if (!existsSync(seaDir)) {
+      logger.debug('.sea directory not found, skipping file watcher', { projectRoot });
+      return null;
+    }
+
+    const watcher = watch(seaDir, {
       persistent: true,
       ignoreInitial: true,
       awaitWriteFinish: {
@@ -155,132 +202,140 @@ export class Daemon {
       },
     });
 
-    this.watcher.on('change', (path) => {
-      logger.debug('File changed', { path });
-      // 可以在这里处理文件变化
+    watcher.on('change', (path) => {
+      logger.debug('Project file changed', { projectRoot, path });
     });
 
-    this.watcher.on('error', (error) => {
-      logger.error('File watcher error', { error });
+    watcher.on('error', (error) => {
+      logger.error('File watcher error', { projectRoot, error });
     });
 
-    logger.info('File watcher started', { path: seaDir });
+    logger.info('File watcher started', { projectRoot, path: seaDir });
+    return watcher;
   }
 
-  /**
-   * 启动定时清理任务
-   */
-  private startCleanupTask(): void {
-    // 每小时清理一次旧 traces
+  private startMaintenanceTasks(): void {
     this.cleanupInterval = setInterval(
       () => {
-        try {
-          const retentionDays = 30;
-          const cleaned = this.shadowManager.cleanupOldTraces(retentionDays);
-          if (cleaned > 0) {
-            logger.info(`Cleaned ${cleaned} old traces`);
+        for (const runtime of this.projectRuntimes.values()) {
+          try {
+            const retentionDays = 30;
+            const cleaned = runtime.shadowManager.cleanupOldTraces(retentionDays);
+            if (cleaned > 0) {
+              logger.info('Cleaned old traces for project', {
+                projectRoot: runtime.projectRoot,
+                cleaned,
+              });
+            }
+          } catch (error) {
+            logger.error('Cleanup task failed', { projectRoot: runtime.projectRoot, error });
           }
-        } catch (error) {
-          logger.error('Cleanup task failed', { error });
         }
       },
-      60 * 60 * 1000 // 1 小时
+      60 * 60 * 1000
     );
 
-    // 每5秒处理一次重试队列
     this.retryInterval = setInterval(() => {
-      void this.processRetryQueue();
+      this.processRetryQueue();
     }, this.retryDelay);
 
-    // 每分钟保存一次状态检查点
-    this.checkpointInterval = setInterval(
-      () => {
-        void this.saveCheckpoint();
-      },
-      60 * 1000 // 1 分钟
-    );
+    this.checkpointInterval = setInterval(() => {
+      void this.saveAllCheckpoints();
+    }, 60 * 1000);
 
-    logger.debug('Cleanup task started');
+    this.registrySyncInterval = setInterval(() => {
+      void this.syncRegisteredProjects();
+    }, 5000);
+
+    logger.debug('Daemon maintenance tasks started');
   }
 
-  /**
-   * 保存状态检查点
-   */
-  private async saveCheckpoint(): Promise<void> {
+  private async saveAllCheckpoints(): Promise<void> {
+    for (const projectRoot of this.projectRuntimes.keys()) {
+      await this.saveCheckpointForProject(projectRoot);
+    }
+  }
+
+  private async saveCheckpointForProject(projectRoot: string): Promise<void> {
+    const runtime = this.projectRuntimes.get(projectRoot);
+    if (!runtime) {
+      return;
+    }
+
     try {
+      const lastCheckpointAt = new Date().toISOString();
       const state: DaemonState = {
         isRunning: this.isRunning,
         startedAt: this.startedAt,
-        processedTraces: this.processedTraces,
-        lastCheckpointAt: new Date().toISOString(),
-        retryQueueSize: this.retryQueue.size,
+        processedTraces: runtime.processedTraces,
+        lastCheckpointAt,
+        retryQueueSize: Array.from(this.retryQueue.values()).filter(
+          (entry) => entry.projectRoot === projectRoot
+        ).length,
         optimizationStatus: { ...this.optimizationStatus },
       };
 
-      const checkpointPath = join(this.projectRoot, CHECKPOINT_FILE);
+      const checkpointPath = join(projectRoot, CHECKPOINT_FILE);
       const checkpointDir = dirname(checkpointPath);
 
-      // 确保目录存在
       if (!existsSync(checkpointDir)) {
         mkdirSync(checkpointDir, { recursive: true });
       }
 
-      // 使用临时文件实现原子写入
       const tempPath = `${checkpointPath}.tmp`;
       writeFileSync(tempPath, JSON.stringify(state, null, 2), 'utf-8');
 
-      // 原子替换
       const { renameSync, unlinkSync } = await import('node:fs');
       try {
         renameSync(tempPath, checkpointPath);
       } catch (error) {
-        // 清理临时文件
         try {
           if (existsSync(tempPath)) {
             unlinkSync(tempPath);
           }
         } catch {
-          // 忽略清理错误
+          // ignore cleanup errors
         }
         throw error;
       }
 
-      logger.debug('Daemon checkpoint saved', { path: checkpointPath });
+      runtime.lastCheckpointAt = lastCheckpointAt;
+      logger.debug('Daemon checkpoint saved', { projectRoot, path: checkpointPath });
     } catch (error) {
-      logger.error('Failed to save daemon checkpoint', { error });
+      logger.error('Failed to save daemon checkpoint', { projectRoot, error });
     }
   }
 
-  private scheduleCheckpointSave(delayMs = 250): void {
-    if (this.checkpointFlushTimer) {
-      clearTimeout(this.checkpointFlushTimer);
+  private scheduleCheckpointSave(projectRoot: string, delayMs = 250): void {
+    const runtime = this.projectRuntimes.get(projectRoot);
+    if (!runtime) {
+      return;
     }
-    this.checkpointFlushTimer = setTimeout(() => {
-      this.checkpointFlushTimer = null;
-      void this.saveCheckpoint();
+
+    if (runtime.checkpointFlushTimer) {
+      clearTimeout(runtime.checkpointFlushTimer);
+    }
+
+    runtime.checkpointFlushTimer = setTimeout(() => {
+      runtime.checkpointFlushTimer = null;
+      void this.saveCheckpointForProject(projectRoot);
     }, delayMs);
   }
 
-  /**
-   * 更新优化状态
-   */
   updateOptimizationStatus(
     state: 'idle' | 'analyzing' | 'optimizing' | 'error',
     skillId?: string,
     error?: string
   ): void {
     this.optimizationStatus.currentState = state;
-    this.optimizationStatus.currentSkillId = skillId || null;
-    this.optimizationStatus.lastError = error || null;
+    this.optimizationStatus.currentSkillId = state === 'idle' ? null : (skillId ?? null);
+    this.optimizationStatus.lastError = error ?? null;
     if (state === 'idle') {
-      this.optimizationStatus.currentSkillId = null;
+      this.optimizationStatus.lastOptimizationAt = new Date().toISOString();
     }
     logger.debug('Optimization status updated', { state, skillId });
   }
 
-  /**
-   * 添加到优化队列
-   */
   enqueueOptimization(skillId: string): void {
     if (!this.optimizationQueue.includes(skillId)) {
       this.optimizationQueue.push(skillId);
@@ -292,18 +347,12 @@ export class Daemon {
     }
   }
 
-  /**
-   * 从优化队列获取下一个
-   */
   dequeueOptimization(): string | undefined {
     const skillId = this.optimizationQueue.shift();
     this.optimizationStatus.queueSize = this.optimizationQueue.length;
     return skillId;
   }
 
-  /**
-   * 标记优化完成
-   */
   completeOptimization(skillId: string): void {
     this.optimizationStatus.currentState = 'idle';
     this.optimizationStatus.currentSkillId = null;
@@ -312,51 +361,102 @@ export class Daemon {
     logger.info('Optimization completed', { skillId });
   }
 
-  /**
-   * 获取守护进程状态
-   */
-  getState(): DaemonState {
+  getState(projectRoot?: string): DaemonState {
+    const runtime =
+      (projectRoot ? this.projectRuntimes.get(resolve(projectRoot)) : null) ??
+      this.projectRuntimes.values().next().value ??
+      null;
+
     return {
       isRunning: this.isRunning,
       startedAt: this.startedAt,
-      processedTraces: this.processedTraces,
-      lastCheckpointAt: this.lastCheckpointAt,
+      processedTraces: runtime?.processedTraces ?? 0,
+      lastCheckpointAt: runtime?.lastCheckpointAt ?? null,
       retryQueueSize: this.retryQueue.size,
       optimizationStatus: { ...this.optimizationStatus },
     };
   }
 
-  /**
-   * 处理 trace（带重试机制）
-   */
   private async processTraceWithRetry(trace: unknown): Promise<void> {
+    const typedTrace = trace as Trace;
+    const projectRoot = await this.ensureRuntimeForTrace(typedTrace);
+    if (!projectRoot) {
+      logger.debug('Ignoring trace for unregistered project', {
+        traceId: typedTrace.trace_id,
+        projectPath: typedTrace.metadata?.projectPath,
+      });
+      return;
+    }
+
+    const runtime = this.projectRuntimes.get(projectRoot);
+    if (!runtime) {
+      logger.warn('Resolved trace project without active runtime', {
+        traceId: typedTrace.trace_id,
+        projectRoot,
+      });
+      return;
+    }
+
     try {
-      // 将 unknown 类型转换为 Trace 类型
-      await this.shadowManager.processTrace(trace as import('../types/index.js').Trace);
-      this.processedTraces++;
-      this.scheduleCheckpointSave();
+      await runtime.shadowManager.processTrace(typedTrace);
+      runtime.processedTraces++;
+      this.scheduleCheckpointSave(projectRoot);
     } catch (error) {
-      logger.warn('Failed to process trace, adding to retry queue', { error });
-      this.addToRetryQueue(trace, error as Error);
+      logger.warn('Failed to process trace, adding to retry queue', {
+        projectRoot,
+        traceId: typedTrace.trace_id,
+        error,
+      });
+      this.addToRetryQueue(typedTrace, error as Error, projectRoot);
     }
   }
 
-  /**
-   * 添加到重试队列（优化内存使用）
-   */
-  private addToRetryQueue(trace: unknown, error: Error): void {
-    const traceObj = trace as import('../types/index.js').Trace;
-    const traceId = traceObj.trace_id;
+  private async ensureRuntimeForTrace(trace: Trace): Promise<string | null> {
+    const rawProjectPath = trace.metadata?.projectPath;
+    if (typeof rawProjectPath !== 'string' || rawProjectPath.trim().length === 0) {
+      return null;
+    }
 
-    // 检查是否已存在
+    const normalizedTracePath = resolve(rawProjectPath);
+    const activeMatch = this.findBestProjectMatch(
+      normalizedTracePath,
+      Array.from(this.projectRuntimes.keys())
+    );
+    if (activeMatch) {
+      return activeMatch;
+    }
+
+    const registeredMatch = this.findBestProjectMatch(
+      normalizedTracePath,
+      this.getRegisteredProjectRoots()
+    );
+    if (!registeredMatch) {
+      return null;
+    }
+
+    await this.ensureProjectRuntime(registeredMatch);
+    return registeredMatch;
+  }
+
+  private findBestProjectMatch(tracePath: string, projectRoots: string[]): string | null {
+    const sortedRoots = [...projectRoots].sort((left, right) => right.length - left.length);
+    for (const projectRoot of sortedRoots) {
+      if (tracePath === projectRoot || tracePath.startsWith(projectRoot + sep)) {
+        return projectRoot;
+      }
+    }
+    return null;
+  }
+
+  private addToRetryQueue(trace: Trace, error: Error, projectRoot: string | null): void {
+    const traceId = trace.trace_id;
+
     if (this.retryQueue.has(traceId)) {
       logger.debug('Trace already in retry queue, skipping', { traceId });
       return;
     }
 
-    // 检查队列大小，防止内存泄漏
     if (this.retryQueue.size >= this.maxQueueSize) {
-      // 删除最早的条目
       const firstKey = this.retryQueue.keys().next().value;
       if (firstKey) {
         this.retryQueue.delete(firstKey);
@@ -364,32 +464,33 @@ export class Daemon {
       }
     }
 
-    // 只存储必要信息，不存储完整 trace 对象
     this.retryQueue.set(traceId, {
       traceId,
+      projectRoot,
       attempts: 0,
-      lastErrorMessage: error.message, // 只存储错误消息，不存储完整 Error 对象
+      lastErrorMessage: error.message,
       addedAt: Date.now(),
     });
 
-    logger.debug('Trace added to retry queue', { traceId, queueSize: this.retryQueue.size });
+    logger.debug('Trace added to retry queue', {
+      traceId,
+      projectRoot,
+      queueSize: this.retryQueue.size,
+    });
   }
 
-  /**
-   * 处理重试队列（优化内存使用）
-   */
   private processRetryQueue(): void {
     if (this.retryQueue.size === 0) {
       return;
     }
 
-    // 复制队列条目进行处理
     const entriesToProcess = Array.from(this.retryQueue.entries());
 
     for (const [traceId, entry] of entriesToProcess) {
       if (entry.attempts >= this.maxRetries) {
         logger.error('Trace exceeded max retries, discarding', {
           traceId,
+          projectRoot: entry.projectRoot,
           attempts: entry.attempts,
           lastErrorMessage: entry.lastErrorMessage,
         });
@@ -398,9 +499,10 @@ export class Daemon {
       }
 
       try {
-        // 注意：这里需要从 trace store 重新读取 trace 数据
-        // 因为我们没有存储完整 trace 对象
-        logger.warn('Retry queue processing requires trace store lookup', { traceId });
+        logger.warn('Retry queue processing requires trace store lookup', {
+          traceId,
+          projectRoot: entry.projectRoot,
+        });
         this.retryQueue.delete(traceId);
       } catch (error) {
         entry.attempts++;
@@ -409,6 +511,7 @@ export class Daemon {
         if (entry.attempts >= this.maxRetries) {
           logger.error('Trace failed after max retries', {
             traceId,
+            projectRoot: entry.projectRoot,
             attempts: entry.attempts,
             error: entry.lastErrorMessage,
           });
@@ -416,6 +519,7 @@ export class Daemon {
         } else {
           logger.debug('Trace retry failed, will retry again', {
             traceId,
+            projectRoot: entry.projectRoot,
             attempts: entry.attempts,
           });
         }
@@ -423,9 +527,6 @@ export class Daemon {
     }
   }
 
-  /**
-   * 停止守护进程
-   */
   async stop(): Promise<void> {
     if (!this.isRunning) {
       return;
@@ -434,27 +535,18 @@ export class Daemon {
     logger.info('Stopping daemon');
 
     try {
-      // 设置状态为停止
       this.isRunning = false;
-
-      // 停止所有组件
       await this.cleanup();
-
       logger.info('Daemon stopped successfully');
     } catch (error) {
       logger.error('Error during daemon shutdown', { error });
-      // 即使出错也要继续清理
       await this.cleanup();
     }
   }
 
-  /**
-   * 清理资源
-   */
   private async cleanup(): Promise<void> {
     const errors: Error[] = [];
 
-    // 1. 停止 codex observer
     try {
       await this.codexObserver.stop();
       logger.debug('Codex observer stopped');
@@ -463,78 +555,60 @@ export class Daemon {
       errors.push(error as Error);
     }
 
-    // 2. 停止文件监听器
-    try {
-      if (this.watcher) {
-        await this.watcher.close();
-        this.watcher = null;
-        logger.debug('File watcher stopped');
-      }
-    } catch (error) {
-      logger.error('Failed to stop file watcher', { error });
-      errors.push(error as Error);
-    }
-
-    // 3. 停止定时任务
     try {
       if (this.cleanupInterval) {
         clearInterval(this.cleanupInterval);
         this.cleanupInterval = null;
-        logger.debug('Cleanup task stopped');
       }
       if (this.retryInterval) {
         clearInterval(this.retryInterval);
         this.retryInterval = null;
-        logger.debug('Retry task stopped');
       }
       if (this.checkpointInterval) {
         clearInterval(this.checkpointInterval);
         this.checkpointInterval = null;
-        logger.debug('Checkpoint task stopped');
       }
-      if (this.checkpointFlushTimer) {
-        clearTimeout(this.checkpointFlushTimer);
-        this.checkpointFlushTimer = null;
-        logger.debug('Checkpoint flush timer stopped');
+      if (this.registrySyncInterval) {
+        clearInterval(this.registrySyncInterval);
+        this.registrySyncInterval = null;
       }
     } catch (error) {
-      logger.error('Failed to stop cleanup task', { error });
+      logger.error('Failed to stop daemon timers', { error });
       errors.push(error as Error);
     }
 
-    // 4. 保存最终检查点
-    try {
-      await this.saveCheckpoint();
-      logger.debug('Final checkpoint saved');
-    } catch (error) {
-      logger.error('Failed to save final checkpoint', { error });
-      errors.push(error as Error);
+    for (const runtime of this.projectRuntimes.values()) {
+      try {
+        if (runtime.watcher) {
+          await runtime.watcher.close();
+        }
+        if (runtime.checkpointFlushTimer) {
+          clearTimeout(runtime.checkpointFlushTimer);
+          runtime.checkpointFlushTimer = null;
+        }
+        await this.saveCheckpointForProject(runtime.projectRoot);
+        await runtime.shadowManager.close();
+      } catch (error) {
+        logger.error('Failed to clean up project runtime', {
+          projectRoot: runtime.projectRoot,
+          error,
+        });
+        errors.push(error as Error);
+      }
     }
 
-    // 4. 关闭 shadow manager
-    try {
-      await this.shadowManager.close();
-      logger.debug('Shadow manager closed');
-    } catch (error) {
-      logger.error('Failed to close shadow manager', { error });
-      errors.push(error as Error);
-    }
+    this.projectRuntimes.clear();
 
-    // 如果有错误，记录但不抛出（避免阻塞进程退出）
     if (errors.length > 0) {
       logger.warn(`Cleanup completed with ${errors.length} error(s)`);
     }
   }
 
-  /**
-   * 注册优雅退出处理（防止重复退出）
-   */
   private registerShutdownHooks(): void {
     let isShuttingDown = false;
     let shutdownTimeout: NodeJS.Timeout | null = null;
 
     const shutdownHandler = async (signal: string): Promise<void> => {
-      // 防止重复执行
       if (isShuttingDown) {
         logger.warn('Shutdown already in progress, ignoring signal', { signal });
         return;
@@ -543,7 +617,6 @@ export class Daemon {
       isShuttingDown = true;
       logger.info(`Received ${signal}, shutting down gracefully...`);
 
-      // 设置退出超时（30秒）
       shutdownTimeout = setTimeout(() => {
         logger.error('Shutdown timeout exceeded, forcing exit');
         process.exit(1);
@@ -552,7 +625,6 @@ export class Daemon {
       try {
         await this.stop();
 
-        // 清除超时定时器
         if (shutdownTimeout) {
           clearTimeout(shutdownTimeout);
           shutdownTimeout = null;
@@ -563,7 +635,6 @@ export class Daemon {
       } catch (error) {
         logger.error('Error during graceful shutdown', { error });
 
-        // 清除超时定时器
         if (shutdownTimeout) {
           clearTimeout(shutdownTimeout);
           shutdownTimeout = null;
@@ -573,17 +644,12 @@ export class Daemon {
       }
     };
 
-    // 监听系统信号
     process.on('SIGTERM', () => void shutdownHandler('SIGTERM'));
     process.on('SIGINT', () => void shutdownHandler('SIGINT'));
-
-    // 监听未捕获异常
     process.on('uncaughtException', (error) => {
       logger.error('Uncaught exception', { error });
       void shutdownHandler('uncaughtException');
     });
-
-    // 监听未处理的 Promise 拒绝
     process.on('unhandledRejection', (reason) => {
       logger.error('Unhandled rejection', { reason });
       void shutdownHandler('unhandledRejection');
@@ -592,29 +658,25 @@ export class Daemon {
     logger.debug('Shutdown hooks registered');
   }
 
-  /**
-   * 检查是否正在运行
-   */
   isActive(): boolean {
     return this.isRunning;
   }
 
-  /**
-   * 获取 shadow manager
-   */
-  getShadowManager(): import('../core/shadow-manager/index.js').ShadowManager {
-    return this.shadowManager;
+  getShadowManager(
+    projectRoot?: string
+  ): import('../core/shadow-manager/index.js').ShadowManager | null {
+    const runtime =
+      (projectRoot ? this.projectRuntimes.get(resolve(projectRoot)) : null) ??
+      this.projectRuntimes.values().next().value ??
+      null;
+    return runtime?.shadowManager ?? null;
   }
 
-  /**
-   * 获取 codex observer
-   */
   getCodexObserver(): import('../core/observer/codex-observer.js').CodexObserver {
     return this.codexObserver;
   }
 }
 
-// 导出工厂函数
 export function createDaemon(projectRoot: string): Daemon {
   return new Daemon(projectRoot);
 }

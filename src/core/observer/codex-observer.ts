@@ -1,6 +1,14 @@
 import { watch, type FSWatcher } from 'chokidar';
-import { closeSync, existsSync, openSync, readFileSync, readSync, readdirSync, statSync } from 'node:fs';
-import { join, basename } from 'node:path';
+import {
+  closeSync,
+  existsSync,
+  openSync,
+  readFileSync,
+  readSync,
+  readdirSync,
+  statSync,
+} from 'node:fs';
+import { join, basename, resolve } from 'node:path';
 import { BaseObserver } from './base-observer.js';
 import { createChildLogger } from '../../utils/logger.js';
 import { extractSkillRefs, extractSkillRefsFromSources } from '../../utils/skill-refs.js';
@@ -39,6 +47,7 @@ export class CodexObserver extends BaseObserver {
   private processedFiles: Set<string> = new Set();
   private processedByteOffset: Map<string, number> = new Map();
   private pendingLineFragment: Map<string, string> = new Map();
+  private sessionProjectPaths: Map<string, string> = new Map();
   // 启动恢复只保留极小窗口，避免把历史长会话一次性灌回优化链路。
   private readonly bootstrapFileLimit = 1;
   private readonly bootstrapTailLineLimit = 10;
@@ -127,6 +136,7 @@ export class CodexObserver extends BaseObserver {
     this.processedFiles.clear();
     this.processedByteOffset.clear();
     this.pendingLineFragment.clear();
+    this.sessionProjectPaths.clear();
     logger.info('Codex observer stopped');
   }
 
@@ -310,7 +320,10 @@ export class CodexObserver extends BaseObserver {
   /**
    * 处理 session JSONL 文件（内部实现）
    */
-  private processSessionFileInternal(path: string, options?: { bootstrapTailLines?: number }): void {
+  private processSessionFileInternal(
+    path: string,
+    options?: { bootstrapTailLines?: number }
+  ): void {
     const sessionId = this.extractSessionId(path);
     const traces: PreprocessedTrace[] = [];
 
@@ -324,11 +337,15 @@ export class CodexObserver extends BaseObserver {
 
       for (const line of newLines) {
         const rawType = this.peekRawEventType(line);
-        if (rawType === 'compacted' || rawType === 'event_msg' || rawType === 'turn_context') {
+        if (rawType === 'compacted' || rawType === 'event_msg') {
           continue;
         }
         try {
           const event = JSON.parse(line) as CodexRawEvent;
+          this.captureSessionProjectPath(sessionId, event);
+          if (event.type === 'turn_context') {
+            continue;
+          }
           const preprocessed = this.preprocessEvent(sessionId, event);
           if (preprocessed) {
             traces.push(preprocessed);
@@ -398,7 +415,10 @@ export class CodexObserver extends BaseObserver {
     }
   }
 
-  private readSessionTailLines(path: string, maxLines: number): { lines: string[]; nextOffset: number } {
+  private readSessionTailLines(
+    path: string,
+    maxLines: number
+  ): { lines: string[]; nextOffset: number } {
     const fileSize = statSync(path).size;
     if (fileSize === 0 || maxLines <= 0) {
       return { lines: [], nextOffset: fileSize };
@@ -449,6 +469,7 @@ export class CodexObserver extends BaseObserver {
 
     switch (event.type) {
       case 'session_meta': {
+        this.captureSessionProjectPath(sessionId, event);
         // 提取会话元数据（项目上下文）
         // 从 base_instructions 中提取激活的 skills
         // base_instructions 可能是字符串或 {text: string} 对象
@@ -471,6 +492,7 @@ export class CodexObserver extends BaseObserver {
           },
           skillRefs: activatedSkills,
           metadata: {
+            projectPath: this.sessionProjectPaths.get(sessionId),
             originator: event.payload.originator,
             source: event.payload.source,
           },
@@ -539,7 +561,8 @@ export class CodexObserver extends BaseObserver {
         const toolName =
           (payload.name as string) ||
           ((payload.function as Record<string, unknown>)?.name as string);
-        const rawArgs = payload.arguments ?? (payload.function as Record<string, unknown>)?.arguments;
+        const rawArgs =
+          payload.arguments ?? (payload.function as Record<string, unknown>)?.arguments;
         let args: Record<string, unknown> = {};
 
         if (typeof rawArgs === 'string') {
@@ -645,9 +668,7 @@ export class CodexObserver extends BaseObserver {
   private compactStructuredValue(value: unknown): Record<string, unknown> {
     if (typeof value === 'string') {
       const preview = this.truncateText(value, this.maxStructuredPreviewChars);
-      return preview
-        ? { preview, truncated: value.length > this.maxStructuredPreviewChars }
-        : {};
+      return preview ? { preview, truncated: value.length > this.maxStructuredPreviewChars } : {};
     }
     if (!value || typeof value !== 'object') {
       return { value };
@@ -657,16 +678,16 @@ export class CodexObserver extends BaseObserver {
       return {
         kind: 'array',
         itemCount: value.length,
-        preview: value
-          .slice(0, 3)
-          .map((item) => this.compactPrimitive(item)),
+        preview: value.slice(0, 3).map((item) => this.compactPrimitive(item)),
         truncated: value.length > 3,
       };
     }
 
     const objectValue = value as Record<string, unknown>;
     const entries = Object.entries(objectValue);
-    const previewEntries = entries.slice(0, 8).map(([key, item]) => [key, this.compactPrimitive(item)]);
+    const previewEntries = entries
+      .slice(0, 8)
+      .map(([key, item]) => [key, this.compactPrimitive(item)]);
     const previewObject = Object.fromEntries(previewEntries);
     const base = {
       kind: 'object',
@@ -697,7 +718,9 @@ export class CodexObserver extends BaseObserver {
       return `[array:${value.length}]`;
     }
     if (value && typeof value === 'object') {
-      return `[object:${Object.keys(value as Record<string, unknown>).slice(0, 5).join(',')}]`;
+      return `[object:${Object.keys(value as Record<string, unknown>)
+        .slice(0, 5)
+        .join(',')}]`;
     }
     return String(value);
   }
@@ -750,6 +773,17 @@ export class CodexObserver extends BaseObserver {
    * 转换为标准 Trace 格式
    */
   private convertToStandardTrace(preprocessed: PreprocessedTrace): Trace {
+    const projectPath =
+      (typeof preprocessed.metadata?.projectPath === 'string'
+        ? preprocessed.metadata.projectPath
+        : this.sessionProjectPaths.get(preprocessed.sessionId)) ?? undefined;
+    const metadata =
+      projectPath || preprocessed.metadata
+        ? {
+            ...(preprocessed.metadata ?? {}),
+            ...(projectPath ? { projectPath } : {}),
+          }
+        : undefined;
     const base = {
       trace_id: `${preprocessed.sessionId}_${preprocessed.turnId}`,
       runtime: 'codex' as const,
@@ -759,6 +793,7 @@ export class CodexObserver extends BaseObserver {
       timestamp: preprocessed.timestamp,
       skill_refs: preprocessed.skillRefs, // 添加 skill_refs
       status: 'success' as TraceStatus,
+      metadata,
     };
 
     switch (preprocessed.eventType) {
@@ -880,6 +915,32 @@ export class CodexObserver extends BaseObserver {
       logger.warn('Failed to read session index', { error });
       return [];
     }
+  }
+
+  private captureSessionProjectPath(sessionId: string, event: CodexRawEvent): void {
+    const projectPath = this.extractProjectPathFromPayload(event.payload);
+    if (!projectPath) {
+      return;
+    }
+
+    this.sessionProjectPaths.set(sessionId, projectPath);
+  }
+
+  private extractProjectPathFromPayload(payload: Record<string, unknown>): string | null {
+    const directCwd = payload.cwd;
+    if (typeof directCwd === 'string' && directCwd.trim()) {
+      return resolve(directCwd);
+    }
+
+    const nestedContext = payload.context;
+    if (nestedContext && typeof nestedContext === 'object') {
+      const nestedCwd = (nestedContext as Record<string, unknown>).cwd;
+      if (typeof nestedCwd === 'string' && nestedCwd.trim()) {
+        return resolve(nestedCwd);
+      }
+    }
+
+    return null;
   }
 }
 

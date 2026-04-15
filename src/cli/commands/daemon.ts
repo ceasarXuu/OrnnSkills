@@ -1,14 +1,13 @@
 import { Command } from 'commander';
 import { cliInfo } from '../../utils/cli-output.js';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { existsSync, readFileSync } from 'node:fs';
 import { exec, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { Daemon } from '../../daemon/index.js';
 import { createDashboardServer } from '../../dashboard/server.js';
-import { registerProject } from '../../dashboard/projects-registry.js';
+import { listProjects } from '../../dashboard/projects-registry.js';
 import { printErrorAndExit } from '../../utils/error-helper.js';
-import { validateProjectRootOrExit } from '../lib/cli-setup.js';
 import {
   readPidFile,
   writePidFile,
@@ -34,6 +33,24 @@ interface DaemonOptions {
 
 const DEFAULT_DASHBOARD_PORT = 47432;
 const MAX_PORT_ATTEMPTS = 10;
+
+function resolveLaunchContext(projectPath: string): string {
+  return resolve(projectPath);
+}
+
+function getRegisteredProjectRoots(): string[] {
+  return listProjects().map((project) => resolve(project.path));
+}
+
+function getRegisteredProjectRootsOrThrow(): string[] {
+  const projectRoots = getRegisteredProjectRoots();
+  if (projectRoots.length === 0) {
+    throw new Error(
+      'No initialized projects found. Run "ornn init" in at least one project first.'
+    );
+  }
+  return projectRoots;
+}
 
 function openBrowser(url: string): void {
   const platform = process.platform;
@@ -80,43 +97,37 @@ export function createStartCommand(): Command {
   start
     .description('Start the OrnnSkills daemon')
     .option('-p, --project <path>', 'Project root path', process.cwd())
-    .option('--dashboard', 'Start the dashboard alongside the daemon', true)
+    .option('--no-dashboard', 'Do not start the dashboard')
     .option('--port <number>', 'Dashboard port (default: 47432)', String(DEFAULT_DASHBOARD_PORT))
     .option('--lang <en|zh>', 'Dashboard language', 'en')
     .option('--no-open', 'Do not automatically open the browser')
     .option('--background', 'Run in background and release terminal', false)
     .action(async (options: DaemonOptions): Promise<void> => {
       try {
-        const projectRoot = validateProjectRootOrExit(options.project, 'daemon start');
+        const launchContext = resolveLaunchContext(options.project);
+        const registeredProjects = getRegisteredProjectRootsOrThrow();
 
         // 检查是否已经在运行
-        const existingPid = readPidFile(projectRoot);
+        const existingPid = readPidFile();
         if (existingPid && isProcessRunning(existingPid)) {
           cliInfo(`Daemon is already running (PID: ${existingPid})`);
           cliInfo(`Use "ornn daemon status" to check status.`);
           process.exit(0);
         }
 
-        // 注册项目到 dashboard 注册表
-        registerProject(projectRoot);
-
         // 如果指定了 --background，则 spawn 一个 detached 子进程
         if (options.background) {
           const dashboardLang = normalizeDashboardLang(options.lang);
-          const args = ['start', '--project', projectRoot];
+          const args = ['start'];
           if (options.dashboard === false) args.push('--no-dashboard');
           if (options.port) args.push('--port', options.port);
           if (options.lang) args.push('--lang', dashboardLang);
           if (options.open === false) args.push('--no-open');
 
-          const child = spawn(
-            process.execPath,
-            [resolveCliEntryPath(__filename), ...args],
-            {
-              detached: true,
-              stdio: 'ignore',
-            }
-          );
+          const child = spawn(process.execPath, [resolveCliEntryPath(__filename), ...args], {
+            detached: true,
+            stdio: 'ignore',
+          });
           child.unref();
 
           cliInfo('Daemon starting in background...');
@@ -127,7 +138,7 @@ export function createStartCommand(): Command {
 
         // 如果 PID 文件存在但进程不在运行，清理旧文件
         if (existingPid) {
-          removePidFile(projectRoot);
+          removePidFile();
         }
 
         // 使用进度指示器
@@ -135,15 +146,16 @@ export function createStartCommand(): Command {
 
         try {
           // 创建并启动 daemon
-          const daemon = new Daemon(projectRoot);
+          const daemon = new Daemon(launchContext);
 
           spinner.text = 'Initializing daemon components...';
           await daemon.start();
 
           // 写入 PID 文件
-          writePidFile(projectRoot, process.pid);
+          writePidFile(undefined, process.pid);
 
           spinner.succeed('Daemon started');
+          cliInfo(`Monitoring ${registeredProjects.length} registered project(s).`);
 
           // 启动 dashboard
           let dashboardServer: ReturnType<typeof createDashboardServer> | null = null;
@@ -179,7 +191,7 @@ export function createStartCommand(): Command {
                 await dashboardServer.stop();
               }
               await daemon.stop();
-              removePidFile(projectRoot);
+              removePidFile();
             };
 
             void cleanup()
@@ -187,7 +199,7 @@ export function createStartCommand(): Command {
                 process.exit(0);
               })
               .catch(() => {
-                removePidFile(projectRoot);
+                removePidFile();
                 process.exit(1);
               });
           };
@@ -228,10 +240,8 @@ export function createStopCommand(): Command {
     .option('-p, --project <path>', 'Project root path', process.cwd())
     .action((options: DaemonOptions) => {
       try {
-        const projectRoot = validateProjectRootOrExit(options.project, 'daemon stop');
-
         // 读取 PID
-        const pid = readPidFile(projectRoot);
+        const pid = readPidFile();
         if (!pid) {
           cliInfo('Daemon is not running (no PID file found)');
           process.exit(0);
@@ -240,7 +250,7 @@ export function createStopCommand(): Command {
         // 检查进程是否在运行
         if (!isProcessRunning(pid)) {
           cliInfo('Daemon is not running (stale PID file)');
-          removePidFile(projectRoot);
+          removePidFile();
           process.exit(0);
         }
 
@@ -258,7 +268,7 @@ export function createStopCommand(): Command {
             clearInterval(interval);
             if (!isProcessRunning(pid)) {
               spinner.succeed('Daemon stopped');
-              removePidFile(projectRoot);
+              removePidFile();
             } else {
               // 强制 kill
               try {
@@ -267,7 +277,7 @@ export function createStopCommand(): Command {
               } catch {
                 spinner.fail('Failed to stop daemon');
               }
-              removePidFile(projectRoot);
+              removePidFile();
             }
           }
         }, 1000);
@@ -291,17 +301,18 @@ export function createRestartCommand(): Command {
   restart
     .description('Restart the OrnnSkills daemon')
     .option('-p, --project <path>', 'Project root path', process.cwd())
-    .option('--dashboard', 'Start the dashboard alongside the daemon', true)
+    .option('--no-dashboard', 'Do not start the dashboard')
     .option('--port <number>', 'Dashboard port (default: 47432)', String(DEFAULT_DASHBOARD_PORT))
     .option('--lang <en|zh>', 'Dashboard language', 'en')
     .option('--no-open', 'Do not automatically open the browser')
     .option('--background', 'Run in background and release terminal', false)
     .action(async (options: DaemonOptions): Promise<void> => {
       try {
-        const projectRoot = validateProjectRootOrExit(options.project, 'daemon restart');
+        const launchContext = resolveLaunchContext(options.project);
+        getRegisteredProjectRootsOrThrow();
 
         // 停止现有 daemon
-        const existingPid = readPidFile(projectRoot);
+        const existingPid = readPidFile();
         if (existingPid && isProcessRunning(existingPid)) {
           const spinner = ora(`Stopping daemon (PID: ${existingPid})...`).start();
           process.kill(existingPid, 'SIGTERM');
@@ -320,14 +331,14 @@ export function createRestartCommand(): Command {
                     // ignore
                   }
                 }
-                removePidFile(projectRoot);
+                removePidFile();
                 spinner.succeed('Daemon stopped');
                 resolve();
               }
             }, 1000);
           });
         } else if (existingPid) {
-          removePidFile(projectRoot);
+          removePidFile();
         }
 
         // 等待端口释放
@@ -336,7 +347,7 @@ export function createRestartCommand(): Command {
         // 启动新 daemon
         cliInfo('Starting new daemon instance...');
         const startOptions = {
-          project: projectRoot,
+          project: launchContext,
           dashboard: options.dashboard,
           port: options.port,
           lang: options.lang,
@@ -345,7 +356,7 @@ export function createRestartCommand(): Command {
         };
 
         const startCmd = createStartCommand();
-        await startCmd.parseAsync(['start', ...buildArgs(startOptions)], { from: 'user' });
+        await startCmd.parseAsync(buildArgs(startOptions), { from: 'user' });
       } catch (error) {
         printErrorAndExit(error instanceof Error ? error.message : String(error), {
           operation: 'Restart daemon',
@@ -360,7 +371,6 @@ export function createRestartCommand(): Command {
 function buildArgs(options: DaemonOptions): string[] {
   const args: string[] = [];
   const dashboardLang = normalizeDashboardLang(options.lang);
-  if (options.project) args.push('--project', options.project);
   if (options.dashboard === false) args.push('--no-dashboard');
   if (options.port) args.push('--port', options.port);
   if (options.lang) args.push('--lang', dashboardLang);
@@ -435,14 +445,24 @@ export function createDaemonStatusCommand(): Command {
     .option('-p, --project <path>', 'Project root path', process.cwd())
     .action((options: DaemonOptions) => {
       try {
-        const projectRoot = validateProjectRootOrExit(options.project, 'daemon status');
+        const registeredProjects = getRegisteredProjectRoots();
+        const requestedProject = resolveLaunchContext(options.project);
+        const selectedProject =
+          registeredProjects.find((projectRoot) => projectRoot === requestedProject) ??
+          registeredProjects[0] ??
+          requestedProject;
 
         // 读取 PID
-        const pid = readPidFile(projectRoot);
+        const pid = readPidFile();
         if (!pid) {
           cliInfo('\n🔴 Daemon status: Not running');
           cliInfo('');
           cliInfo('   The daemon is not currently active.');
+          if (registeredProjects.length === 0) {
+            cliInfo('   No initialized projects are registered yet.');
+          } else {
+            cliInfo(`   Registered projects: ${registeredProjects.length}`);
+          }
           cliInfo('');
           cliInfo('   To start the daemon, run:');
           cliInfo('     $ ornn daemon start');
@@ -456,7 +476,7 @@ export function createDaemonStatusCommand(): Command {
           cliInfo('');
           cliInfo('   The daemon was not properly shut down.');
           cliInfo('');
-          removePidFile(projectRoot);
+          removePidFile();
           cliInfo('   Cleaned up stale PID file.');
           cliInfo('   To start the daemon, run:');
           cliInfo('     $ ornn daemon start');
@@ -465,24 +485,31 @@ export function createDaemonStatusCommand(): Command {
         }
 
         // 读取统计信息
-        const stats = readCheckpointStats(projectRoot);
+        const stats = readCheckpointStats(selectedProject);
         const logStats = getLogStats();
-        const optimizationStats = readOptimizationStats(projectRoot);
+        const optimizationStats = readOptimizationStats(selectedProject);
+        const totalProcessedTraces = registeredProjects.reduce((sum, projectRoot) => {
+          return sum + (readCheckpointStats(projectRoot)?.processedTraces ?? 0);
+        }, 0);
 
         // 显示增强的状态信息
         cliInfo('\n🟢 Daemon status: Running');
         cliInfo('');
         cliInfo('   Process:');
         cliInfo(`     PID:        ${pid}`);
-        cliInfo(`     Project:    ${projectRoot}`);
+        cliInfo(`     Projects:   ${registeredProjects.length}`);
+        cliInfo(`     Selected:   ${selectedProject}`);
         if (stats) {
           cliInfo(`     Uptime:     ${formatUptime(stats.startedAt)}`);
         }
         cliInfo('');
 
-        if (stats) {
+        if (registeredProjects.length > 0) {
           cliInfo('   Activity:');
-          cliInfo(`     Traces processed: ${stats.processedTraces.toLocaleString()}`);
+          cliInfo(`     Total traces processed: ${totalProcessedTraces.toLocaleString()}`);
+          if (stats) {
+            cliInfo(`     Selected project traces: ${stats.processedTraces.toLocaleString()}`);
+          }
           cliInfo('');
         }
 

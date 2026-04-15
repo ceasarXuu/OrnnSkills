@@ -29,6 +29,7 @@ npm install -g ornn-skills
 ### Prerequisites
 
 Before using OrnnSkills, make sure you have:
+
 - Node.js 18+ installed
 - An Agent (Codex/OpenCode/Claude) running in your project
 
@@ -38,7 +39,7 @@ Before using OrnnSkills, make sure you have:
 cd /path/to/your/project
 ```
 
-OrnnSkills works on a per-project basis, so you need to run it in your project directory.
+Run `ornn init` inside each project you want OrnnSkills to monitor. After registration, `ornn start`/`ornn restart` run as a single global daemon and monitor all initialized projects together, so you do not need to start one daemon per project.
 
 ### 2. Initialize Configuration
 
@@ -47,7 +48,9 @@ ornn init
 ```
 
 This will:
+
 - Create `.ornn/` directory in your project
+- Register the project in OrnnSkills' global project registry
 - Generate default configuration files
 - Scan and register global skills
 
@@ -58,6 +61,8 @@ ornn start
 ```
 
 This starts the background daemon that will:
+
+- Load all projects previously registered by `ornn init`
 - Monitor your Agent's execution traces
 - Automatically optimize skills based on real usage
 - Run continuously in the background
@@ -152,14 +157,14 @@ ornn skills unfreeze <skill-id>
 
 The system uses 6 strategies to map traces to corresponding skills:
 
-| Strategy | Trigger Condition | Confidence | Description |
-|----------|-------------------|------------|-------------|
-| Strategy 1 | `tool_call` reads skill file | 0.95 | Most reliable mapping method |
-| Strategy 2 | `tool_call` executes skill-related operations | 0.85 | Inferred from tool parameters |
-| Strategy 3 | `file_change` modifies skill file | 0.9 | File changes clearly point to skill |
-| Strategy 4 | `metadata` contains skill_id | 0.98 | Explicit skill identifier |
-| Strategy 5 | `assistant_output` references skill | 0.6 | Inferred from output content |
-| Strategy 6 | `user_input` requests skill | 0.5 | Inferred from user input |
+| Strategy   | Trigger Condition                             | Confidence | Description                         |
+| ---------- | --------------------------------------------- | ---------- | ----------------------------------- |
+| Strategy 1 | `tool_call` reads skill file                  | 0.95       | Most reliable mapping method        |
+| Strategy 2 | `tool_call` executes skill-related operations | 0.85       | Inferred from tool parameters       |
+| Strategy 3 | `file_change` modifies skill file             | 0.9        | File changes clearly point to skill |
+| Strategy 4 | `metadata` contains skill_id                  | 0.98       | Explicit skill identifier           |
+| Strategy 5 | `assistant_output` references skill           | 0.6        | Inferred from output content        |
+| Strategy 6 | `user_input` requests skill                   | 0.5        | Inferred from user input            |
 
 ### Automatic Optimization Loop
 
@@ -213,23 +218,23 @@ your-project/
 
 ## CLI Commands
 
-| Command | Description |
-|---------|-------------|
-| `ornn init` | Initialize configuration |
-| `ornn start` | Start the daemon in background |
-| `ornn stop` | Stop the daemon |
-| `ornn daemon` | Manage daemon (start, stop, status, restart) |
-| `ornn logs` | View daemon logs |
-| `ornn config` | Manage configuration |
-| `ornn completion` | Generate shell completion script |
-| `ornn skills status` | View current project shadow skills status |
-| `ornn skills log <skill>` | View evolution log for a skill |
-| `ornn skills diff <skill>` | View diff between current content and origin |
-| `ornn skills rollback <skill> --to <rev>` | Rollback to specified revision |
-| `ornn skills freeze <skill>` | Pause automatic optimization for a skill |
-| `ornn skills unfreeze <skill>` | Resume automatic optimization |
-| `ornn skills sync <skill>` | Resync with origin |
-| `ornn skills preview <skill>` | Preview optimization suggestions |
+| Command                                   | Description                                             |
+| ----------------------------------------- | ------------------------------------------------------- |
+| `ornn init`                               | Initialize the current project and register it globally |
+| `ornn start`                              | Start the global daemon in background                   |
+| `ornn stop`                               | Stop the daemon                                         |
+| `ornn daemon`                             | Manage daemon (start, stop, status, restart)            |
+| `ornn logs`                               | View daemon logs                                        |
+| `ornn config`                             | Manage configuration                                    |
+| `ornn completion`                         | Generate shell completion script                        |
+| `ornn skills status`                      | View current project shadow skills status               |
+| `ornn skills log <skill>`                 | View evolution log for a skill                          |
+| `ornn skills diff <skill>`                | View diff between current content and origin            |
+| `ornn skills rollback <skill> --to <rev>` | Rollback to specified revision                          |
+| `ornn skills freeze <skill>`              | Pause automatic optimization for a skill                |
+| `ornn skills unfreeze <skill>`            | Resume automatic optimization                           |
+| `ornn skills sync <skill>`                | Resync with origin                                      |
+| `ornn skills preview <skill>`             | Preview optimization suggestions                        |
 
 ## Automatic Optimization Strategies
 

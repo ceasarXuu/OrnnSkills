@@ -3,6 +3,7 @@
 ## 📊 总体进度：Phase 1 ✅ 完成
 
 ### 2026-04-15
+
 - ✅ 修正实时追踪的业务语义分层：`analysis_failed` 仍保留为 `stability_feedback` 根因事件，但 dashboard 会额外合成一个 `analysis_interrupted` 核心流程终态，避免“核心流程”过滤下只剩“开始分析”，让每个 scope 都能看见本轮是否真正形成业务结论
 - ✅ 去工程化实时追踪状态列：活动表不再直接展示 `episode_ready / continue_collecting / no_patch_needed` 这类内部枚举，而是统一映射为 `分析中 / 继续观察 / 无需优化 / 已应用 / 已中断` 等业务状态
 - ✅ 收紧 daemon 状态回填语义：dashboard 读侧不再把“最近一次分析失败”回填成 daemon 的当前 `error` 状态，而是仅保留 `lastError`；当前状态继续以 checkpoint 和活跃 episode 为准，避免守护进程明明空闲却长期显示错误
@@ -20,6 +21,7 @@
 - 📝 记录架构经验：SSE 的增量游标如果做成全局共享状态，新客户端接入时很容易错误重置或跳过旧客户端还没消费的更新。正确抽象是把版本基线绑定到客户端连接本身，广播时按客户端计算增量，而不是偷懒维护一个全局 `lastVersion`
 
 ### 2026-04-13
+
 - ✅ 抽出共享分析协调层：新增 `window-analysis-coordinator`，统一负责 `analyzeWindow()` 调用、超时控制以及 `evaluation / nextWindowHint` 的 fallback 归一；`OptimizationPipeline`、`ShadowManager` 的自动窗口分析和手动窗口分析现在共用同一套 analyzer 协议
 - 📝 记录架构经验：只共享 window 对象还不够，如果不同入口继续各自包装 `analyzeWindow()`，fallback 评估、超时语义、失败处理很快又会分叉。长期主义的做法是把“分析调用协议”本身也抽成共享协调层，让 orchestrator 只处理业务状态流转
 - ✅ 抽出共享窗口恢复层：新增 `session-window-candidates` 负责从 `recent sessions -> full session timelines` 恢复真实分析窗口候选，新增 `createSkillCallWindow()` 负责统一标准化窗口对象；`OptimizationPipeline` 与 `ShadowManager` 不再各自内联维护一套 window 构造规则
@@ -33,6 +35,7 @@
 - 📝 记录工程经验：给 dashboard 这种用户核心界面做重构时，测试不能只盯 HTML 片段；还要在生产侧断言事件 schema 自身的业务语义字段，否则很容易出现“界面暂时对了，但持久化链路里根本没有稳定事实来源”的假修复
 
 ### 2026-04-12
+
 - ✅ 补齐实时追踪技能跳转：活动表的技能列现在支持直接点击打开现有技能编辑弹窗，优先按事件宿主匹配 skill，匹配不到时回退到同名 skill，避免排查活动后还得手动切回技能列表再搜索
 - 📝 记录恢复经验：dashboard 的“横向跳转”不该只存在于主列表页面；像实时追踪这种排障高频入口，如果技能名只是纯文本，用户会在“看到问题 -> 定位技能 -> 打开编辑”之间多做一次上下文切换，排查效率会明显下降
 - ✅ 修复实时追踪时间列时区偏差：活动表时间戳不再直接截取 ISO 字符串中的 `HH:mm:ss`，现在统一按宿主本地时区格式化，避免看板时间与系统本地时间相差整时区
@@ -53,6 +56,7 @@
 - 📝 记录恢复经验：provider catalog 与已保存配置之间必须定义“模型 ID 等价规则”，不能只做精确字符串匹配；像 LiteLLM registry 常带 `provider/` 前缀，而项目历史配置可能只存裸 model 名，不做归一化就会把内置模型误判成自定义模型，并在自动保存后继续放大配置漂移
 
 ### 2026-04-11
+
 - ✅ 修复本地 link 后 `ornn` CLI 可能报 `permission denied` 的问题：构建和 prepare 阶段统一补齐 `dist/cli/index.js` 的可执行权限
 - 📝 记录环境经验：`npm link` 只负责创建全局软链，不会保证 `tsc` 产物自动带可执行位；如果 `which ornn` 能找到命令但执行报权限错误，优先检查 `dist/cli/index.js` 是否缺少 `+x`
 - ✅ 恢复 dashboard 的成本 tab 与实时追踪增强：活动表格改为直接基于 `decisionEvents + recentTraces` 归一化生成，不再依赖前端内存 diff 推导，避免长时间无新增、scope 缺失和重复结论
@@ -112,16 +116,16 @@
 - 📝 记录前端经验：dashboard hero 区要克制信息密度；如果右侧 summary cards 已经给出模型数、调用数和拆分摘要，左侧 hero 就只保留主数字和一句说明，别再追加一排重复 pills，否则会同时制造视觉噪音和信息重复
 - 📝 记录恢复经验：dashboard 的实时感不能靠固定周期“全量重算 + 全量推送”硬顶。像 `agent-usage.ndjson` 这类会持续增长的文件，一旦被放进定时快照链路里反复全量解析，性能会随使用时长线性变差。正确做法是给读侧加文件签名缓存，再在 SSE 层只推有版本变化的项目
 
-| 阶段 | 状态 | 进度 | 预计时间 |
-|------|------|------|---------|
-| Phase 1: 基础框架 | ✅ 完成 | 100% | 2 周 |
-| Phase 2: Registry | 🔄 进行中 | 0% | 2 周 |
-| Phase 3: Observer Layer | ⏳ 待开始 | 0% | 2 周 |
-| Phase 4: Evaluator & Patch | ⏳ 待开始 | 0% | 3 周 |
-| Phase 5: 自动循环 | ⏳ 待开始 | 0% | 2 周 |
-| Phase 6: Rollback & Rebase | ⏳ 待开始 | 0% | 1.5 周 |
-| Phase 7: CLI 完善 | ⏳ 待开始 | 0% | 1.5 周 |
-| Phase 8: 测试 & 打包 | ⏳ 待开始 | 0% | 2 周 |
+| 阶段                       | 状态      | 进度 | 预计时间 |
+| -------------------------- | --------- | ---- | -------- |
+| Phase 1: 基础框架          | ✅ 完成   | 100% | 2 周     |
+| Phase 2: Registry          | 🔄 进行中 | 0%   | 2 周     |
+| Phase 3: Observer Layer    | ⏳ 待开始 | 0%   | 2 周     |
+| Phase 4: Evaluator & Patch | ⏳ 待开始 | 0%   | 3 周     |
+| Phase 5: 自动循环          | ⏳ 待开始 | 0%   | 2 周     |
+| Phase 6: Rollback & Rebase | ⏳ 待开始 | 0%   | 1.5 周   |
+| Phase 7: CLI 完善          | ⏳ 待开始 | 0%   | 1.5 周   |
+| Phase 8: 测试 & 打包       | ⏳ 待开始 | 0%   | 2 周     |
 
 ---
 
@@ -130,6 +134,7 @@
 ### 已完成的任务
 
 #### 1. 项目初始化 ✅
+
 - [x] package.json 配置
 - [x] TypeScript 配置 (tsconfig.json)
 - [x] ESLint 配置
@@ -138,6 +143,7 @@
 - [x] 项目目录结构搭建
 
 #### 2. 全局类型定义 ✅
+
 - [x] `src/types/index.ts` - 核心类型定义
   - ✅ `OriginSkill` - 原始 skill 类型
   - ✅ `ProjectSkillShadow` - 影子 skill 类型
@@ -149,6 +155,7 @@
   - ✅ 其他辅助类型
 
 #### 3. 工具函数库 ✅
+
 - [x] `src/utils/hash.ts` - 哈希计算工具
   - ✅ `hashContent()` - 内容哈希
   - ✅ `hashFile()` - 文件哈希
@@ -174,6 +181,7 @@
 - [x] `src/utils/index.ts` - 工具函数导出
 
 #### 4. 配置管理系统 ✅
+
 - [x] `src/config/defaults.ts` - 默认配置
   - ✅ Origin paths 配置
   - ✅ Observer 配置
@@ -189,6 +197,7 @@
   - ✅ 配置验证
 
 #### 5. 存储层 ✅
+
 - [x] `src/storage/sqlite.ts` - SQLite 存储
   - ✅ 数据库初始化
   - ✅ Shadow skills 表操作
@@ -215,16 +224,19 @@
 ### 计划任务
 
 #### 1. Origin Registry
+
 - [ ] `src/core/origin-registry/scanner.ts` - 目录扫描器
 - [ ] `src/core/origin-registry/index.ts` - Origin Registry 主类
 - [ ] `src/core/origin-registry/types.ts` - 类型定义
 
 #### 2. Shadow Registry
+
 - [ ] `src/core/shadow-registry/manager.ts` - Shadow 管理器
 - [ ] `src/core/shadow-registry/index.ts` - Shadow Registry 主类
 - [ ] `src/core/shadow-registry/types.ts` - 类型定义
 
 #### 3. Journal Manager
+
 - [ ] `src/core/journal/writer.ts` - Journal 写入器
 - [ ] `src/core/journal/reader.ts` - Journal 读取器
 - [ ] `src/core/journal/snapshot.ts` - Snapshot 管理
@@ -236,6 +248,7 @@
 ## 测试进度
 
 ### 单元测试
+
 - [x] `tests/unit/path.test.ts` - 路径工具测试 ✅
 - [ ] `tests/unit/hash.test.ts` - 哈希工具测试
 - [ ] `tests/unit/diff.test.ts` - Diff 工具测试
@@ -243,6 +256,7 @@
 - [ ] `tests/unit/storage.test.ts` - 存储层测试
 
 ### 集成测试
+
 - [ ] `tests/integration/observer-integration.test.ts`
 - [ ] `tests/integration/full-evolution-cycle.test.ts`
 - [ ] `tests/integration/rollback.test.ts`
@@ -252,6 +266,7 @@
 ## 下一步行动
 
 ### 立即执行（Phase 2）
+
 1. 实现 Origin Registry
    - 扫描本机 skills 目录
    - 读取 skill 元数据
@@ -266,6 +281,7 @@
    - 管理 revision
 
 ### 验收标准
+
 - [ ] `ornn skills status` 命令可用
 - [ ] 能自动发现本机 origin skills
 - [ ] 能在项目中创建 shadow skills
@@ -288,6 +304,7 @@
 ## 更新日志
 
 ### 2026-04-15
+
 - ✅ 修复实时追踪“看起来几小时没更新”的快照取数缺陷：dashboard 快照现在会在最新 trace 之外，额外回填一小批最近带 `skill_refs` 的 trace，避免大量空 `skill_refs` 工具事件把真正的技能调用完全冲出业务看板
 - ✅ 修复 `CodexObserver` 实时增量读取对 partial line 的脆弱性：新增按文件缓存的残片缓冲，允许 watcher 在 JSONL 行尚未完整写完时先记住残片，待下一次 change 再拼成完整事件，避免实时链路吞 trace
 - ✅ 去掉 `CodexObserver` 对 `awaitWriteFinish` 的依赖，改为由 observer 自己处理增量拼接，降低持续 append 的长会话文件被 watcher 延迟甚至漏掉的概率
@@ -300,6 +317,7 @@
 - 📝 调试经验：实时追踪“完全没新增”时，先同时核对三层文件：`~/.codex/sessions/**/*.jsonl` 的最新 mtime、`.ornn/state/default.ndjson` 的尾时间、`.ornn/state/task-episodes.json` 的 open episode。若第一层在增长、第二层停住，断点在 observer；若第二层在增长、episode 的 `totalTraceCount` 在涨但 `probeCount` 仍为 0，断点在 episode -> probe 触发链
 
 ### 2026-04-12
+
 - ✅ 修复成本看板长期无数据的 episode 统计口径问题：probe 现在按 session 窗口累计 trace，而不是只看映射命中的少量 trace
 - ✅ 新增 `shadow-manager-task-episodes` 回归测试，覆盖“session 已达阈值但仅部分 trace 映射到 skill”时仍应触发 probe
 - 📝 补充调试经验：当成本看板为空时，先核对 `.ornn/state/agent-usage.ndjson` 是否存在，再对照 `task-episodes.json` 的 `totalTraceCount` 与 `mappedTraceCount` 是否失衡
@@ -325,10 +343,14 @@
 - ✅ 抽出 `shadow-bootstrapper`：把 skill 扫描、来源优先级、shadow 注册、mapper 注册、项目物化从 `ShadowManager.init()` 链中移出
 - ✅ `ShadowManager` 初始化链现在只负责组装依赖并调用 bootstrapper，删除大段 origin/shadow 启动同步逻辑
 - ✅ 新增模块级单测：覆盖“项目 skill 优先于全局重复项”和“全局 skill 物化到项目”的 bootstrap 契约
+- ✅ 切换 daemon 进程架构：`ornn init` 负责把项目注册进全局注册表，`ornn start`/`ornn restart` 改为单个全局进程，统一监控所有已登记项目
+- ✅ `CodexObserver` 现在会保留 session `cwd` 到 trace `metadata.projectPath`，供全局 daemon 把 trace 路由到正确项目
+- 📝 运维经验：全局 daemon 的监控范围只依赖注册表，不再依赖当前 shell 所在目录；排查“为什么某项目没被监控”时，先确认该项目是否执行过 `ornn init`
 
 ---
 
 ### 2026-03-21
+
 - ✅ 完成 Phase 1 所有任务
 - ✅ 项目基础框架搭建完成
 - ✅ 存储层实现完成
@@ -338,5 +360,5 @@
 
 ---
 
-*最后更新：2026-04-15*
-*更新人：OrnnSkills Team*
+_最后更新：2026-04-15_
+_更新人：OrnnSkills Team_

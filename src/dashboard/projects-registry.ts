@@ -6,9 +6,8 @@
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, basename, resolve } from 'node:path';
 import { homedir } from 'node:os';
-import { basename } from 'node:path';
 
 const GLOBAL_ORNN_DIR = join(homedir(), '.ornn');
 const PROJECTS_FILE = join(GLOBAL_ORNN_DIR, 'projects.json');
@@ -22,6 +21,10 @@ export interface RegisteredProject {
 
 export interface ProjectsRegistry {
   projects: RegisteredProject[];
+}
+
+function normalizeProjectPath(projectPath: string): string {
+  return resolve(projectPath);
 }
 
 function readRegistry(): ProjectsRegistry {
@@ -47,16 +50,17 @@ function writeRegistry(registry: ProjectsRegistry): void {
  * 注册项目到全局注册表（幂等：已存在则不重复添加）
  */
 export function registerProject(projectPath: string): void {
+  const normalizedPath = normalizeProjectPath(projectPath);
   const registry = readRegistry();
-  const existing = registry.projects.find((p) => p.path === projectPath);
+  const existing = registry.projects.find((p) => p.path === normalizedPath);
   const now = new Date().toISOString();
 
   if (existing) {
     existing.lastSeenAt = now;
   } else {
     registry.projects.push({
-      path: projectPath,
-      name: basename(projectPath),
+      path: normalizedPath,
+      name: basename(normalizedPath),
       registeredAt: now,
       lastSeenAt: now,
     });
@@ -69,8 +73,9 @@ export function registerProject(projectPath: string): void {
  * 更新项目的 lastSeenAt（daemon 启动时调用）
  */
 export function touchProject(projectPath: string): void {
+  const normalizedPath = normalizeProjectPath(projectPath);
   const registry = readRegistry();
-  const existing = registry.projects.find((p) => p.path === projectPath);
+  const existing = registry.projects.find((p) => p.path === normalizedPath);
   if (existing) {
     existing.lastSeenAt = new Date().toISOString();
     writeRegistry(registry);
@@ -88,14 +93,15 @@ export function listProjects(): RegisteredProject[] {
  * 手动添加或移除项目
  */
 export function addProject(projectPath: string, name?: string): void {
+  const normalizedPath = normalizeProjectPath(projectPath);
   const registry = readRegistry();
-  const existing = registry.projects.find((p) => p.path === projectPath);
+  const existing = registry.projects.find((p) => p.path === normalizedPath);
   const now = new Date().toISOString();
 
   if (!existing) {
     registry.projects.push({
-      path: projectPath,
-      name: name ?? basename(projectPath),
+      path: normalizedPath,
+      name: name ?? basename(normalizedPath),
       registeredAt: now,
       lastSeenAt: now,
     });
@@ -108,7 +114,8 @@ export function addProject(projectPath: string, name?: string): void {
 }
 
 export function removeProject(projectPath: string): void {
+  const normalizedPath = normalizeProjectPath(projectPath);
   const registry = readRegistry();
-  registry.projects = registry.projects.filter((p) => p.path !== projectPath);
+  registry.projects = registry.projects.filter((p) => p.path !== normalizedPath);
   writeRegistry(registry);
 }

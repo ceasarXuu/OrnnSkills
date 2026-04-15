@@ -1,15 +1,16 @@
 import { dirname, join, resolve, win32, posix } from 'node:path';
-import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync } from 'node:fs';
 import type { Language } from '../../dashboard/i18n.js';
 
-export const PID_FILE = '.ornn/daemon.pid';
-export const LOG_DIR = join(process.env.HOME || '', '.ornn', 'logs');
+export const GLOBAL_ORNN_DIR = join(process.env.HOME || '', '.ornn');
+export const PID_FILE = join(GLOBAL_ORNN_DIR, 'daemon.pid');
+export const LOG_DIR = join(GLOBAL_ORNN_DIR, 'logs');
 
-export function getPidFilePath(projectRoot: string): string {
-  return join(projectRoot, PID_FILE);
+export function getPidFilePath(_projectRoot?: string): string {
+  return PID_FILE;
 }
 
-export function readPidFile(projectRoot: string): number | null {
+export function readPidFile(projectRoot?: string): number | null {
   const pidFile = getPidFilePath(projectRoot);
   if (!existsSync(pidFile)) return null;
   try {
@@ -20,11 +21,13 @@ export function readPidFile(projectRoot: string): number | null {
   }
 }
 
-export function writePidFile(projectRoot: string, pid: number): void {
-  writeFileSync(getPidFilePath(projectRoot), pid.toString(), 'utf-8');
+export function writePidFile(projectRoot: string | undefined, pid: number): void {
+  const pidFile = getPidFilePath(projectRoot);
+  mkdirSync(dirname(pidFile), { recursive: true });
+  writeFileSync(pidFile, pid.toString(), 'utf-8');
 }
 
-export function removePidFile(projectRoot: string): void {
+export function removePidFile(projectRoot?: string): void {
   const pidFile = getPidFilePath(projectRoot);
   if (existsSync(pidFile)) {
     try {

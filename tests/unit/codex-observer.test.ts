@@ -1,5 +1,13 @@
 import { beforeEach, afterEach, describe, it, expect } from 'vitest';
-import { existsSync, mkdirSync, rmSync, statSync, utimesSync, writeFileSync, appendFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  rmSync,
+  statSync,
+  utimesSync,
+  writeFileSync,
+  appendFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { CodexObserver } from '../../src/core/observer/codex-observer.js';
@@ -62,6 +70,28 @@ describe('CodexObserver', () => {
     });
   });
 
+  it('preserves session cwd as projectPath metadata on emitted traces', () => {
+    const observer = new CodexObserver('/tmp/codex-sessions');
+
+    (observer as any).sessionProjectPaths.set('session-1', '/projects/alpha');
+
+    const trace = (observer as any).convertToStandardTrace({
+      sessionId: 'session-1',
+      turnId: 'turn-1',
+      timestamp: '2026-04-16T00:00:00.000Z',
+      eventType: 'assistant_output',
+      content: 'hello',
+      metadata: {
+        source: 'vscode',
+      },
+    });
+
+    expect(trace.metadata).toMatchObject({
+      projectPath: '/projects/alpha',
+      source: 'vscode',
+    });
+  });
+
   it('skips compacted maintenance events', () => {
     const observer = new CodexObserver('/tmp/codex-sessions');
 
@@ -96,10 +126,26 @@ describe('CodexObserver', () => {
     mkdirSync(join(sessionsDir, '2026', '04', '12'), { recursive: true });
     const recentPath = join(sessionsDir, '2026', '04', '12', 'recent.jsonl');
     const olderPath = join(sessionsDir, '2026', '04', '12', 'older.jsonl');
-    writeFileSync(recentPath, '{"timestamp":"2026-04-12T02:00:00.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"recent"}]}}\n', 'utf-8');
-    writeFileSync(olderPath, '{"timestamp":"2026-04-11T02:00:00.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"older"}]}}\n', 'utf-8');
-    utimesSync(olderPath, new Date('2026-04-11T02:00:00.000Z'), new Date('2026-04-11T02:00:00.000Z'));
-    utimesSync(recentPath, new Date('2026-04-12T02:00:00.000Z'), new Date('2026-04-12T02:00:00.000Z'));
+    writeFileSync(
+      recentPath,
+      '{"timestamp":"2026-04-12T02:00:00.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"recent"}]}}\n',
+      'utf-8'
+    );
+    writeFileSync(
+      olderPath,
+      '{"timestamp":"2026-04-11T02:00:00.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"older"}]}}\n',
+      'utf-8'
+    );
+    utimesSync(
+      olderPath,
+      new Date('2026-04-11T02:00:00.000Z'),
+      new Date('2026-04-11T02:00:00.000Z')
+    );
+    utimesSync(
+      recentPath,
+      new Date('2026-04-12T02:00:00.000Z'),
+      new Date('2026-04-12T02:00:00.000Z')
+    );
 
     const observer = new CodexObserver(sessionsDir);
     const processed: string[] = [];
@@ -120,8 +166,16 @@ describe('CodexObserver', () => {
     mkdirSync(join(sessionsDir, '2026', '04', '12'), { recursive: true });
     const recentPath = join(sessionsDir, '2026', '04', '12', 'recent.jsonl');
     const olderPath = join(sessionsDir, '2026', '04', '12', 'older.jsonl');
-    writeFileSync(recentPath, '{"timestamp":"2026-04-12T02:00:00.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"recent"}]}}\n', 'utf-8');
-    writeFileSync(olderPath, '{"timestamp":"2026-04-11T02:00:00.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"older"}]}}\n', 'utf-8');
+    writeFileSync(
+      recentPath,
+      '{"timestamp":"2026-04-12T02:00:00.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"recent"}]}}\n',
+      'utf-8'
+    );
+    writeFileSync(
+      olderPath,
+      '{"timestamp":"2026-04-11T02:00:00.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"older"}]}}\n',
+      'utf-8'
+    );
 
     const observer = new CodexObserver(sessionsDir);
 
@@ -142,13 +196,16 @@ describe('CodexObserver', () => {
         '{"timestamp":"2026-04-12T02:00:00.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"two"}]}}',
         '{"timestamp":"2026-04-12T03:00:00.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"three"}]}}',
       ].join('\n') + '\n',
-      'utf-8',
+      'utf-8'
     );
 
     const observer = new CodexObserver(sessionsDir);
     const emittedTexts: string[] = [];
 
-    (observer as any).emitPreprocessedTraces = (_sessionId: string, traces: Array<{ content?: string }>) => {
+    (observer as any).emitPreprocessedTraces = (
+      _sessionId: string,
+      traces: Array<{ content?: string }>
+    ) => {
       emittedTexts.push(...traces.map((trace) => String(trace.content ?? '')));
     };
 
@@ -165,13 +222,16 @@ describe('CodexObserver', () => {
     writeFileSync(
       sessionPath,
       '{"timestamp":"2026-04-12T01:00:00.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"first"}]}}\n',
-      'utf-8',
+      'utf-8'
     );
 
     const observer = new CodexObserver(sessionsDir);
     const emittedTexts: string[] = [];
 
-    (observer as any).emitPreprocessedTraces = (_sessionId: string, traces: Array<{ content?: string }>) => {
+    (observer as any).emitPreprocessedTraces = (
+      _sessionId: string,
+      traces: Array<{ content?: string }>
+    ) => {
       emittedTexts.push(...traces.map((trace) => String(trace.content ?? '')));
     };
 
@@ -181,7 +241,7 @@ describe('CodexObserver', () => {
     appendFileSync(
       sessionPath,
       '{"timestamp":"2026-04-12T02:00:00.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"second"}]}}\n',
-      'utf-8',
+      'utf-8'
     );
 
     (observer as any).handleFileChange(sessionPath);
@@ -198,13 +258,16 @@ describe('CodexObserver', () => {
     writeFileSync(
       sessionPath,
       '{"timestamp":"2026-04-12T01:00:00.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"first"}]}}\n',
-      'utf-8',
+      'utf-8'
     );
 
     const observer = new CodexObserver(sessionsDir);
     const emittedTexts: string[] = [];
 
-    (observer as any).emitPreprocessedTraces = (_sessionId: string, traces: Array<{ content?: string }>) => {
+    (observer as any).emitPreprocessedTraces = (
+      _sessionId: string,
+      traces: Array<{ content?: string }>
+    ) => {
       emittedTexts.push(...traces.map((trace) => String(trace.content ?? '')));
     };
 
@@ -214,7 +277,7 @@ describe('CodexObserver', () => {
     appendFileSync(
       sessionPath,
       '{"timestamp":"2026-04-12T02:00:00.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"second"}]}}\n',
-      'utf-8',
+      'utf-8'
     );
 
     (observer as any).handleFileAdd(sessionPath);
@@ -230,13 +293,16 @@ describe('CodexObserver', () => {
     writeFileSync(
       sessionPath,
       '{"timestamp":"2026-04-12T01:00:00.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"first"}]}}\n',
-      'utf-8',
+      'utf-8'
     );
 
     const observer = new CodexObserver(sessionsDir);
     const emittedTexts: string[] = [];
 
-    (observer as any).emitPreprocessedTraces = (_sessionId: string, traces: Array<{ content?: string }>) => {
+    (observer as any).emitPreprocessedTraces = (
+      _sessionId: string,
+      traces: Array<{ content?: string }>
+    ) => {
       emittedTexts.push(...traces.map((trace) => String(trace.content ?? '')));
     };
 
@@ -246,9 +312,13 @@ describe('CodexObserver', () => {
     appendFileSync(
       sessionPath,
       '{"timestamp":"2026-04-12T02:00:00.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"second"}]}}\n',
-      'utf-8',
+      'utf-8'
     );
-    utimesSync(sessionPath, new Date('2026-04-12T02:00:00.000Z'), new Date('2026-04-12T02:00:00.000Z'));
+    utimesSync(
+      sessionPath,
+      new Date('2026-04-12T02:00:00.000Z'),
+      new Date('2026-04-12T02:00:00.000Z')
+    );
 
     (observer as any).reconcileRecentSessionGrowth(1);
 
@@ -263,13 +333,16 @@ describe('CodexObserver', () => {
     writeFileSync(
       sessionPath,
       '{"timestamp":"2026-04-12T01:00:00.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"first"}]}}\n',
-      'utf-8',
+      'utf-8'
     );
 
     const observer = new CodexObserver(sessionsDir);
     const emittedTexts: string[] = [];
 
-    (observer as any).emitPreprocessedTraces = (_sessionId: string, traces: Array<{ content?: string }>) => {
+    (observer as any).emitPreprocessedTraces = (
+      _sessionId: string,
+      traces: Array<{ content?: string }>
+    ) => {
       emittedTexts.push(...traces.map((trace) => String(trace.content ?? '')));
     };
 
@@ -278,15 +351,11 @@ describe('CodexObserver', () => {
     appendFileSync(
       sessionPath,
       '{"timestamp":"2026-04-12T02:00:00.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"sec',
-      'utf-8',
+      'utf-8'
     );
     (observer as any).handleFileChange(sessionPath);
 
-    appendFileSync(
-      sessionPath,
-      'ond"}]}}\n',
-      'utf-8',
-    );
+    appendFileSync(sessionPath, 'ond"}]}}\n', 'utf-8');
     (observer as any).handleFileChange(sessionPath);
 
     expect(emittedTexts).toEqual(['first', 'second']);
