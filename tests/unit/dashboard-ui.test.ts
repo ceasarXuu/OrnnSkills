@@ -260,7 +260,7 @@ function loadDashboardTestHarness(
   const script = scriptMatch[1]
     .replace(/\binit\(\);\s*$/, '')
     .concat(
-      '\n;globalThis.__dashboardTest = { state, init, switchLang, selectProject, selectMainTab, renderMainPanel, safeRenderMainPanel, renderSidebar, buildActivityRows, copyActivityDetail, openActivityDetail, renderCostPanel, viewSkill };'
+      '\n;globalThis.__dashboardTest = { state, init, switchLang, selectProject, selectMainTab, renderMainPanel, safeRenderMainPanel, renderSidebar, buildActivityRows, copyActivityDetail, openActivityDetail, renderCostPanel, viewSkill, triggerProjectPicker: openProjectPicker };'
     );
 
   vm.runInNewContext(script, runtime);
@@ -281,6 +281,7 @@ function loadDashboardTestHarness(
         openActivityDetail: (projectPath: string, rowId: string) => Promise<void>;
         renderCostPanel: (projectPath: string) => string;
         viewSkill: (projectPath: string, skillId: string, runtime?: string) => Promise<void>;
+        triggerProjectPicker: () => Promise<void>;
       };
     }).__dashboardTest,
     getElement(id: string) {
@@ -438,6 +439,42 @@ describe('dashboard ui recovery', () => {
     const html = getElement('projectList').innerHTML;
     expect(html).toContain('mili');
     expect(html).toContain('● 运行中 · 111 个技能');
+  });
+
+  it('opens the native project picker and selects the chosen project directly from the add action', async () => {
+    const projectPath = '/tmp/picked-project';
+    const encodedPath = encodeURIComponent(projectPath);
+    const { dashboard, getFetchCalls } = loadDashboardTestHarness({}, {
+      fetchMap: {
+        '/api/projects/pick': {
+          ok: true,
+          path: projectPath,
+          projects: [{ path: projectPath, name: 'picked-project', isRunning: false, skillCount: 0 }],
+        },
+        [`/api/projects/${encodedPath}/snapshot`]: {
+          daemon: {
+            isRunning: false,
+            pid: null,
+            startedAt: null,
+            processedTraces: 0,
+            lastCheckpointAt: null,
+            retryQueueSize: 0,
+            optimizationStatus: { currentState: 'idle', currentSkillId: null, lastOptimizationAt: null, lastError: null, queueSize: 0 },
+          },
+          skills: [],
+          traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
+          recentTraces: [],
+          decisionEvents: [],
+          agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
+        },
+      },
+    });
+
+    await dashboard.triggerProjectPicker();
+
+    expect(dashboard.state.selectedProjectId).toBe(projectPath);
+    expect(getFetchCalls()).toContain('/api/projects/pick');
+    expect(getFetchCalls()).toContain(`/api/projects/${encodedPath}/snapshot`);
   });
 
   it('reuses one global config payload when switching projects on the config tab', async () => {

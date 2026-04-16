@@ -897,7 +897,7 @@ export function getDashboardHtml(_port: number, lang: Language = 'en', buildId =
     <aside class="sidebar">
       <div class="sidebar-title">${t.sidebarProjects}</div>
       <div class="sidebar-list" id="projectList"></div>
-      <div class="sidebar-add" onclick="toggleAddForm()">
+      <div class="sidebar-add" onclick="openProjectPicker()">
         <span>＋</span><span>${t.sidebarAddProject}</span>
       </div>
       <div class="add-form" id="addForm">
@@ -4336,6 +4336,39 @@ function toggleAddForm() {
   form.classList.toggle('visible');
   if (form.classList.contains('visible')) {
     document.getElementById('addPathInput').focus();
+  }
+}
+
+async function openProjectPicker() {
+  try {
+    console.debug('[dashboard] opening native project picker');
+    const data = await fetchJsonWithTimeout('/api/projects/pick', 15000, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (data.ok && data.path) {
+      state.projects = Array.isArray(data.projects) ? data.projects : state.projects;
+      console.info('[dashboard] native project picker selected project', {
+        projectPath: data.path,
+        projectCount: state.projects.length,
+      });
+      renderSidebar();
+      document.getElementById('addForm').classList.remove('visible');
+      document.getElementById('addPathInput').value = '';
+      await selectProject(data.path);
+      return;
+    }
+    if (data.cancelled) {
+      console.debug('[dashboard] native project picker cancelled');
+      return;
+    }
+    console.warn('[dashboard] native project picker returned unexpected payload', data);
+    toggleAddForm();
+  } catch (error) {
+    console.warn('[dashboard] native project picker failed, falling back to manual path input', {
+      error: String(error),
+    });
+    toggleAddForm();
   }
 }
 

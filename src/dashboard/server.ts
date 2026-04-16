@@ -45,6 +45,7 @@ import { readDashboardConfig, writeDashboardConfig, checkProvidersConnectivity }
 import { getLiteLLMCatalog } from '../config/litellm-catalog.js';
 import { buildActivityScopeDetailFromData } from './activity-scope-reader.js';
 import { resolveLLMSafetyOptions } from '../llm/request-guard.js';
+import { pickProjectDirectory } from './native-project-picker.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -568,6 +569,30 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
       }
 
       // ── API: Add project ──
+      if (path === '/api/projects/pick' && method === 'POST') {
+        try {
+          logger.info('Opening native project picker');
+          const projectPath = await pickProjectDirectory();
+          if (!projectPath) {
+            logger.info('Native project picker cancelled');
+            json(res, { ok: false, cancelled: true });
+            return;
+          }
+          addProject(projectPath);
+          await writeProjectLanguage(projectPath, currentLang);
+          logger.info('Native project picker selected project', {
+            projectPath,
+            lang: currentLang,
+            source: 'api.projects.pick',
+          });
+          json(res, { ok: true, path: projectPath, projects: getProjectsWithStatus() });
+        } catch (error) {
+          logger.error('Native project picker failed', { error: String(error) });
+          json(res, { ok: false, error: String(error) }, 500);
+        }
+        return;
+      }
+
       if (path === '/api/projects' && method === 'POST') {
         try {
           const body = (await parseBody(req)) as { path?: string; name?: string };

@@ -4,6 +4,7 @@ import { createServer } from 'node:net';
 const mocks = vi.hoisted(() => ({
   listProjects: vi.fn(),
   addProject: vi.fn(),
+  pickProjectDirectory: vi.fn(),
   writeProjectLanguage: vi.fn(),
   readDaemonStatus: vi.fn(),
   readSkills: vi.fn(),
@@ -28,6 +29,10 @@ vi.mock('../../src/dashboard/projects-registry.js', () => ({
 
 vi.mock('../../src/dashboard/language-state.js', () => ({
   writeProjectLanguage: mocks.writeProjectLanguage,
+}));
+
+vi.mock('../../src/dashboard/native-project-picker.js', () => ({
+  pickProjectDirectory: mocks.pickProjectDirectory,
 }));
 
 vi.mock('../../src/dashboard/data-reader.js', () => ({
@@ -258,6 +263,51 @@ describe('dashboard server sse bootstrap', () => {
       expect(response.ok).toBe(true);
       expect(await response.json()).toEqual({ ok: true, lang: 'zh' });
       expect(mocks.writeProjectLanguage).toHaveBeenCalledWith(projectPath, 'zh');
+    } finally {
+      await dashboard.stop();
+    }
+  });
+
+  it('opens the native project picker and registers the selected project', async () => {
+    const projectPath = '/tmp/picked-project';
+    const port = await getFreePort();
+    mocks.listProjects.mockReturnValue([
+      {
+        path: projectPath,
+        name: 'picked-project',
+        registeredAt: '2026-04-15T00:00:00.000Z',
+        lastSeenAt: '2026-04-15T00:00:00.000Z',
+      },
+    ]);
+    mocks.pickProjectDirectory.mockResolvedValue(projectPath);
+    mocks.readDaemonStatus.mockReturnValue({ isRunning: false });
+    mocks.readSkills.mockReturnValue([]);
+    mocks.readGlobalLogs.mockReturnValue([]);
+    mocks.readLogsSince.mockReturnValue({ lines: [], newOffset: 0 });
+    mocks.readProjectSnapshotVersion.mockReturnValue('v1');
+
+    const { createDashboardServer } = await import('../../src/dashboard/server.js');
+    const dashboard = createDashboardServer(port, 'en');
+    await dashboard.start();
+
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/api/projects/pick`, { method: 'POST' });
+      expect(response.ok).toBe(true);
+      await expect(response.json()).resolves.toEqual({
+        ok: true,
+        path: projectPath,
+        projects: [
+          expect.objectContaining({
+            path: projectPath,
+            name: 'picked-project',
+            isRunning: false,
+            skillCount: 0,
+          }),
+        ],
+      });
+      expect(mocks.pickProjectDirectory).toHaveBeenCalledTimes(1);
+      expect(mocks.addProject).toHaveBeenCalledWith(projectPath);
+      expect(mocks.writeProjectLanguage).toHaveBeenCalledWith(projectPath, 'en');
     } finally {
       await dashboard.stop();
     }
