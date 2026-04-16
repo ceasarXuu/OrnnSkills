@@ -9,11 +9,11 @@ import {
   normalizeNarrativeArray,
   normalizeNarrativeString,
 } from '../llm-localization/index.js';
+import { buildTraceTimelineText } from '../trace-summary/index.js';
 import { extractJsonObject } from '../../utils/json-response.js';
 import type {
   ChangeType,
   EvaluationResult,
-  Trace,
   WindowAnalysisDecision,
   WindowAnalysisHint,
 } from '../../types/index.js';
@@ -75,42 +75,10 @@ function describeChangeType(changeType: ChangeType, lang: Language): string {
   }
 }
 
-function truncate(value: string, maxLength: number): string {
-  return value.length <= maxLength ? value : `${value.slice(0, maxLength)}...`;
-}
-
 function buildRawResponseExcerpt(raw: string): string {
   const normalized = String(raw || '').trim();
   if (!normalized) return '';
-  return truncate(normalized, 1200);
-}
-
-function summarizeTrace(trace: Trace, lang: Language): string {
-  const isZh = lang === 'zh';
-  if (trace.event_type === 'user_input' && trace.user_input) {
-    return isZh ? `用户输入: ${truncate(trace.user_input, 220)}` : `user_input: ${truncate(trace.user_input, 220)}`;
-  }
-  if (trace.event_type === 'assistant_output' && trace.assistant_output) {
-    return isZh
-      ? `助手输出: ${truncate(trace.assistant_output, 220)}`
-      : `assistant_output: ${truncate(trace.assistant_output, 220)}`;
-  }
-  if (trace.event_type === 'tool_call') {
-    return isZh
-      ? `工具调用: ${trace.tool_name || 'unknown'} ${truncate(JSON.stringify(trace.tool_args || {}), 180)}`
-      : `tool_call: ${trace.tool_name || 'unknown'} ${truncate(JSON.stringify(trace.tool_args || {}), 180)}`;
-  }
-  if (trace.event_type === 'tool_result') {
-    return isZh
-      ? `工具结果: ${trace.tool_name || 'unknown'} ${truncate(JSON.stringify(trace.tool_result || {}), 180)}`
-      : `tool_result: ${trace.tool_name || 'unknown'} ${truncate(JSON.stringify(trace.tool_result || {}), 180)}`;
-  }
-  if (trace.event_type === 'file_change') {
-    return isZh
-      ? `文件变更: ${truncate(JSON.stringify(trace.files_changed || []), 180)}`
-      : `file_change: ${truncate(JSON.stringify(trace.files_changed || []), 180)}`;
-  }
-  return isZh ? `${trace.event_type}: 状态=${trace.status}` : `${trace.event_type}: status=${trace.status}`;
+  return normalized.length <= 1200 ? normalized : `${normalized.slice(0, 1200)}...`;
 }
 
 function buildFallbackHint(window: SkillCallWindow): WindowAnalysisHint {
@@ -162,9 +130,7 @@ function buildPrompt(
         'evidence must be an array of short factual bullets grounded in the timeline.',
       ].join('\n');
 
-  const timeline = window.traces.slice(-60).map((trace: Trace, index: number) => {
-    return `${index + 1}. [${trace.timestamp}] ${summarizeTrace(trace, lang)}`;
-  });
+  const timeline = buildTraceTimelineText(window.traces.slice(-60), lang).split('\n');
 
   const userPrompt = isZh
     ? [

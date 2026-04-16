@@ -5,6 +5,7 @@ import { buildAgentUsageModelId, recordAgentUsage } from '../agent-usage/index.j
 import { readProjectLanguage } from '../../dashboard/language-state.js';
 import type { Language } from '../../dashboard/i18n.js';
 import { normalizeNarrativeArray, normalizeNarrativeString } from '../llm-localization/index.js';
+import { buildTraceTimelineText } from '../trace-summary/index.js';
 import { extractJsonObject } from '../../utils/json-response.js';
 import type { DecisionEventEvidence, EvaluationResult, Trace } from '../../types/index.js';
 
@@ -22,48 +23,6 @@ export interface DecisionExplanationResult {
 
 function truncate(value: string, maxLength: number): string {
   return value.length <= maxLength ? value : `${value.slice(0, maxLength)}...`;
-}
-
-function summarizeTrace(trace: Trace): string {
-  if (trace.event_type === 'user_input' && trace.user_input) {
-    return `user_input: ${truncate(trace.user_input, 220)}`;
-  }
-  if (trace.event_type === 'assistant_output' && trace.assistant_output) {
-    return `assistant_output: ${truncate(trace.assistant_output, 220)}`;
-  }
-  if (trace.event_type === 'tool_call') {
-    return `tool_call: ${trace.tool_name || 'unknown'} ${truncate(JSON.stringify(trace.tool_args || {}), 180)}`;
-  }
-  if (trace.event_type === 'tool_result') {
-    return `tool_result: ${trace.tool_name || 'unknown'} ${truncate(JSON.stringify(trace.tool_result || {}), 180)}`;
-  }
-  if (trace.event_type === 'file_change') {
-    return `file_change: ${truncate(JSON.stringify(trace.files_changed || []), 180)}`;
-  }
-  return `${trace.event_type}: status=${trace.status}`;
-}
-
-function summarizeTraceWithLanguage(trace: Trace, lang: Language): string {
-  if (lang === 'zh') {
-    if (trace.event_type === 'user_input' && trace.user_input) {
-      return `用户输入: ${truncate(trace.user_input, 220)}`;
-    }
-    if (trace.event_type === 'assistant_output' && trace.assistant_output) {
-      return `助手输出: ${truncate(trace.assistant_output, 220)}`;
-    }
-    if (trace.event_type === 'tool_call') {
-      return `工具调用: ${trace.tool_name || 'unknown'} ${truncate(JSON.stringify(trace.tool_args || {}), 180)}`;
-    }
-    if (trace.event_type === 'tool_result') {
-      return `工具结果: ${trace.tool_name || 'unknown'} ${truncate(JSON.stringify(trace.tool_result || {}), 180)}`;
-    }
-    if (trace.event_type === 'file_change') {
-      return `文件变更: ${truncate(JSON.stringify(trace.files_changed || []), 180)}`;
-    }
-    return `${trace.event_type}: 状态=${trace.status}`;
-  }
-
-  return summarizeTrace(trace);
 }
 
 function formatEvidenceBlock(evidence: DecisionEventEvidence | null | undefined): string {
@@ -124,7 +83,7 @@ function buildPrompt(
         formatEvidenceBlock(evidence),
         '',
         '观察到的 Trace 时间线:',
-        ...traces.slice(-40).map((trace, index) => `${index + 1}. [${trace.timestamp}] ${summarizeTraceWithLanguage(trace, lang)}`),
+        ...buildTraceTimelineText(traces.slice(-40), lang).split('\n'),
         '',
         '请生成一段面向 dashboard 用户的简洁解释。',
       ].join('\n')
@@ -140,7 +99,7 @@ function buildPrompt(
         formatEvidenceBlock(evidence),
         '',
         'Observed Trace Timeline:',
-        ...traces.slice(-40).map((trace, index) => `${index + 1}. [${trace.timestamp}] ${summarizeTraceWithLanguage(trace, lang)}`),
+        ...buildTraceTimelineText(traces.slice(-40), lang).split('\n'),
         '',
         'Produce a concise explanation for dashboard users.',
       ].join('\n');

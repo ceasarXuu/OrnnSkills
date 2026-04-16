@@ -264,6 +264,103 @@ describe('SkillCallAnalyzer', () => {
     expect(result.technicalDetail).toContain('attempts=2');
   });
 
+  it('compacts noisy traces before sending the analysis prompt', async () => {
+    readProjectLanguageMock.mockResolvedValue('zh');
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: '{"decision":"no_optimization","reason":"当前无需修改","confidence":0.9,"evidence":[]}',
+            },
+          },
+        ],
+        usage: {
+          prompt_tokens: 120,
+          completion_tokens: 20,
+          total_tokens: 140,
+        },
+        model: 'gpt-4o-mini',
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const analyzer = createSkillCallAnalyzer();
+    const result = await analyzer.analyzeWindow('/tmp/project', {
+      windowId: 'window-compact',
+      skillId: 'test-skill',
+      runtime: 'codex',
+      sessionId: 'session-1',
+      closeReason: 'completed',
+      startedAt: '2026-04-10T00:00:00.000Z',
+      lastTraceAt: '2026-04-10T00:01:00.000Z',
+      traces: [
+        {
+          trace_id: 'trace-1',
+          runtime: 'codex',
+          session_id: 'session-1',
+          turn_id: 'turn-1',
+          event_type: 'assistant_output',
+          timestamp: '2026-04-10T00:00:10.000Z',
+          assistant_output: `开始排查。${'低信号文本 '.repeat(120)}这个尾巴不应该原样进入模型。`,
+          status: 'success',
+        },
+        {
+          trace_id: 'trace-2',
+          runtime: 'codex',
+          session_id: 'session-1',
+          turn_id: 'turn-2',
+          event_type: 'tool_call',
+          timestamp: '2026-04-10T00:00:20.000Z',
+          tool_name: 'exec_command',
+          tool_args: {
+            cmd: 'npm test',
+            workdir: '/tmp/project',
+            max_output_tokens: 24000,
+            yield_time_ms: 1000,
+            login: true,
+            noisy_blob: 'Y'.repeat(1000),
+          },
+          status: 'success',
+        },
+        {
+          trace_id: 'trace-3',
+          runtime: 'codex',
+          session_id: 'session-1',
+          turn_id: 'turn-3',
+          event_type: 'tool_result',
+          timestamp: '2026-04-10T00:00:30.000Z',
+          tool_name: 'exec_command',
+          tool_result: {
+            exit_code: 0,
+            stdout: `PASS${' result'.repeat(100)}`,
+            stderr: '',
+            yield_time_ms: 1000,
+          },
+          status: 'success',
+        },
+      ],
+    } as never, 'skill content');
+
+    expect(result.success).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const requestBody = JSON.parse(String(requestInit.body)) as {
+      messages: Array<{ role: string; content: string }>;
+    };
+    const userMessage = requestBody.messages.find((message) => message.role === 'user')?.content || '';
+
+    expect(userMessage).toContain('助手输出: 开始排查。');
+    expect(userMessage).toContain('工具调用: exec_command cmd=npm test; workdir=/tmp/project');
+    expect(userMessage).toContain('工具结果: exec_command exit_code=0; stdout=PASS');
+    expect(userMessage).not.toContain('max_output_tokens');
+    expect(userMessage).not.toContain('yield_time_ms');
+    expect(userMessage).not.toContain('YYYYY');
+    expect(userMessage).not.toContain('这个尾巴不应该原样进入模型。');
+  });
+
   it('recovers structured json from reasoning_content-only responses', async () => {
     readDashboardConfigMock.mockResolvedValue({
       autoOptimize: true,

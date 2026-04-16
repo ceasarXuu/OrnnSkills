@@ -250,6 +250,69 @@ describe('activity scope reader', () => {
     });
   });
 
+  it('compacts submitted traces to high-signal summaries', () => {
+    const noisyAssistantOutput = `先说明修复方案。${'无意义噪声 '.repeat(120)}不要把这个尾巴完整带进分析。`;
+    const detail = buildActivityScopeDetailFromData({
+      lang: 'zh',
+      projectName: 'ornn-project',
+      episode: makeEpisode({
+        traceRefs: ['trace-1', 'trace-2', 'trace-3'],
+        stats: {
+          totalTraceCount: 3,
+          totalTurnCount: 3,
+          mappedTraceCount: 1,
+          tracesSinceLastProbe: 3,
+          turnsSinceLastProbe: 3,
+        },
+      }),
+      decisionEvents: [
+        makeDecisionEvent({
+          id: 'event-submit',
+          episodeId: 'episode-1',
+          traceCount: 3,
+          timestamp: '2026-04-16T00:01:10.000Z',
+        }),
+      ],
+      agentUsageRecords: [],
+      traces: [
+        makeTrace('trace-1', '2026-04-16T00:00:00.000Z', {
+          assistant_output: noisyAssistantOutput,
+        }),
+        makeTrace('trace-2', '2026-04-16T00:00:30.000Z', {
+          event_type: 'tool_call',
+          tool_name: 'exec_command',
+          tool_args: {
+            cmd: 'npm test',
+            workdir: '/tmp/ornn-project',
+            max_output_tokens: 16000,
+            yield_time_ms: 1000,
+            login: true,
+            extra_blob: 'X'.repeat(600),
+          },
+        }),
+        makeTrace('trace-3', '2026-04-16T00:00:50.000Z', {
+          event_type: 'tool_result',
+          tool_name: 'exec_command',
+          tool_result: {
+            exit_code: 0,
+            stdout: `PASS${' output'.repeat(80)}`,
+            stderr: '',
+            max_output_tokens: 16000,
+          },
+        }),
+      ],
+    });
+
+    const submitted = detail?.timeline.find((node) => node.type === 'analysis_submitted');
+    expect(submitted?.traceText).toContain('助手输出: 先说明修复方案。');
+    expect(submitted?.traceText).toContain('工具调用: exec_command cmd=npm test; workdir=/tmp/ornn-project');
+    expect(submitted?.traceText).toContain('工具结果: exec_command exit_code=0; stdout=PASS');
+    expect(submitted?.traceText).not.toContain('max_output_tokens');
+    expect(submitted?.traceText).not.toContain('yield_time_ms');
+    expect(submitted?.traceText).not.toContain('XXXXX');
+    expect(submitted?.traceText).not.toContain('不要把这个尾巴完整带进分析。');
+  });
+
   it('builds timeline detail for an optimized scope with explicit analysis result and close node', () => {
     const detail = buildActivityScopeDetailFromData({
       lang: 'zh',

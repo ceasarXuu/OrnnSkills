@@ -1,5 +1,6 @@
 import type { DecisionEventRecord } from '../core/decision-events/index.js';
 import type { TaskEpisode } from '../core/task-episode/index.js';
+import { buildTraceTimelineText, summarizeTraceForTimeline } from '../core/trace-summary/index.js';
 import type { Language } from './i18n.js';
 import type { AgentUsageRecord, Trace } from '../types/index.js';
 
@@ -132,38 +133,8 @@ function deriveScopeStatus(
   };
 }
 
-function summarizeTrace(trace: Trace, lang: Language): string {
-  const isZh = lang === 'zh';
-  if (trace.event_type === 'user_input' && trace.user_input) {
-    return isZh ? `用户输入: ${trace.user_input}` : `User Input: ${trace.user_input}`;
-  }
-  if (trace.event_type === 'assistant_output' && trace.assistant_output) {
-    return isZh ? `助手输出: ${trace.assistant_output}` : `Assistant Output: ${trace.assistant_output}`;
-  }
-  if (trace.event_type === 'tool_call') {
-    const args = trace.tool_args ? ` ${JSON.stringify(trace.tool_args)}` : '';
-    return isZh
-      ? `工具调用: ${trace.tool_name || 'unknown'}${args}`
-      : `Tool Call: ${trace.tool_name || 'unknown'}${args}`;
-  }
-  if (trace.event_type === 'tool_result') {
-    const result = trace.tool_result ? ` ${JSON.stringify(trace.tool_result)}` : '';
-    return isZh
-      ? `工具结果: ${trace.tool_name || 'unknown'}${result}`
-      : `Tool Result: ${trace.tool_name || 'unknown'}${result}`;
-  }
-  if (trace.event_type === 'file_change') {
-    const files = Array.isArray(trace.files_changed) ? trace.files_changed.join(', ') : '';
-    return isZh ? `文件变更: ${files}` : `Files Changed: ${files}`;
-  }
-  return isZh ? `${trace.event_type}` : trace.event_type;
-}
-
 function buildSubmittedTraceText(traces: Trace[], lang: Language): string {
-  return traces
-    .sort((a, b) => a.timestamp.localeCompare(b.timestamp))
-    .map((trace, index) => `${index + 1}. [${trace.timestamp}] ${summarizeTrace(trace, lang)}`)
-    .join('\n');
+  return buildTraceTimelineText(traces, lang);
 }
 
 function findAnalyzerUsageForEvent(
@@ -298,7 +269,7 @@ export function buildActivityScopeDetailFromData(
       id: `skill-called:${firstTrace.trace_id}`,
       type: 'skill_called',
       timestamp: firstTrace.timestamp,
-      summary: summarizeTrace(firstTrace, input.lang),
+      summary: summarizeTraceForTimeline(firstTrace, input.lang),
     });
   }
 
