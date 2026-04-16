@@ -225,4 +225,101 @@ describe('global daemon architecture', () => {
     expect(mocks.spawn).toHaveBeenCalledTimes(1);
     expect(exitSpy).toHaveBeenCalledWith(0);
   });
+
+  it('stops routing traces for paused projects and resumes from new traces only', async () => {
+    mocks.listProjects.mockReturnValue([
+      {
+        path: '/projects/alpha',
+        name: 'alpha',
+        registeredAt: '2026-04-16T00:00:00.000Z',
+        lastSeenAt: '2026-04-16T00:00:00.000Z',
+        monitoringState: 'active',
+        pausedAt: null,
+      },
+    ]);
+
+    const { Daemon } = await import('../../src/daemon/index.js');
+    const daemon = new Daemon('/launcher-context');
+    await daemon.start();
+
+    const observerCallback = mocks.observerCallbackRef.get();
+    expect(observerCallback).toBeTypeOf('function');
+
+    observerCallback?.({
+      trace_id: 'trace-before-pause',
+      runtime: 'codex',
+      session_id: 'session-alpha',
+      turn_id: 'turn-1',
+      event_type: 'user_input',
+      timestamp: '2026-04-16T00:00:00.000Z',
+      status: 'success',
+      metadata: { projectPath: '/projects/alpha' },
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const firstManager = mocks.projectManagers.get('/projects/alpha');
+    expect(firstManager?.processTrace).toHaveBeenCalledTimes(1);
+
+    mocks.listProjects.mockReturnValue([
+      {
+        path: '/projects/alpha',
+        name: 'alpha',
+        registeredAt: '2026-04-16T00:00:00.000Z',
+        lastSeenAt: '2026-04-16T00:00:00.000Z',
+        monitoringState: 'paused',
+        pausedAt: '2026-04-16T00:05:00.000Z',
+      },
+    ]);
+    await (daemon as unknown as { syncRegisteredProjects: () => Promise<void> }).syncRegisteredProjects();
+
+    observerCallback?.({
+      trace_id: 'trace-during-pause',
+      runtime: 'codex',
+      session_id: 'session-alpha',
+      turn_id: 'turn-2',
+      event_type: 'assistant_output',
+      timestamp: '2026-04-16T00:06:00.000Z',
+      status: 'success',
+      metadata: { projectPath: '/projects/alpha' },
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(firstManager?.close).toHaveBeenCalledTimes(1);
+    expect(firstManager?.processTrace).toHaveBeenCalledTimes(1);
+
+    mocks.listProjects.mockReturnValue([
+      {
+        path: '/projects/alpha',
+        name: 'alpha',
+        registeredAt: '2026-04-16T00:00:00.000Z',
+        lastSeenAt: '2026-04-16T00:00:00.000Z',
+        monitoringState: 'active',
+        pausedAt: null,
+      },
+    ]);
+    await (daemon as unknown as { syncRegisteredProjects: () => Promise<void> }).syncRegisteredProjects();
+
+    const resumedManager = mocks.projectManagers.get('/projects/alpha');
+    expect(resumedManager).toBeTruthy();
+    expect(resumedManager).not.toBe(firstManager);
+
+    observerCallback?.({
+      trace_id: 'trace-after-resume',
+      runtime: 'codex',
+      session_id: 'session-alpha',
+      turn_id: 'turn-3',
+      event_type: 'assistant_output',
+      timestamp: '2026-04-16T00:07:00.000Z',
+      status: 'success',
+      metadata: { projectPath: '/projects/alpha' },
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(resumedManager?.processTrace).toHaveBeenCalledTimes(1);
+
+    await daemon.stop();
+  });
 });

@@ -14,6 +14,7 @@ import { join } from 'node:path';
 import {
   listProjects,
   addProject,
+  setProjectMonitoringState,
   type RegisteredProject,
 } from './projects-registry.js';
 import { readProjectLanguage, writeProjectLanguage } from './language-state.js';
@@ -41,7 +42,12 @@ import { createShadowRegistry } from '../core/shadow-registry/index.js';
 import { SkillVersionManager } from '../core/skill-version/index.js';
 import type { RuntimeType } from '../types/index.js';
 import { createSkillDeployer } from '../core/skill-deployer/index.js';
-import { readDashboardConfig, writeDashboardConfig, checkProvidersConnectivity } from '../config/manager.js';
+import {
+  readDashboardConfig,
+  writeDashboardConfig,
+  checkProvidersConnectivity,
+  resolveDashboardPromptOverrides,
+} from '../config/manager.js';
 import { getLiteLLMCatalog } from '../config/litellm-catalog.js';
 import { buildActivityScopeDetailFromData } from './activity-scope-reader.js';
 import { resolveLLMSafetyOptions } from '../llm/request-guard.js';
@@ -52,6 +58,7 @@ import { ensureMonitoringDaemon, ensureProjectInitialized } from './project-onbo
 
 interface ProjectWithStatus extends RegisteredProject {
   isRunning: boolean;
+  isPaused: boolean;
   skillCount: number;
 }
 
@@ -166,12 +173,28 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
 
   function getProjectsWithStatus(): ProjectWithStatus[] {
     return listProjects().map((p) => {
+      const monitoringState = p.monitoringState === 'paused' ? 'paused' : 'active';
+      const pausedAt = monitoringState === 'paused' ? p.pausedAt ?? null : null;
       try {
         const daemon = readDaemonStatus(p.path);
         const skills = readSkills(p.path);
-        return { ...p, isRunning: daemon.isRunning, skillCount: skills.length };
+        return {
+          ...p,
+          monitoringState,
+          pausedAt,
+          isPaused: monitoringState === 'paused',
+          isRunning: monitoringState === 'paused' ? false : daemon.isRunning,
+          skillCount: skills.length,
+        };
       } catch {
-        return { ...p, isRunning: false, skillCount: 0 };
+        return {
+          ...p,
+          monitoringState,
+          pausedAt,
+          isPaused: monitoringState === 'paused',
+          isRunning: false,
+          skillCount: 0,
+        };
       }
     });
   }
@@ -186,6 +209,8 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
         path: project.path,
         name: project.name,
         isRunning: project.isRunning,
+        monitoringState: project.monitoringState,
+        pausedAt: project.pausedAt ?? null,
         skillCount: project.skillCount,
       }))
     );
@@ -270,6 +295,122 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
     };
   }
 
+  function resolveRuntime(
+    runtimeFromBody?: unknown,
+    runtimeFromQuery?: string | null
+  ): RuntimeType {
+    const runtimeCandidate =
+      typeof runtimeFromBody === 'string' && runtimeFromBody.length > 0
+        ? runtimeFromBody
+        : runtimeFromQuery;
+    return runtimeCandidate === 'claude' ||
+      runtimeCandidate === 'opencode' ||
+      runtimeCandidate === 'codex'
+      ? runtimeCandidate
+      : 'codex';
+  }
+
+  function saveSkillVersion(params: {
+    projectPath: string;
+    skillId: string;
+    runtime: RuntimeType;
+    content: string;
+    reason: string;
+    logContext: string;
+  }) {
+    const { projectPath, skillId, runtime, content, reason, logContext } = params;
+    const oldContent = readSkillContent(projectPath, skillId, runtime);
+    if (oldContent === null) {
+      return { ok: false as const, notFound: true as const };
+    }
+
+    const versionManager = new SkillVersionManager({
+      projectPath,
+      skillId,
+      runtime,
+    });
+    const currentEffectiveVersion = versionManager.getEffectiveVersion()?.version ?? null;
+    if (content === oldContent) {
+      return {
+        ok: true as const,
+        unchanged: true as const,
+        version: currentEffectiveVersion,
+      };
+    }
+
+    const shadowRegistry = createShadowRegistry(projectPath);
+    shadowRegistry.init();
+    const updated = shadowRegistry.updateContent(skillId, content, runtime);
+    if (!updated) {
+      return { ok: false as const, notFound: true as const };
+    }
+
+    const created = versionManager.createVersion(content, reason, []);
+    const deployer = createSkillDeployer({
+      runtime,
+      projectPath,
+    });
+    const deployResult = deployer.deploy(skillId, created);
+    if (!deployResult.success) {
+      logger.error(`${logContext} created version but failed to deploy latest`, {
+        projectPath,
+        skillId,
+        runtime,
+        version: created.version,
+        error: deployResult.error,
+      });
+      return {
+        ok: false as const,
+        version: created.version,
+        error: `Version created (v${created.version}) but deploy failed`,
+        detail: deployResult.error,
+      };
+    }
+
+    logger.info(logContext, {
+      projectPath,
+      skillId,
+      runtime,
+      version: created.version,
+      deployedPath: deployResult.deployedPath,
+    });
+
+    return {
+      ok: true as const,
+      unchanged: false as const,
+      version: created.version,
+      metadata: created.metadata,
+      deployedPath: deployResult.deployedPath,
+      created,
+    };
+  }
+
+  function listSameNamedSkillTargets(
+    sourceProjectPath: string,
+    skillId: string,
+    sourceRuntime: RuntimeType
+  ): Array<{ projectPath: string; runtime: RuntimeType }> {
+    const seen = new Set<string>();
+    const targets: Array<{ projectPath: string; runtime: RuntimeType }> = [];
+
+    for (const project of listProjects()) {
+      const skills = readSkills(project.path);
+      for (const skill of skills) {
+        if (skill.skillId !== skillId) continue;
+        const runtime: RuntimeType = skill.runtime ?? 'codex';
+        if (project.path === sourceProjectPath && runtime === sourceRuntime) {
+          continue;
+        }
+        const key = `${project.path}::${runtime}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        targets.push({ projectPath: project.path, runtime });
+      }
+    }
+
+    return targets;
+  }
+
   // ── SSE Push Loop ────────────────────────────────────────────────────────
 
   function sendSseEvent(client: SseClient, event: string, data: unknown) {
@@ -337,12 +478,13 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
 
   // ── Request Router ────────────────────────────────────────────────────────
 
-  const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
-    const url = new URL(req.url ?? '/', `http://localhost:${port}`);
-    const path = url.pathname;
-    const method = req.method ?? 'GET';
+  const server = createServer((req: IncomingMessage, res: ServerResponse) => {
+    void (async () => {
+      const url = new URL(req.url ?? '/', `http://localhost:${port}`);
+      const path = url.pathname;
+      const method = req.method ?? 'GET';
 
-    try {
+      try {
       // ── Dashboard HTML ──
       if (path === '/' && method === 'GET') {
         const detectedLang = detectLangFromAcceptLanguage(req.headers['accept-language']);
@@ -519,6 +661,11 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
               maxConcurrentRequests?: number;
               maxEstimatedTokensPerWindow?: number;
             };
+            promptOverrides?: {
+              skillCallAnalyzer?: string;
+              decisionExplainer?: string;
+              readinessProbe?: string;
+            };
             defaultProvider?: string;
             logLevel?: string;
             providers?: Array<{
@@ -538,16 +685,19 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
           userConfirm: body.config.userConfirm ?? false,
           runtimeSync: body.config.runtimeSync ?? true,
           llmSafety: resolveLLMSafetyOptions(body.config.llmSafety),
+          promptOverrides: resolveDashboardPromptOverrides(body.config.promptOverrides),
           defaultProvider: body.config.defaultProvider ?? '',
           logLevel: body.config.logLevel ?? 'info',
           providers: body.config.providers ?? [],
         });
+        const normalizedPromptOverrides = resolveDashboardPromptOverrides(body.config.promptOverrides);
         logger.info('Dashboard global config saved', {
           providerCount: (body.config.providers ?? []).length,
           autoOptimize: body.config.autoOptimize ?? true,
           userConfirm: body.config.userConfirm ?? false,
           runtimeSync: body.config.runtimeSync ?? true,
           llmSafety: resolveLLMSafetyOptions(body.config.llmSafety),
+          promptOverrideCount: Object.values(normalizedPromptOverrides).filter((value) => value.length > 0).length,
           defaultProvider: body.config.defaultProvider ?? '',
           logLevel: body.config.logLevel ?? 'info',
           durationMs: Date.now() - started,
@@ -685,6 +835,40 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
           return;
         }
 
+        if (subPath === '/monitoring' && method === 'PATCH') {
+          const body = (await parseBody(req)) as { paused?: unknown };
+          if (typeof body.paused !== 'boolean') {
+            json(res, { ok: false, error: 'paused must be a boolean' }, 400);
+            return;
+          }
+
+          const nextState = body.paused ? 'paused' : 'active';
+          const updatedProject = setProjectMonitoringState(projectPath, nextState);
+          if (!updatedProject) {
+            json(res, { ok: false, error: 'project not found' }, 404);
+            return;
+          }
+
+          logger.info('Dashboard project monitoring state updated', {
+            projectPath,
+            monitoringState: nextState,
+          });
+
+          const projects = getProjectsWithStatus();
+          const project = projects.find((entry) => entry.path === projectPath) ?? {
+            ...updatedProject,
+            isPaused: nextState === 'paused',
+            isRunning: false,
+            skillCount: 0,
+          };
+          json(res, {
+            ok: true,
+            project,
+            projects,
+          });
+          return;
+        }
+
         // GET /api/projects/:id/skills
         if (subPath === '/skills' && method === 'GET') {
           json(res, { skills: readSkills(projectPath) });
@@ -740,91 +924,172 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
             return;
           }
 
-          const runtimeFromBody = body.runtime;
-          const runtimeParam = url.searchParams.get('runtime');
-          const runtimeCandidate =
-            typeof runtimeFromBody === 'string' && runtimeFromBody.length > 0
-              ? runtimeFromBody
-              : runtimeParam;
-          const runtime: RuntimeType =
-            runtimeCandidate === 'claude' ||
-            runtimeCandidate === 'opencode' ||
-            runtimeCandidate === 'codex'
-              ? runtimeCandidate
-              : 'codex';
-
-          const oldContent = readSkillContent(projectPath, skillId, runtime);
-          if (oldContent === null) {
-            notFound(res);
-            return;
-          }
-
-          const newContent = body.content;
-          if (newContent === oldContent) {
-            json(res, { ok: true, unchanged: true });
-            return;
-          }
-
-          const shadowRegistry = createShadowRegistry(projectPath);
-          shadowRegistry.init();
-          const updated = shadowRegistry.updateContent(skillId, newContent, runtime);
-          if (!updated) {
-            notFound(res);
-            return;
-          }
-
-          const versionManager = new SkillVersionManager({
-            projectPath,
-            skillId,
-            runtime,
-          });
+          const runtime = resolveRuntime(body.runtime, url.searchParams.get('runtime'));
           const reason =
             typeof body.reason === 'string' && body.reason.trim().length > 0
               ? body.reason.trim()
               : 'Manual edit from dashboard';
-          const created = versionManager.createVersion(newContent, reason, []);
-          const deployer = createSkillDeployer({
-            runtime,
+          const result = saveSkillVersion({
             projectPath,
+            skillId,
+            runtime,
+            content: body.content,
+            reason,
+            logContext: 'Dashboard saved skill edit and created version',
           });
-          // 自动将最新版本写回 runtime；历史版本继续保留在 .ornn
-          const deployResult = deployer.deploy(skillId, created);
-          if (!deployResult.success) {
-            logger.error('Dashboard save created version but failed to deploy latest', {
-              projectPath,
-              skillId,
-              runtime,
-              version: created.version,
-              error: deployResult.error,
-            });
+
+          if (!result.ok && result.notFound) {
+            notFound(res);
+            return;
+          }
+
+          if (!result.ok) {
             json(
               res,
               {
                 ok: false,
-                error: `Version created (v${created.version}) but deploy failed`,
-                detail: deployResult.error,
-                version: created.version,
+                error: result.error,
+                detail: result.detail,
+                version: result.version,
               },
               500
             );
             return;
           }
 
-          logger.info('Dashboard saved skill edit and created version', {
+          json(res, {
+            ok: true,
+            unchanged: result.unchanged,
+            skillId,
+            runtime,
+            version: result.version,
+            metadata: result.metadata,
+            deployedPath: result.deployedPath,
+          });
+          return;
+        }
+
+        const applyToAllMatch = subPath.match(/^\/skills\/([^/]+)\/apply-to-all$/);
+        if (applyToAllMatch && method === 'POST') {
+          const skillId = decodeURIComponent(applyToAllMatch[1]);
+          const body = (await parseBody(req)) as {
+            content?: unknown;
+            runtime?: unknown;
+            reason?: unknown;
+          };
+          if (typeof body.content !== 'string') {
+            json(res, { ok: false, error: 'content must be a string' }, 400);
+            return;
+          }
+
+          const runtime = resolveRuntime(body.runtime, url.searchParams.get('runtime'));
+          const sourceReason =
+            typeof body.reason === 'string' && body.reason.trim().length > 0
+              ? body.reason.trim()
+              : 'Manual edit from dashboard';
+          const sourceResult = saveSkillVersion({
             projectPath,
             skillId,
             runtime,
-            version: created.version,
-            deployedPath: deployResult.deployedPath,
+            content: body.content,
+            reason: sourceReason,
+            logContext: 'Dashboard bulk apply saved source skill version',
+          });
+
+          if (!sourceResult.ok && sourceResult.notFound) {
+            notFound(res);
+            return;
+          }
+
+          if (!sourceResult.ok) {
+            json(
+              res,
+              {
+                ok: false,
+                error: sourceResult.error,
+                detail: sourceResult.detail,
+                version: sourceResult.version,
+              },
+              500
+            );
+            return;
+          }
+
+          const targets = listSameNamedSkillTargets(projectPath, skillId, runtime);
+          let updatedTargets = 0;
+          let skippedTargets = 0;
+          let failedTargets = 0;
+
+          for (const target of targets) {
+            const targetContent = readSkillContent(target.projectPath, skillId, target.runtime);
+            if (targetContent === null) {
+              failedTargets++;
+              logger.warn('Dashboard bulk apply target content not found', {
+                sourceProjectPath: projectPath,
+                targetProjectPath: target.projectPath,
+                skillId,
+                runtime: target.runtime,
+              });
+              continue;
+            }
+
+            if (targetContent === body.content) {
+              skippedTargets++;
+              continue;
+            }
+
+            const targetResult = saveSkillVersion({
+              projectPath: target.projectPath,
+              skillId,
+              runtime: target.runtime,
+              content: body.content,
+              reason: `Bulk apply from ${projectPath} (${runtime})`,
+              logContext: 'Dashboard bulk apply propagated skill version',
+            });
+
+            if (!targetResult.ok) {
+              failedTargets++;
+              logger.warn('Dashboard bulk apply failed for target skill', {
+                sourceProjectPath: projectPath,
+                targetProjectPath: target.projectPath,
+                skillId,
+                runtime: target.runtime,
+                error: targetResult.error,
+                detail: targetResult.detail,
+              });
+              continue;
+            }
+
+            if (targetResult.unchanged) {
+              skippedTargets++;
+              continue;
+            }
+
+            updatedTargets++;
+          }
+
+          logger.info('Dashboard bulk apply completed for same-named skills', {
+            sourceProjectPath: projectPath,
+            skillId,
+            runtime,
+            totalTargets: targets.length,
+            updatedTargets,
+            skippedTargets,
+            failedTargets,
           });
 
           json(res, {
             ok: true,
             skillId,
             runtime,
-            version: created.version,
-            metadata: created.metadata,
-            deployedPath: deployResult.deployedPath,
+            source: {
+              saved: !sourceResult.unchanged,
+              version: sourceResult.version ?? null,
+            },
+            totalTargets: targets.length,
+            updatedTargets,
+            skippedTargets,
+            failedTargets,
           });
           return;
         }
@@ -988,7 +1253,7 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
         // GET /api/projects/:id/config
         if (subPath === '/config' && method === 'GET') {
           const started = Date.now();
-          const config = await readDashboardConfig(undefined);
+          const config = await readDashboardConfig(projectPath);
           logger.info('Dashboard config loaded', {
             projectPath,
             providerCount: config.providers.length,
@@ -1013,6 +1278,11 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
                 maxConcurrentRequests?: number;
                 maxEstimatedTokensPerWindow?: number;
               };
+              promptOverrides?: {
+                skillCallAnalyzer?: string;
+                decisionExplainer?: string;
+                readinessProbe?: string;
+              };
               defaultProvider?: string;
               logLevel?: string;
               providers?: Array<{
@@ -1032,10 +1302,12 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
             userConfirm: body.config.userConfirm ?? false,
             runtimeSync: body.config.runtimeSync ?? true,
             llmSafety: resolveLLMSafetyOptions(body.config.llmSafety),
+            promptOverrides: resolveDashboardPromptOverrides(body.config.promptOverrides),
             defaultProvider: body.config.defaultProvider ?? '',
             logLevel: body.config.logLevel ?? 'info',
             providers: body.config.providers ?? [],
           });
+          const normalizedPromptOverrides = resolveDashboardPromptOverrides(body.config.promptOverrides);
           logger.info('Dashboard config saved', {
             projectPath,
             providerCount: (body.config.providers ?? []).length,
@@ -1043,6 +1315,7 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
             userConfirm: body.config.userConfirm ?? false,
             runtimeSync: body.config.runtimeSync ?? true,
             llmSafety: resolveLLMSafetyOptions(body.config.llmSafety),
+            promptOverrideCount: Object.values(normalizedPromptOverrides).filter((value) => value.length > 0).length,
             defaultProvider: body.config.defaultProvider ?? '',
             logLevel: body.config.logLevel ?? 'info',
             durationMs: Date.now() - started,
@@ -1089,20 +1362,21 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
         }
       }
 
-      notFound(res);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      if (message === 'Invalid JSON' || message === 'Request body too large') {
-        json(res, { error: message }, 400);
-        return;
+        notFound(res);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (message === 'Invalid JSON' || message === 'Request body too large') {
+          json(res, { error: message }, 400);
+          return;
+        }
+        logger.error('Dashboard request failed', {
+          method,
+          path,
+          error: message,
+        });
+        json(res, { error: 'Internal server error', detail: message }, 500);
       }
-      logger.error('Dashboard request failed', {
-        method,
-        path,
-        error: message,
-      });
-      json(res, { error: 'Internal server error', detail: message }, 500);
-    }
+    })();
   });
 
   function start(): Promise<void> {

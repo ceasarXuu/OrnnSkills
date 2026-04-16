@@ -9,14 +9,15 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, basename, resolve } from 'node:path';
 import { homedir } from 'node:os';
 
-const GLOBAL_ORNN_DIR = join(homedir(), '.ornn');
-const PROJECTS_FILE = join(GLOBAL_ORNN_DIR, 'projects.json');
+export type ProjectMonitoringState = 'active' | 'paused';
 
 export interface RegisteredProject {
   path: string;
   name: string;
   registeredAt: string;
   lastSeenAt: string;
+  monitoringState?: ProjectMonitoringState;
+  pausedAt?: string | null;
 }
 
 export interface ProjectsRegistry {
@@ -27,23 +28,60 @@ function normalizeProjectPath(projectPath: string): string {
   return resolve(projectPath);
 }
 
+function getGlobalOrnnDir(): string {
+  return join(homedir(), '.ornn');
+}
+
+function getProjectsFilePath(): string {
+  return join(getGlobalOrnnDir(), 'projects.json');
+}
+
+function normalizeProject(project: RegisteredProject): RegisteredProject {
+  const monitoringState: ProjectMonitoringState =
+    project.monitoringState === 'paused' ? 'paused' : 'active';
+
+  return {
+    ...project,
+    monitoringState,
+    pausedAt: monitoringState === 'paused' ? project.pausedAt ?? null : null,
+  };
+}
+
 function readRegistry(): ProjectsRegistry {
-  if (!existsSync(PROJECTS_FILE)) {
+  const projectsFile = getProjectsFilePath();
+  if (!existsSync(projectsFile)) {
     return { projects: [] };
   }
   try {
-    const raw = readFileSync(PROJECTS_FILE, 'utf-8');
-    return JSON.parse(raw) as ProjectsRegistry;
+    const raw = readFileSync(projectsFile, 'utf-8');
+    const parsed = JSON.parse(raw) as ProjectsRegistry;
+    return {
+      projects: Array.isArray(parsed.projects)
+        ? parsed.projects.map((project) => normalizeProject(project))
+        : [],
+    };
   } catch {
     return { projects: [] };
   }
 }
 
 function writeRegistry(registry: ProjectsRegistry): void {
-  if (!existsSync(GLOBAL_ORNN_DIR)) {
-    mkdirSync(GLOBAL_ORNN_DIR, { recursive: true });
+  const globalOrnnDir = getGlobalOrnnDir();
+  const projectsFile = getProjectsFilePath();
+  if (!existsSync(globalOrnnDir)) {
+    mkdirSync(globalOrnnDir, { recursive: true });
   }
-  writeFileSync(PROJECTS_FILE, JSON.stringify(registry, null, 2), 'utf-8');
+  writeFileSync(
+    projectsFile,
+    JSON.stringify(
+      {
+        projects: registry.projects.map((project) => normalizeProject(project)),
+      },
+      null,
+      2
+    ),
+    'utf-8'
+  );
 }
 
 /**
@@ -63,6 +101,8 @@ export function registerProject(projectPath: string): void {
       name: basename(normalizedPath),
       registeredAt: now,
       lastSeenAt: now,
+      monitoringState: 'active',
+      pausedAt: null,
     });
   }
 
@@ -86,7 +126,7 @@ export function touchProject(projectPath: string): void {
  * 获取所有注册的项目
  */
 export function listProjects(): RegisteredProject[] {
-  return readRegistry().projects;
+  return readRegistry().projects.map((project) => normalizeProject(project));
 }
 
 /**
@@ -104,6 +144,8 @@ export function addProject(projectPath: string, name?: string): void {
       name: name ?? basename(normalizedPath),
       registeredAt: now,
       lastSeenAt: now,
+      monitoringState: 'active',
+      pausedAt: null,
     });
     writeRegistry(registry);
   } else if (name) {
@@ -118,4 +160,29 @@ export function removeProject(projectPath: string): void {
   const registry = readRegistry();
   registry.projects = registry.projects.filter((p) => p.path !== normalizedPath);
   writeRegistry(registry);
+}
+
+export function getProjectRegistration(projectPath: string): RegisteredProject | null {
+  const normalizedPath = normalizeProjectPath(projectPath);
+  const registry = readRegistry();
+  const project = registry.projects.find((entry) => entry.path === normalizedPath);
+  return project ? normalizeProject(project) : null;
+}
+
+export function setProjectMonitoringState(
+  projectPath: string,
+  monitoringState: ProjectMonitoringState
+): RegisteredProject | null {
+  const normalizedPath = normalizeProjectPath(projectPath);
+  const registry = readRegistry();
+  const project = registry.projects.find((entry) => entry.path === normalizedPath);
+  if (!project) {
+    return null;
+  }
+
+  project.monitoringState = monitoringState;
+  project.pausedAt = monitoringState === 'paused' ? new Date().toISOString() : null;
+  project.lastSeenAt = new Date().toISOString();
+  writeRegistry(registry);
+  return normalizeProject(project);
 }

@@ -4,6 +4,7 @@ import { createServer } from 'node:net';
 const mocks = vi.hoisted(() => ({
   listProjects: vi.fn(),
   addProject: vi.fn(),
+  setProjectMonitoringState: vi.fn(),
   pickProjectDirectory: vi.fn(),
   ensureProjectInitialized: vi.fn(),
   ensureMonitoringDaemon: vi.fn(),
@@ -21,6 +22,11 @@ const mocks = vi.hoisted(() => ({
   readDashboardConfig: vi.fn(),
   writeDashboardConfig: vi.fn(),
   checkProvidersConnectivity: vi.fn(),
+  resolveDashboardPromptOverrides: vi.fn((value) => ({
+    skillCallAnalyzer: typeof value?.skillCallAnalyzer === 'string' ? value.skillCallAnalyzer.trim() : '',
+    decisionExplainer: typeof value?.decisionExplainer === 'string' ? value.decisionExplainer.trim() : '',
+    readinessProbe: typeof value?.readinessProbe === 'string' ? value.readinessProbe.trim() : '',
+  })),
   getLiteLLMCatalog: vi.fn(),
   shadowRegistry: {
     init: vi.fn(),
@@ -42,6 +48,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../../src/dashboard/projects-registry.js', () => ({
   listProjects: mocks.listProjects,
   addProject: mocks.addProject,
+  setProjectMonitoringState: mocks.setProjectMonitoringState,
 }));
 
 vi.mock('../../src/dashboard/language-state.js', () => ({
@@ -74,6 +81,7 @@ vi.mock('../../src/config/manager.js', () => ({
   readDashboardConfig: mocks.readDashboardConfig,
   writeDashboardConfig: mocks.writeDashboardConfig,
   checkProvidersConnectivity: mocks.checkProvidersConnectivity,
+  resolveDashboardPromptOverrides: mocks.resolveDashboardPromptOverrides,
 }));
 
 vi.mock('../../src/config/litellm-catalog.js', () => ({
@@ -85,8 +93,11 @@ vi.mock('../../src/core/shadow-registry/index.js', () => ({
 }));
 
 vi.mock('../../src/core/skill-version/index.js', () => ({
-  SkillVersionManager: function SkillVersionManager() {
-    return mocks.versionManager;
+  SkillVersionManager: function SkillVersionManager(...args: unknown[]) {
+    if (!mocks.SkillVersionManager.getMockImplementation()) {
+      mocks.SkillVersionManager.mockImplementation(() => mocks.versionManager);
+    }
+    return mocks.SkillVersionManager(...args);
   },
 }));
 
@@ -230,6 +241,196 @@ describe('dashboard server sse bootstrap', () => {
       expect(mocks.deployer.deploy).toHaveBeenCalledWith(
         skillId,
         expect.objectContaining({ version: 3, content: '# active v3' })
+      );
+    } finally {
+      await dashboard.stop();
+    }
+  });
+
+  it('applies the current skill content to every same-named registered skill as a one-off action', async () => {
+    const sourceProject = '/tmp/source-project';
+    const peerProject = '/tmp/peer-project';
+    const skippedProject = '/tmp/skipped-project';
+    const skillId = 'test-driven-development';
+    const runtime = 'codex';
+    const content = '# propagated skill';
+    const port = await getFreePort();
+
+    const sourceShadowRegistry = {
+      init: vi.fn(),
+      updateContent: vi.fn().mockReturnValue({ skillId, runtime }),
+    };
+    const peerShadowRegistry = {
+      init: vi.fn(),
+      updateContent: vi.fn().mockReturnValue({ skillId, runtime: 'claude' }),
+    };
+    const skippedShadowRegistry = {
+      init: vi.fn(),
+      updateContent: vi.fn().mockReturnValue({ skillId, runtime: 'opencode' }),
+    };
+
+    const sourceVersionManager = {
+      createVersion: vi.fn().mockReturnValue({
+        version: 4,
+        content,
+        metadata: {
+          version: 4,
+          createdAt: '2026-04-17T00:00:00.000Z',
+          reason: 'Manual edit from dashboard',
+          traceIds: [],
+          previousVersion: 3,
+          isDisabled: false,
+        },
+      }),
+      setVersionDisabled: vi.fn(),
+      getEffectiveVersion: vi.fn(),
+    };
+    const peerVersionManager = {
+      createVersion: vi.fn().mockReturnValue({
+        version: 9,
+        content,
+        metadata: {
+          version: 9,
+          createdAt: '2026-04-17T00:00:00.000Z',
+          reason: 'Bulk apply from dashboard',
+          traceIds: [],
+          previousVersion: 8,
+          isDisabled: false,
+        },
+      }),
+      setVersionDisabled: vi.fn(),
+      getEffectiveVersion: vi.fn(),
+    };
+
+    const sourceDeployer = {
+      deploy: vi.fn().mockReturnValue({
+        success: true,
+        deployedPath: '/tmp/source-project/.codex/skills/test-driven-development/SKILL.md',
+        version: 4,
+      }),
+    };
+    const peerDeployer = {
+      deploy: vi.fn().mockReturnValue({
+        success: true,
+        deployedPath: '/tmp/peer-project/.claude/skills/test-driven-development/SKILL.md',
+        version: 9,
+      }),
+    };
+
+    mocks.listProjects.mockReturnValue([
+      {
+        path: sourceProject,
+        name: 'source-project',
+        registeredAt: '2026-04-15T00:00:00.000Z',
+        lastSeenAt: '2026-04-15T00:00:00.000Z',
+      },
+      {
+        path: peerProject,
+        name: 'peer-project',
+        registeredAt: '2026-04-15T00:00:00.000Z',
+        lastSeenAt: '2026-04-15T00:00:00.000Z',
+      },
+      {
+        path: skippedProject,
+        name: 'skipped-project',
+        registeredAt: '2026-04-15T00:00:00.000Z',
+        lastSeenAt: '2026-04-15T00:00:00.000Z',
+      },
+    ]);
+    mocks.readSkills.mockImplementation((projectPath: string) => {
+      if (projectPath === sourceProject) {
+        return [{ skillId, runtime: 'codex' }];
+      }
+      if (projectPath === peerProject) {
+        return [{ skillId, runtime: 'claude' }];
+      }
+      if (projectPath === skippedProject) {
+        return [{ skillId, runtime: 'opencode' }];
+      }
+      return [];
+    });
+    mocks.readSkillContent.mockImplementation((projectPath: string, targetSkillId: string, targetRuntime?: string) => {
+      if (targetSkillId !== skillId) return null;
+      if (projectPath === sourceProject && targetRuntime === 'codex') return '# stale source';
+      if (projectPath === peerProject && targetRuntime === 'claude') return '# stale peer';
+      if (projectPath === skippedProject && targetRuntime === 'opencode') return content;
+      return null;
+    });
+    mocks.createShadowRegistry.mockImplementation((projectPath: string) => {
+      if (projectPath === sourceProject) return sourceShadowRegistry;
+      if (projectPath === peerProject) return peerShadowRegistry;
+      if (projectPath === skippedProject) return skippedShadowRegistry;
+      return mocks.shadowRegistry;
+    });
+    mocks.SkillVersionManager.mockImplementation((options: { projectPath: string; runtime: string }) => {
+      if (options.projectPath === sourceProject && options.runtime === 'codex') {
+        return sourceVersionManager;
+      }
+      if (options.projectPath === peerProject && options.runtime === 'claude') {
+        return peerVersionManager;
+      }
+      return mocks.versionManager;
+    });
+    mocks.createSkillDeployer.mockImplementation((options: { projectPath: string; runtime: string }) => {
+      if (options.projectPath === sourceProject && options.runtime === 'codex') {
+        return sourceDeployer;
+      }
+      if (options.projectPath === peerProject && options.runtime === 'claude') {
+        return peerDeployer;
+      }
+      return mocks.deployer;
+    });
+
+    const { createDashboardServer } = await import('../../src/dashboard/server.js');
+    const dashboard = createDashboardServer(port, 'en');
+    await dashboard.start();
+
+    try {
+      const response = await fetch(
+        `http://127.0.0.1:${port}/api/projects/${encodeURIComponent(sourceProject)}/skills/${encodeURIComponent(skillId)}/apply-to-all?runtime=${runtime}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content, runtime }),
+        }
+      );
+
+      expect(response.ok).toBe(true);
+      await expect(response.json()).resolves.toEqual({
+        ok: true,
+        skillId,
+        runtime,
+        source: {
+          saved: true,
+          version: 4,
+        },
+        totalTargets: 2,
+        updatedTargets: 1,
+        skippedTargets: 1,
+        failedTargets: 0,
+      });
+
+      expect(sourceShadowRegistry.updateContent).toHaveBeenCalledWith(skillId, content, 'codex');
+      expect(peerShadowRegistry.updateContent).toHaveBeenCalledWith(skillId, content, 'claude');
+      expect(skippedShadowRegistry.updateContent).not.toHaveBeenCalled();
+
+      expect(sourceVersionManager.createVersion).toHaveBeenCalledWith(
+        content,
+        expect.any(String),
+        []
+      );
+      expect(peerVersionManager.createVersion).toHaveBeenCalledWith(
+        content,
+        expect.any(String),
+        []
+      );
+      expect(sourceDeployer.deploy).toHaveBeenCalledWith(
+        skillId,
+        expect.objectContaining({ version: 4, content })
+      );
+      expect(peerDeployer.deploy).toHaveBeenCalledWith(
+        skillId,
+        expect.objectContaining({ version: 9, content })
       );
     } finally {
       await dashboard.stop();
@@ -504,6 +705,127 @@ describe('dashboard server sse bootstrap', () => {
     }
   });
 
+  it('pauses and resumes project monitoring through the dashboard api', async () => {
+    const projectPath = '/tmp/pauseable-project';
+    const port = await getFreePort();
+    const projects = [
+      {
+        path: projectPath,
+        name: 'pauseable-project',
+        registeredAt: '2026-04-15T00:00:00.000Z',
+        lastSeenAt: '2026-04-15T00:00:00.000Z',
+        monitoringState: 'active' as const,
+        pausedAt: null,
+      },
+    ];
+
+    mocks.listProjects.mockImplementation(() => projects.map((project) => ({ ...project })));
+    mocks.setProjectMonitoringState.mockImplementation(
+      (path: string, monitoringState: 'active' | 'paused') => {
+        const index = projects.findIndex((project) => project.path === path);
+        if (index === -1) return null;
+        projects[index] = {
+          ...projects[index],
+          monitoringState,
+          pausedAt: monitoringState === 'paused' ? '2026-04-17T09:00:00.000Z' : null,
+        };
+        return { ...projects[index] };
+      }
+    );
+    mocks.readDaemonStatus.mockReturnValue({
+      isRunning: true,
+      pid: process.pid,
+      startedAt: '2026-04-17T08:00:00.000Z',
+      processedTraces: 12,
+      lastCheckpointAt: '2026-04-17T08:30:00.000Z',
+      retryQueueSize: 0,
+      optimizationStatus: {
+        currentState: 'idle',
+        currentSkillId: null,
+        lastOptimizationAt: '2026-04-17T08:20:00.000Z',
+        lastError: null,
+        queueSize: 0,
+      },
+      monitoringState: 'active',
+      pausedAt: null,
+    });
+    mocks.readSkills.mockReturnValue([]);
+
+    const { createDashboardServer } = await import('../../src/dashboard/server.js');
+    const dashboard = createDashboardServer(port, 'en');
+    await dashboard.start();
+
+    try {
+      const pauseResponse = await fetch(
+        `http://127.0.0.1:${port}/api/projects/${encodeURIComponent(projectPath)}/monitoring`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ paused: true }),
+        }
+      );
+
+      expect(pauseResponse.ok).toBe(true);
+      await expect(pauseResponse.json()).resolves.toEqual({
+        ok: true,
+        project: expect.objectContaining({
+          path: projectPath,
+          monitoringState: 'paused',
+          pausedAt: '2026-04-17T09:00:00.000Z',
+          isPaused: true,
+          isRunning: false,
+          skillCount: 0,
+        }),
+        projects: [
+          expect.objectContaining({
+            path: projectPath,
+            monitoringState: 'paused',
+            pausedAt: '2026-04-17T09:00:00.000Z',
+            isPaused: true,
+            isRunning: false,
+            skillCount: 0,
+          }),
+        ],
+      });
+      expect(mocks.setProjectMonitoringState).toHaveBeenCalledWith(projectPath, 'paused');
+
+      const resumeResponse = await fetch(
+        `http://127.0.0.1:${port}/api/projects/${encodeURIComponent(projectPath)}/monitoring`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ paused: false }),
+        }
+      );
+
+      expect(resumeResponse.ok).toBe(true);
+      await expect(resumeResponse.json()).resolves.toEqual({
+        ok: true,
+        project: expect.objectContaining({
+          path: projectPath,
+          monitoringState: 'active',
+          pausedAt: null,
+          isPaused: false,
+          isRunning: true,
+          skillCount: 0,
+        }),
+        projects: [
+          expect.objectContaining({
+            path: projectPath,
+            monitoringState: 'active',
+            pausedAt: null,
+            isPaused: false,
+            isRunning: true,
+            skillCount: 0,
+          }),
+        ],
+      });
+      expect(mocks.setProjectMonitoringState).toHaveBeenLastCalledWith(projectPath, 'active');
+    } finally {
+      await dashboard.stop();
+    }
+  });
+
   it('serves global config from a project-independent endpoint', async () => {
     const port = await getFreePort();
     mocks.readDashboardConfig.mockResolvedValue({
@@ -588,6 +910,11 @@ describe('dashboard server sse bootstrap', () => {
               maxConcurrentRequests: 1,
               maxEstimatedTokensPerWindow: 16000,
             },
+            promptOverrides: {
+              skillCallAnalyzer: 'Return strict JSON.',
+              decisionExplainer: 'Stay concise.',
+              readinessProbe: 'Delay until stable evidence appears.',
+            },
             providers: [
               {
                 provider: 'deepseek',
@@ -608,6 +935,11 @@ describe('dashboard server sse bootstrap', () => {
           maxRequestsPerWindow: 7,
           maxConcurrentRequests: 1,
           maxEstimatedTokensPerWindow: 16000,
+        },
+        promptOverrides: {
+          skillCallAnalyzer: 'Return strict JSON.',
+          decisionExplainer: 'Stay concise.',
+          readinessProbe: 'Delay until stable evidence appears.',
         },
       }));
     } finally {

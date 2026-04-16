@@ -76,9 +76,26 @@ export function getDashboardHtml(_port: number, lang: Language = 'en', buildId =
   }
   .project-item:hover { background: var(--bg2); }
   .project-item.active { background: var(--bg2); border-left-color: var(--blue); }
-  .project-name { font-size: 12px; font-weight: 500; display: flex; align-items: center; gap: 6px; }
+  .project-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .project-name { font-size: 12px; font-weight: 500; display: flex; align-items: center; gap: 6px; min-width: 0; flex: 1; }
+  .project-name span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .project-path { font-size: 10px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .project-meta { font-size: 10px; color: var(--muted); }
+  .project-monitor-btn {
+    font-family: var(--font); font-size: 10px; line-height: 1;
+    padding: 4px 8px; border-radius: 999px;
+    border: 1px solid rgba(88,166,255,.35); background: rgba(88,166,255,.08); color: var(--blue);
+    cursor: pointer; transition: border-color .15s, color .15s, background .15s;
+    flex-shrink: 0;
+  }
+  .project-monitor-btn:hover { border-color: var(--blue); background: rgba(88,166,255,.14); }
+  .project-monitor-btn.resume {
+    border-color: rgba(63,185,80,.35);
+    background: rgba(63,185,80,.08);
+    color: var(--green);
+  }
+  .project-monitor-btn.resume:hover { border-color: var(--green); background: rgba(63,185,80,.14); }
+  .project-monitor-btn:disabled { opacity: .6; cursor: not-allowed; }
   .sidebar-add {
     padding: 8px 12px; border-top: 1px solid var(--border);
     display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--muted);
@@ -702,7 +719,8 @@ export function getDashboardHtml(_port: number, lang: Language = 'en', buildId =
     resize: none; outline: none;
   }
   .modal-editor:focus { border-color: var(--blue); }
-  .modal-actions { display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+  .modal-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-shrink: 0; }
+  .modal-action-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
   .modal-save-hint { font-size: 10px; color: var(--muted); }
   .btn-primary {
     font-family: var(--font); font-size: 11px; padding: 5px 12px; border-radius: 4px;
@@ -710,6 +728,28 @@ export function getDashboardHtml(_port: number, lang: Language = 'en', buildId =
     cursor: pointer; transition: opacity .1s;
   }
   .btn-primary:disabled { opacity: .6; cursor: not-allowed; }
+  .confirm-copy { display: flex; flex-direction: column; gap: 8px; font-size: 11px; line-height: 1.6; color: var(--text); }
+  .confirm-copy strong { color: var(--text); font-weight: 600; }
+  .confirm-copy p { margin: 0; }
+  .confirm-copy-note {
+    font-size: 10px;
+    color: var(--muted);
+    border: 1px solid rgba(88,166,255,.24);
+    background: rgba(88,166,255,.08);
+    border-radius: 6px;
+    padding: 8px 10px;
+  }
+  #applyAllSkillModal .modal {
+    width: min(640px, calc(100vw - 32px));
+    height: auto;
+    max-height: calc(100vh - 48px);
+  }
+  #applyAllSkillModal .modal-body {
+    grid-template-columns: 1fr;
+  }
+  #applyAllSkillModal .modal-content {
+    border-right: none;
+  }
   .modal-history { padding: 12px; overflow-y: auto; }
   .modal-history h4 { font-size: 10px; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; letter-spacing: .06em; }
   .version-item {
@@ -722,6 +762,8 @@ export function getDashboardHtml(_port: number, lang: Language = 'en', buildId =
   .version-num { font-size: 11px; font-weight: 500; }
   .version-meta { font-size: 10px; color: var(--muted); margin-top: 3px; }
   .version-change { display: inline-block; font-size: 9px; padding: 1px 5px; border-radius: 8px; margin-top: 3px; background: rgba(88,166,255,.1); color: var(--blue); }
+  .version-scope-link { border: 0; cursor: pointer; font-family: inherit; line-height: 1.35; }
+  .version-scope-link:hover { background: rgba(88,166,255,.16); color: #79c0ff; }
   .version-flags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
   .version-flag {
     display: inline-flex; align-items: center; font-size: 9px; line-height: 1;
@@ -951,12 +993,38 @@ export function getDashboardHtml(_port: number, lang: Language = 'en', buildId =
         <textarea id="modalContent" class="modal-editor" spellcheck="false">${t.modalLoading}</textarea>
         <div class="modal-actions">
           <span id="modalSaveHint" class="modal-save-hint"></span>
-          <button id="modalSaveBtn" class="btn-primary" onclick="saveCurrentSkill()">${lang === 'zh' ? '保存' : 'Save'}</button>
+          <div class="modal-action-group">
+            <button id="modalApplyAllBtn" class="btn-secondary" onclick="openApplyToAllSkillModal()">${t.modalApplyAllButton}</button>
+            <button id="modalSaveBtn" class="btn-primary" onclick="saveCurrentSkill()">${t.modalSave}</button>
+          </div>
         </div>
       </div>
       <div class="modal-history">
         <h4>${t.modalVersionHistory}</h4>
         <div id="versionList"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="applyAllSkillModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">
+        <span id="applyAllConfirmTitle">${t.modalApplyAllTitle}</span>
+      </div>
+      <button class="modal-close" onclick="closeApplyToAllSkillModal()">✕ ${t.modalClose}</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-content">
+        <div id="applyAllConfirmBody" class="confirm-copy"></div>
+        <div class="modal-actions">
+          <span></span>
+          <div class="modal-action-group">
+            <button id="applyAllCancelBtn" class="btn-secondary" onclick="closeApplyToAllSkillModal()">${t.modalApplyAllCancel}</button>
+            <button id="applyAllConfirmBtn" class="btn-primary" onclick="confirmApplyCurrentSkillToAll()">${t.modalApplyAllConfirm}</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -1047,6 +1115,19 @@ async function switchLang(lang) {
   });
   const modalHistoryTitleEl = document.querySelector('.modal-history h4');
   if (modalHistoryTitleEl) modalHistoryTitleEl.textContent = t('modalVersionHistory');
+  const modalSaveBtnEl = document.getElementById('modalSaveBtn');
+  if (modalSaveBtnEl) modalSaveBtnEl.textContent = t('modalSave');
+  const modalApplyAllBtnEl = document.getElementById('modalApplyAllBtn');
+  if (modalApplyAllBtnEl) modalApplyAllBtnEl.textContent = t('modalApplyAllButton');
+  const applyAllTitleEl = document.getElementById('applyAllConfirmTitle');
+  if (applyAllTitleEl) applyAllTitleEl.textContent = t('modalApplyAllTitle');
+  const applyAllCancelBtnEl = document.getElementById('applyAllCancelBtn');
+  if (applyAllCancelBtnEl) applyAllCancelBtnEl.textContent = t('modalApplyAllCancel');
+  const applyAllConfirmBtnEl = document.getElementById('applyAllConfirmBtn');
+  if (applyAllConfirmBtnEl) applyAllConfirmBtnEl.textContent = t('modalApplyAllConfirm');
+  if (document.getElementById('applyAllSkillModal')?.classList.contains('visible')) {
+    renderApplyToAllConfirmation();
+  }
   const eventModalTitleEl = document.getElementById('eventModalTitle');
   if (eventModalTitleEl) eventModalTitleEl.textContent = t('activityDetailTitle');
   // Re-render dynamic content
@@ -1065,6 +1146,7 @@ const state = {
   allLogs: [],
   logFilter: 'ALL',
   configByProject: {},
+  monitoringMutationByProject: {},
   currentSkillId: null,
   selectedRuntimeTab: 'all',
   searchQuery: '',
@@ -1101,6 +1183,29 @@ function getSkillVersionContextKey(encProject, encSkill, encRuntime) {
   return String(encProject) + '::' + String(encSkill) + '::' + String(encRuntime);
 }
 
+function getVersionActivityScopeId(meta) {
+  return meta && typeof meta.activityScopeId === 'string' && meta.activityScopeId.trim()
+    ? meta.activityScopeId.trim()
+    : '';
+}
+
+function renderVersionReasonTag(encProject, meta) {
+  if (!meta?.reason) return '';
+  const fullReason = String(meta.reason);
+  const reasonText = escHtml(fullReason.slice(0, 40));
+  const scopeId = getVersionActivityScopeId(meta);
+  if (scopeId) {
+    return '<br><button class="version-change version-scope-link" type="button" title="' + escHtml(fullReason) + '" onclick="openVersionScopeDetail(\\'' + encProject + '\\',\\'' + escJsStr(scopeId) + '\\');event.stopPropagation()">' + reasonText + '</button>';
+  }
+  return '<br><span class="version-change">' + reasonText + '</span>';
+}
+
+function renderVersionMetaHtml(encProject, meta) {
+  if (!meta) return t('modalClickToLoad');
+  const createdAt = meta?.createdAt?.slice(0, 10) ?? '';
+  return '<span>' + createdAt + '</span>' + renderVersionReasonTag(encProject, meta);
+}
+
 function renderVersionHistory(encProject, encSkill, encRuntime) {
   const versionList = document.getElementById('versionList');
   if (!versionList) return;
@@ -1117,11 +1222,7 @@ function renderVersionHistory(encProject, encSkill, encRuntime) {
     const meta = metaByVersion[v];
     const isDisabled = !!meta?.isDisabled;
     const isEffective = !isDisabled && v === effectiveVersion;
-    const createdAt = meta?.createdAt?.slice(0, 10) ?? '';
-    const reason = meta?.reason ? escHtml(meta.reason.slice(0, 40)) : '';
-    const metaHtml = meta
-      ? '<span>' + createdAt + '</span>' + (reason ? '<br><span class="version-change">' + reason + '</span>' : '')
-      : t('modalClickToLoad');
+    const metaHtml = renderVersionMetaHtml(encProject, meta);
     const flags = []
       .concat(isEffective ? ['<span class="version-flag effective">' + t('modalEffective') + '</span>'] : [])
       .concat(isDisabled ? ['<span class="version-flag invalid">' + t('modalInvalid') + '</span>'] : [])
@@ -1308,11 +1409,14 @@ function buildEmptyProjectData() {
   return {
     daemon: {
       isRunning: false,
+      isPaused: false,
       pid: null,
       startedAt: null,
       processedTraces: 0,
       lastCheckpointAt: null,
       retryQueueSize: 0,
+      monitoringState: 'active',
+      pausedAt: null,
       optimizationStatus: {
         currentState: 'idle',
         currentSkillId: null,
@@ -1486,6 +1590,12 @@ const DEFAULT_LLM_SAFETY_CONFIG = {
   maxEstimatedTokensPerWindow: 48000,
 };
 
+const DEFAULT_PROMPT_OVERRIDES = {
+  skillCallAnalyzer: '',
+  decisionExplainer: '',
+  readinessProbe: '',
+};
+
 function parsePositiveInteger(value, fallback) {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
@@ -1511,6 +1621,15 @@ function sanitizeLLMSafetyForState(safety) {
   };
 }
 
+function sanitizePromptOverridesForState(promptOverrides) {
+  const raw = promptOverrides && typeof promptOverrides === 'object' ? promptOverrides : {};
+  return {
+    skillCallAnalyzer: typeof raw.skillCallAnalyzer === 'string' ? raw.skillCallAnalyzer : DEFAULT_PROMPT_OVERRIDES.skillCallAnalyzer,
+    decisionExplainer: typeof raw.decisionExplainer === 'string' ? raw.decisionExplainer : DEFAULT_PROMPT_OVERRIDES.decisionExplainer,
+    readinessProbe: typeof raw.readinessProbe === 'string' ? raw.readinessProbe : DEFAULT_PROMPT_OVERRIDES.readinessProbe,
+  };
+}
+
 function collectLLMSafetyFromConfigEditor(fallbackSafety) {
   const safeFallback = sanitizeLLMSafetyForState(fallbackSafety);
   const enabledEl = document.getElementById('cfg_llm_safety_enabled');
@@ -1529,6 +1648,23 @@ function collectLLMSafetyFromConfigEditor(fallbackSafety) {
     maxRequestsPerWindow: requestEl.value,
     maxConcurrentRequests: concurrentEl.value,
     maxEstimatedTokensPerWindow: tokenEl.value,
+  });
+}
+
+function collectPromptOverridesFromConfigEditor(fallbackPromptOverrides) {
+  const safeFallback = sanitizePromptOverridesForState(fallbackPromptOverrides);
+  const analyzerEl = document.getElementById('cfg_prompt_skill_call_analyzer');
+  const explainerEl = document.getElementById('cfg_prompt_decision_explainer');
+  const readinessEl = document.getElementById('cfg_prompt_readiness_probe');
+
+  if (!analyzerEl || !explainerEl || !readinessEl) {
+    return safeFallback;
+  }
+
+  return sanitizePromptOverridesForState({
+    skillCallAnalyzer: analyzerEl.value,
+    decisionExplainer: explainerEl.value,
+    readinessProbe: readinessEl.value,
   });
 }
 
@@ -1641,6 +1777,12 @@ async function init() {
 }
 
 // ─── Sidebar ─────────────────────────────────────────────────────────────────
+function isProjectMonitoringPaused(project, projectData) {
+  if (projectData?.daemon?.isPaused === true) return true;
+  if (projectData?.daemon?.monitoringState === 'paused') return true;
+  return project?.isPaused === true || project?.monitoringState === 'paused';
+}
+
 function renderSidebar() {
   const list = document.getElementById('projectList');
   if (state.projects.length === 0) {
@@ -1650,17 +1792,41 @@ function renderSidebar() {
   list.innerHTML = state.projects.map(p => {
     const pd = state.projectData[p.path];
     const useCachedSnapshot = !!pd && !state.staleProjectData[p.path];
+    const paused = useCachedSnapshot ? isProjectMonitoringPaused(p, pd) : (p.isPaused === true || p.monitoringState === 'paused');
     const running = useCachedSnapshot ? (pd?.daemon?.isRunning ?? p.isRunning) : p.isRunning;
     const skills = useCachedSnapshot ? (pd?.skills?.length ?? p.skillCount ?? 0) : (p.skillCount ?? 0);
-    const dotClass = running === undefined ? 'dot-gray' : running ? 'dot-green' : 'dot-red';
-    const statusText = running === undefined ? '' : running ? '● ' + t('sidebarRunning') : '○ ' + t('sidebarStopped');
-    const statusColor = running === undefined ? 'color:var(--muted)' : running ? 'color:var(--green)' : 'color:var(--muted)';
+    const dotClass = paused ? 'dot-yellow' : running === undefined ? 'dot-gray' : running ? 'dot-green' : 'dot-red';
+    const statusText = paused
+      ? '|| ' + t('sidebarPaused')
+      : running === undefined
+        ? ''
+        : running
+          ? '● ' + t('sidebarRunning')
+          : '○ ' + t('sidebarStopped');
+    const statusColor = paused
+      ? 'color:var(--yellow)'
+      : running === undefined
+        ? 'color:var(--muted)'
+        : running
+          ? 'color:var(--green)'
+          : 'color:var(--muted)';
     const active = state.selectedProjectId === p.path ? 'active' : '';
     const skillsText = skills > 0 ? ' · ' + skills + ' ' + t('sidebarSkills') : '';
+    const monitorBusy = !!state.monitoringMutationByProject[p.path];
+    const buttonLabel = paused ? t('sidebarResume') : t('sidebarPause');
+    const buttonClass = paused ? 'project-monitor-btn resume' : 'project-monitor-btn';
     return \`<div class="project-item \${active}" onclick="selectProject('\${escJsStr(p.path)}')">
-      <div class="project-name">
-        <span class="dot \${dotClass}"></span>
-        <span>\${escHtml(p.name)}</span>
+      <div class="project-top">
+        <div class="project-name">
+          <span class="dot \${dotClass}"></span>
+          <span>\${escHtml(p.name)}</span>
+        </div>
+        <button
+          class="\${buttonClass}"
+          type="button"
+          \${monitorBusy ? 'disabled' : ''}
+          onclick="event.stopPropagation();toggleProjectMonitoring('\${escJsStr(p.path)}', \${paused ? 'false' : 'true'})"
+        >\${buttonLabel}</button>
       </div>
       <div class="project-path" title="\${escHtml(p.path)}">\${escHtml(p.path)}</div>
       <div class="project-meta" style="\${statusColor}">\${statusText}\${skillsText}</div>
@@ -1684,6 +1850,54 @@ async function selectProject(path) {
     void loadProviderCatalog();
   }
   renderSidebar();
+}
+
+async function toggleProjectMonitoring(projectPath, paused) {
+  if (!projectPath) return;
+  if (state.monitoringMutationByProject[projectPath]) return;
+
+  state.monitoringMutationByProject[projectPath] = true;
+  renderSidebar();
+
+  try {
+    const encProject = encodeURIComponent(projectPath);
+    const data = await fetchJsonWithTimeout('/api/projects/' + encProject + '/monitoring', 10000, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paused: !!paused }),
+    });
+
+    if (Array.isArray(data.projects)) {
+      state.projects = data.projects;
+    } else {
+      state.projects = state.projects.map((project) => {
+        if (project.path !== projectPath) return project;
+        return {
+          ...project,
+          monitoringState: paused ? 'paused' : 'active',
+          pausedAt: paused ? new Date().toISOString() : null,
+          isPaused: !!paused,
+          isRunning: !paused,
+        };
+      });
+    }
+
+    if (state.projectData[projectPath] || state.selectedProjectId === projectPath) {
+      await loadProjectSnapshot(projectPath, { force: true });
+    }
+  } catch (error) {
+    console.warn('[dashboard] failed to toggle project monitoring', {
+      projectPath,
+      paused: !!paused,
+      error: String(error),
+    });
+  } finally {
+    delete state.monitoringMutationByProject[projectPath];
+    renderSidebar();
+    if (state.selectedProjectId === projectPath) {
+      safeRenderMainPanel(projectPath, 'toggleProjectMonitoring');
+    }
+  }
 }
 
 function ensureConfigTabDependencies(projectPath) {
@@ -2046,8 +2260,8 @@ function normalizeBusinessDetailForCompare(value) {
   const candidate = typeof value === 'string' ? value.trim() : '';
   if (!candidate) return '';
   return candidate
-    .replace(/^(窗口分析结论|分析结论|Window Analysis Conclusion|Analysis Conclusion)[:：]\s*/iu, '')
-    .replace(/\s+/g, ' ')
+    .replace(/^(窗口分析结论|分析结论|Window Analysis Conclusion|Analysis Conclusion)[:：]\\s*/iu, '')
+    .replace(/\\s+/g, ' ')
     .trim();
 }
 
@@ -2650,28 +2864,32 @@ async function copyActivityDetail(projectPath, rowId) {
   }
 }
 
+async function openActivityScopeDetail(projectPath, scopeId, fallbackSkillId = '—') {
+  document.getElementById('eventModalTitle').textContent = fallbackSkillId + ' · ' + t('activityScopeTimelineTitle');
+  setEventModalContentHtml('<pre class="activity-detail-text">' + escHtml(t('activityScopeDetailLoading')) + '</pre>');
+  document.getElementById('eventModal').classList.add('visible');
+  try {
+    const detail = await fetchActivityScopeDetail(projectPath, scopeId);
+    if (!detail) {
+      setEventModalContentHtml('<pre class="activity-detail-text">' + escHtml(t('activityDetailEmpty')) + '</pre>');
+      return;
+    }
+    document.getElementById('eventModalTitle').textContent = (detail.skillId || fallbackSkillId || '—') + ' · ' + t('activityScopeTimelineTitle');
+    setEventModalContentHtml(renderActivityScopeDetail(detail));
+  } catch (error) {
+    console.warn('[dashboard] failed to load activity scope detail', {
+      projectPath,
+      scopeId,
+      error: String(error),
+    });
+    setEventModalContentHtml('<pre class="activity-detail-text">' + escHtml(t('activityScopeDetailLoadFailed') + ' ' + String(error)) + '</pre>');
+  }
+}
+
 async function openActivityDetail(projectPath, rowId) {
   const row = getActivityRow(projectPath, rowId);
   if (isScopeActivityRow(row)) {
-    document.getElementById('eventModalTitle').textContent = (row.skillId || '—') + ' · ' + t('activityScopeTimelineTitle');
-    setEventModalContentHtml('<pre class="activity-detail-text">' + escHtml(t('activityScopeDetailLoading')) + '</pre>');
-    document.getElementById('eventModal').classList.add('visible');
-    try {
-      const detail = await fetchActivityScopeDetail(projectPath, row.scopeId);
-      if (!detail) {
-        setEventModalContentHtml('<pre class="activity-detail-text">' + escHtml(t('activityDetailEmpty')) + '</pre>');
-        return;
-      }
-      setEventModalContentHtml(renderActivityScopeDetail(detail));
-    } catch (error) {
-      console.warn('[dashboard] failed to load activity scope detail', {
-        projectPath,
-        scopeId: row.scopeId,
-        error: String(error),
-      });
-      setEventModalContentHtml('<pre class="activity-detail-text">' + escHtml(t('activityScopeDetailLoadFailed') + ' ' + String(error)) + '</pre>');
-    }
-    return;
+    return openActivityScopeDetail(projectPath, row.scopeId, row.skillId || '—');
   }
 
   document.getElementById('eventModalTitle').textContent = row
@@ -2679,6 +2897,11 @@ async function openActivityDetail(projectPath, rowId) {
     : t('activityDetailTitle');
   setEventModalContentHtml('<pre class="activity-detail-text">' + escHtml(buildActivityDetail(row)) + '</pre>');
   document.getElementById('eventModal').classList.add('visible');
+}
+
+async function openVersionScopeDetail(encProject, scopeId) {
+  if (!scopeId) return;
+  return openActivityScopeDetail(decodeURIComponent(encProject), scopeId);
 }
 
 function closeEventModal() {
@@ -3208,7 +3431,23 @@ function renderMainPanel(projectPath) {
     bySkill: {},
   };
 
-  const uptime = daemon.isRunning && daemon.startedAt ? formatUptime(daemon.startedAt) : '—';
+  const monitoringPaused = daemon.isPaused === true || daemon.monitoringState === 'paused';
+  const daemonRunning = !monitoringPaused && !!daemon.isRunning;
+  const daemonStatusText = monitoringPaused
+    ? t('daemonPaused')
+    : daemonRunning
+      ? t('daemonRunning')
+      : t('daemonStopped');
+  const daemonStatusDot = monitoringPaused
+    ? 'dot dot-yellow'
+    : daemonRunning
+      ? 'dot dot-green'
+      : 'dot dot-gray';
+  const uptime = daemonRunning && daemon.startedAt ? formatUptime(daemon.startedAt) : '—';
+  const optimizationQueueSize = monitoringPaused ? 0 : (daemon.optimizationStatus?.queueSize ?? 0);
+  const renderedDaemonState = renderStateBadge(
+    monitoringPaused ? 'idle' : daemon.optimizationStatus?.currentState
+  );
 
   el.innerHTML = \`<div class="panel-inner">
     <div class="main-tabs">
@@ -3237,11 +3476,11 @@ function renderMainPanel(projectPath) {
       <div class="stat-card">
         <div class="stat-label">\${t('statUptime')}</div>
         <div class="stat-value" style="font-size:15px">\${uptime}</div>
-        <div class="stat-sub">\${daemon.isRunning ? t('daemonRunning') : t('daemonStopped')}</div>
+        <div class="stat-sub">\${daemonStatusText}</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">\${t('statQueue')}</div>
-        <div class="stat-value">\${daemon.optimizationStatus?.queueSize ?? 0}</div>
+        <div class="stat-value">\${optimizationQueueSize}</div>
         <div class="stat-sub">\${t('statQueueSub')}</div>
       </div>
       <div class="stat-card">
@@ -3254,19 +3493,19 @@ function renderMainPanel(projectPath) {
     <div class="card">
       <div class="card-header">
         <span>\${t('daemonStatus')}</span>
-        <span>\${daemon.isRunning ? '<span class="dot dot-green"></span> ' + t('daemonRunning') : '<span class="dot dot-gray"></span> ' + t('daemonStopped')}</span>
+        <span><span class="\${daemonStatusDot}"></span> \${daemonStatusText}</span>
       </div>
       <div class="card-body">
         <div class="daemon-grid">
           <div>
-            <div class="daemon-row"><span class="daemon-key">\${t('daemonState')}</span><span class="daemon-val">\${renderStateBadge(daemon.optimizationStatus?.currentState)}</span></div>
-            <div class="daemon-row"><span class="daemon-key">\${t('daemonCurrentSkill')}</span><span class="daemon-val">\${daemon.optimizationStatus?.currentSkillId ?? '—'}</span></div>
-            <div class="daemon-row"><span class="daemon-key">\${t('daemonRetryQueue')}</span><span class="daemon-val">\${daemon.retryQueueSize ?? 0}</span></div>
+            <div class="daemon-row"><span class="daemon-key">\${t('daemonState')}</span><span class="daemon-val">\${renderedDaemonState}</span></div>
+            <div class="daemon-row"><span class="daemon-key">\${t('daemonCurrentSkill')}</span><span class="daemon-val">\${monitoringPaused ? '—' : (daemon.optimizationStatus?.currentSkillId ?? '—')}</span></div>
+            <div class="daemon-row"><span class="daemon-key">\${t('daemonRetryQueue')}</span><span class="daemon-val">\${monitoringPaused ? 0 : (daemon.retryQueueSize ?? 0)}</span></div>
           </div>
           <div>
             <div class="daemon-row"><span class="daemon-key">\${t('daemonLastCheckpoint')}</span><span class="daemon-val">\${daemon.lastCheckpointAt ? timeAgo(daemon.lastCheckpointAt) : '—'}</span></div>
             <div class="daemon-row"><span class="daemon-key">\${t('daemonLastOptimization')}</span><span class="daemon-val">\${daemon.optimizationStatus?.lastOptimizationAt ? timeAgo(daemon.optimizationStatus.lastOptimizationAt) : '—'}</span></div>
-            \${daemon.optimizationStatus?.lastError ? \`<div class="daemon-row"><span class="daemon-key" style="color:var(--red)">\${t('daemonLastError')}</span><span class="daemon-val" style="color:var(--red);font-size:10px">\${escHtml(daemon.optimizationStatus.lastError)}</span></div>\` : ''}
+            \${!monitoringPaused && daemon.optimizationStatus?.lastError ? \`<div class="daemon-row"><span class="daemon-key" style="color:var(--red)">\${t('daemonLastError')}</span><span class="daemon-val" style="color:var(--red);font-size:10px">\${escHtml(daemon.optimizationStatus.lastError)}</span></div>\` : ''}
           </div>
         </div>
       </div>
@@ -3533,6 +3772,7 @@ function renderConfigPanel(projectPath) {
     userConfirm: false,
     runtimeSync: true,
     llmSafety: DEFAULT_LLM_SAFETY_CONFIG,
+    promptOverrides: DEFAULT_PROMPT_OVERRIDES,
     defaultProvider: '',
     logLevel: 'info',
     providers: [],
@@ -3543,6 +3783,7 @@ function renderConfigPanel(projectPath) {
 
   const providers = Array.isArray(config.providers) ? config.providers : [];
   const llmSafety = sanitizeLLMSafetyForState(config.llmSafety);
+  const promptOverrides = sanitizePromptOverridesForState(config.promptOverrides);
   const activeProviderIndex = getActiveProviderIndex(config.defaultProvider, providers);
   const rowsHtml = providers.length > 0
     ? providers.map((row, index) => renderProviderRow(projectPath, row, index, activeProviderIndex)).join('')
@@ -3588,6 +3829,24 @@ function renderConfigPanel(projectPath) {
         <label>
           <div class="config-label">\${t('configLlmSafetyTokensLabel')}</div>
           <input id="cfg_llm_safety_max_tokens" class="config-input" type="number" min="1" step="1000" value="\${escHtml(String(llmSafety.maxEstimatedTokensPerWindow))}" oninput="scheduleProjectConfigSave(500)" />
+        </label>
+      </div>
+    </div>
+    <div class="config-field" style="margin-top:14px">
+      <label class="config-label">\${t('configPromptOverridesLabel')}</label>
+      <div class="config-help">\${t('configPromptOverridesHelp')}</div>
+      <div style="display:grid;gap:10px;margin-top:8px">
+        <label>
+          <div class="config-label">\${t('configPromptSkillCallAnalyzerLabel')}</div>
+          <textarea id="cfg_prompt_skill_call_analyzer" class="config-textarea" rows="5" placeholder="\${escHtml(t('configPromptSkillCallAnalyzerPlaceholder'))}" oninput="scheduleProjectConfigSave(500)">\${escHtml(promptOverrides.skillCallAnalyzer)}</textarea>
+        </label>
+        <label>
+          <div class="config-label">\${t('configPromptDecisionExplainerLabel')}</div>
+          <textarea id="cfg_prompt_decision_explainer" class="config-textarea" rows="4" placeholder="\${escHtml(t('configPromptDecisionExplainerPlaceholder'))}" oninput="scheduleProjectConfigSave(500)">\${escHtml(promptOverrides.decisionExplainer)}</textarea>
+        </label>
+        <label>
+          <div class="config-label">\${t('configPromptReadinessProbeLabel')}</div>
+          <textarea id="cfg_prompt_readiness_probe" class="config-textarea" rows="4" placeholder="\${escHtml(t('configPromptReadinessProbePlaceholder'))}" oninput="scheduleProjectConfigSave(500)">\${escHtml(promptOverrides.readinessProbe)}</textarea>
         </label>
       </div>
     </div>
@@ -3989,6 +4248,7 @@ async function ensureProjectConfig(projectPath) {
     state.configByProject[scopeId] = {
       ...(data.config || {}),
       llmSafety: sanitizeLLMSafetyForState(data?.config?.llmSafety),
+      promptOverrides: sanitizePromptOverridesForState(data?.config?.promptOverrides),
       providers: sanitizeProvidersForState(data?.config?.providers),
     };
     state.configLoadErrorByProject[scopeId] = '';
@@ -4023,6 +4283,7 @@ async function saveProjectConfig(options = {}) {
     const providers = collectProvidersFromConfigEditor();
     const currentConfig = getStoredConfig(projectPath) || {};
     const llmSafety = collectLLMSafetyFromConfigEditor(currentConfig.llmSafety);
+    const promptOverrides = collectPromptOverridesFromConfigEditor(currentConfig.promptOverrides);
     const selectedProviderIndex = getSelectedProviderIndexFromEditor(
       providers.length,
       currentConfig.defaultProvider,
@@ -4034,6 +4295,7 @@ async function saveProjectConfig(options = {}) {
         userConfirm: false,
         runtimeSync: true,
         llmSafety,
+        promptOverrides,
         defaultProvider: selectedProviderIndex >= 0 ? (providers[selectedProviderIndex]?.provider || '') : '',
         logLevel: currentConfig.logLevel || 'info',
         providers,
@@ -4047,6 +4309,7 @@ async function saveProjectConfig(options = {}) {
     state.configByProject[scopeId] = {
       ...payload.config,
       llmSafety: sanitizeLLMSafetyForState(payload.config.llmSafety),
+      promptOverrides: sanitizePromptOverridesForState(payload.config.promptOverrides),
       providers: sanitizeProvidersForState(payload.config.providers),
     };
     updateConfigSaveHint(projectPath, auto ? t('configAutoSaved') : t('configSaved'));
@@ -4332,6 +4595,9 @@ async function viewSkill(projectPath, skillId, runtime = 'codex') {
   document.getElementById('modalSkillName').textContent = \`\${skillId} (\${runtime})\`;
   document.getElementById('modalSaveHint').textContent = '';
   document.getElementById('modalSaveBtn').disabled = false;
+  document.getElementById('modalSaveBtn').textContent = t('modalSave');
+  document.getElementById('modalApplyAllBtn').disabled = false;
+  document.getElementById('modalApplyAllBtn').textContent = t('modalApplyAllButton');
 
   // Look up skill in state
   const pd = state.projectData[projectPath];
@@ -4388,9 +4654,7 @@ async function loadVersionMeta(encProject, encSkill, encRuntime, version) {
     renderVersionHistory(encProject, encSkill, encRuntime);
     const el = document.getElementById(\`vmeta_\${version}\`);
     if (el && data.metadata) {
-      const m = data.metadata;
-      el.innerHTML = \`<span>\${m.createdAt?.slice(0,10) ?? ''}</span>
-        \${m.reason ? \`<br><span class="version-change">\${escHtml(m.reason.slice(0,40))}</span>\` : ''}\`;
+      el.innerHTML = renderVersionMetaHtml(encProject, data.metadata);
     }
   } catch (e) {
     console.warn('[dashboard] failed to load version metadata', { encProject, encSkill, version, error: String(e) });
@@ -4468,22 +4732,97 @@ async function toggleSkillVersionDisabled(encProject, encSkill, encRuntime, vers
   }
 }
 
+function renderApplyToAllConfirmation() {
+  const titleEl = document.getElementById('applyAllConfirmTitle');
+  const bodyEl = document.getElementById('applyAllConfirmBody');
+  if (!titleEl || !bodyEl) return;
+  const skillId = state.currentSkillId || '—';
+  const runtime = state.currentSkillRuntime || 'codex';
+  titleEl.textContent = t('modalApplyAllTitle');
+  bodyEl.innerHTML =
+    '<p><strong>' + escHtml(skillId) + ' (' + escHtml(runtime) + ')</strong></p>' +
+    '<p>' + escHtml(t('modalApplyAllSavingLine')) + '</p>' +
+    '<p>' + escHtml(t('modalApplyAllTargetsLine')) + '</p>' +
+    '<div class="confirm-copy-note">' + escHtml(t('modalApplyAllOneOffLine')) + '</div>';
+}
+
+function openApplyToAllSkillModal() {
+  if (!state.selectedProjectId || !state.currentSkillId) return;
+  renderApplyToAllConfirmation();
+  document.getElementById('applyAllSkillModal').classList.add('visible');
+}
+
+function closeApplyToAllSkillModal() {
+  document.getElementById('applyAllSkillModal').classList.remove('visible');
+}
+
+function formatApplyToAllSummary(data) {
+  const updated = Number(data?.updatedTargets ?? 0);
+  const skipped = Number(data?.skippedTargets ?? 0);
+  const failed = Number(data?.failedTargets ?? 0);
+  if (currentLang === 'zh') {
+    const parts = [
+      t('modalApplyAllSummaryPrefix'),
+      String(updated) + t('modalApplyAllSummaryUpdated'),
+      '，',
+      String(skipped) + t('modalApplyAllSummarySkipped'),
+    ];
+    if (failed > 0) {
+      parts.push('，', String(failed) + t('modalApplyAllSummaryFailed'));
+    }
+    return parts.join('');
+  }
+
+  const parts = [
+    t('modalApplyAllSummaryPrefix'),
+    ' ',
+    String(updated),
+    ' ',
+    t('modalApplyAllSummaryUpdated'),
+    ', ',
+    String(skipped),
+    ' ',
+    t('modalApplyAllSummarySkipped'),
+  ];
+  if (failed > 0) {
+    parts.push(', ', String(failed), ' ', t('modalApplyAllSummaryFailed'));
+  }
+  return parts.join('');
+}
+
+async function refreshCurrentSkillModal(runtime, successHint = '') {
+  if (!state.selectedProjectId || !state.currentSkillId) return;
+  const snapshot = await loadProjectSnapshot(state.selectedProjectId, { force: true });
+  if (snapshot && state.selectedMainTab === 'skills') {
+    updateSkillsList();
+  }
+  await viewSkill(state.selectedProjectId, state.currentSkillId, runtime);
+  const hintEl = document.getElementById('modalSaveHint');
+  if (hintEl && successHint) {
+    hintEl.textContent = successHint;
+  }
+}
+
 async function saveCurrentSkill() {
   if (!state.selectedProjectId || !state.currentSkillId) return;
 
   const saveBtn = document.getElementById('modalSaveBtn');
+  const applyAllBtn = document.getElementById('modalApplyAllBtn');
   const hintEl = document.getElementById('modalSaveHint');
   const contentEl = document.getElementById('modalContent');
   const content = contentEl?.value ?? '';
   const runtime = state.currentSkillRuntime || 'codex';
 
   saveBtn.disabled = true;
+  if (applyAllBtn) {
+    applyAllBtn.disabled = true;
+  }
   hintEl.textContent = t('modalSaving');
 
   try {
     const encProject = encodeURIComponent(state.selectedProjectId);
     const encSkill = encodeURIComponent(state.currentSkillId);
-    const r = await fetch(\`/api/projects/\${encProject}/skills/\${encSkill}?runtime=\${encodeURIComponent(runtime)}\`, {
+    const data = await fetchJsonWithTimeout(\`/api/projects/\${encProject}/skills/\${encSkill}?runtime=\${encodeURIComponent(runtime)}\`, 12000, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -4492,19 +4831,10 @@ async function saveCurrentSkill() {
         reason: t('modalManualEditReason'),
       }),
     });
-    if (!r.ok) {
-      throw new Error(\`HTTP \${r.status}: \${r.statusText}\`);
-    }
-    const data = await r.json();
-    hintEl.textContent = data.unchanged
+    const successHint = data.unchanged
       ? t('modalNoChanges')
       : (t('modalSavedVersionPrefix') + data.version);
-
-    const snapshot = await loadProjectSnapshot(state.selectedProjectId, { force: true });
-    if (snapshot) {
-      if (state.selectedMainTab === 'skills') updateSkillsList();
-    }
-    await viewSkill(state.selectedProjectId, state.currentSkillId, runtime);
+    await refreshCurrentSkillModal(runtime, successHint);
   } catch (e) {
     console.error('[dashboard] failed to save skill content', {
       projectPath: state.selectedProjectId,
@@ -4515,6 +4845,69 @@ async function saveCurrentSkill() {
     hintEl.textContent = t('modalSaveFailed');
   } finally {
     saveBtn.disabled = false;
+    if (applyAllBtn) {
+      applyAllBtn.disabled = false;
+    }
+  }
+}
+
+async function confirmApplyCurrentSkillToAll() {
+  if (!state.selectedProjectId || !state.currentSkillId) return;
+
+  const saveBtn = document.getElementById('modalSaveBtn');
+  const applyAllBtn = document.getElementById('modalApplyAllBtn');
+  const confirmBtn = document.getElementById('applyAllConfirmBtn');
+  const cancelBtn = document.getElementById('applyAllCancelBtn');
+  const hintEl = document.getElementById('modalSaveHint');
+  const contentEl = document.getElementById('modalContent');
+  const content = contentEl?.value ?? '';
+  const runtime = state.currentSkillRuntime || 'codex';
+
+  saveBtn.disabled = true;
+  if (applyAllBtn) {
+    applyAllBtn.disabled = true;
+  }
+  if (confirmBtn) {
+    confirmBtn.disabled = true;
+  }
+  if (cancelBtn) {
+    cancelBtn.disabled = true;
+  }
+  hintEl.textContent = t('modalApplyAllRunning');
+
+  try {
+    const encProject = encodeURIComponent(state.selectedProjectId);
+    const encSkill = encodeURIComponent(state.currentSkillId);
+    const data = await fetchJsonWithTimeout(\`/api/projects/\${encProject}/skills/\${encSkill}/apply-to-all?runtime=\${encodeURIComponent(runtime)}\`, 30000, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content,
+        runtime,
+        reason: t('modalManualEditReason'),
+      }),
+    });
+    closeApplyToAllSkillModal();
+    await refreshCurrentSkillModal(runtime, formatApplyToAllSummary(data));
+  } catch (e) {
+    console.error('[dashboard] failed to apply skill content to same-named skills', {
+      projectPath: state.selectedProjectId,
+      skillId: state.currentSkillId,
+      runtime,
+      error: String(e),
+    });
+    hintEl.textContent = t('modalApplyAllFailed');
+  } finally {
+    saveBtn.disabled = false;
+    if (applyAllBtn) {
+      applyAllBtn.disabled = false;
+    }
+    if (confirmBtn) {
+      confirmBtn.disabled = false;
+    }
+    if (cancelBtn) {
+      cancelBtn.disabled = false;
+    }
   }
 }
 
@@ -4524,6 +4917,9 @@ function closeModal() {
 // Close modal on overlay click
 document.getElementById('skillModal').addEventListener('click', (e) => {
   if (e.target === e.currentTarget) closeModal();
+});
+document.getElementById('applyAllSkillModal').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) closeApplyToAllSkillModal();
 });
 document.getElementById('eventModal').addEventListener('click', (e) => {
   if (e.target === e.currentTarget) closeEventModal();

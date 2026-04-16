@@ -4,7 +4,12 @@ import { dirname, join, resolve, sep } from 'node:path';
 import { createChildLogger } from '../utils/logger.js';
 import { createShadowManager } from '../core/shadow-manager/index.js';
 import { createCodexObserver } from '../core/observer/codex-observer.js';
-import { listProjects, touchProject } from '../dashboard/projects-registry.js';
+import {
+  getProjectRegistration,
+  listProjects,
+  touchProject,
+  type ProjectMonitoringState,
+} from '../dashboard/projects-registry.js';
 import type { Trace } from '../types/index.js';
 
 const logger = createChildLogger('daemon');
@@ -15,6 +20,8 @@ interface DaemonState {
   processedTraces: number;
   lastCheckpointAt: string | null;
   retryQueueSize: number;
+  monitoringState: ProjectMonitoringState;
+  pausedAt: string | null;
   optimizationStatus: OptimizationStatus;
 }
 
@@ -131,7 +138,19 @@ export class Daemon {
   }
 
   private getRegisteredProjectRoots(): string[] {
-    return listProjects().map((project) => resolve(project.path));
+    return listProjects()
+      .filter((project) => project.monitoringState !== 'paused')
+      .map((project) => resolve(project.path));
+  }
+
+  private getProjectMonitoringState(
+    projectRoot: string
+  ): { monitoringState: ProjectMonitoringState; pausedAt: string | null } {
+    const registration = getProjectRegistration(projectRoot);
+    return {
+      monitoringState: registration?.monitoringState === 'paused' ? 'paused' : 'active',
+      pausedAt: registration?.monitoringState === 'paused' ? registration.pausedAt ?? null : null,
+    };
   }
 
   private async ensureProjectRuntime(projectRoot: string): Promise<ProjectRuntime> {
@@ -171,6 +190,7 @@ export class Daemon {
     }
 
     try {
+      this.clearRetryQueueForProject(projectRoot);
       if (runtime.watcher) {
         await runtime.watcher.close();
       }
@@ -265,14 +285,17 @@ export class Daemon {
 
     try {
       const lastCheckpointAt = new Date().toISOString();
+      const monitoring = this.getProjectMonitoringState(projectRoot);
       const state: DaemonState = {
-        isRunning: this.isRunning,
+        isRunning: this.isRunning && monitoring.monitoringState !== 'paused',
         startedAt: this.startedAt,
         processedTraces: runtime.processedTraces,
         lastCheckpointAt,
         retryQueueSize: Array.from(this.retryQueue.values()).filter(
           (entry) => entry.projectRoot === projectRoot
         ).length,
+        monitoringState: monitoring.monitoringState,
+        pausedAt: monitoring.pausedAt,
         optimizationStatus: { ...this.optimizationStatus },
       };
 
@@ -367,13 +390,16 @@ export class Daemon {
       (projectRoot ? this.projectRuntimes.get(resolve(projectRoot)) : null) ??
       this.projectRuntimes.values().next().value ??
       null;
+    const monitoring = this.getProjectMonitoringState(projectRoot ?? runtime?.projectRoot ?? this.launchContext);
 
     return {
-      isRunning: this.isRunning,
+      isRunning: this.isRunning && monitoring.monitoringState !== 'paused',
       startedAt: this.startedAt,
       processedTraces: runtime?.processedTraces ?? 0,
       lastCheckpointAt: runtime?.lastCheckpointAt ?? null,
       retryQueueSize: this.retryQueue.size,
+      monitoringState: monitoring.monitoringState,
+      pausedAt: monitoring.pausedAt,
       optimizationStatus: { ...this.optimizationStatus },
     };
   }
@@ -382,10 +408,22 @@ export class Daemon {
     const typedTrace = trace as Trace;
     const projectRoot = await this.ensureRuntimeForTrace(typedTrace);
     if (!projectRoot) {
-      logger.debug('Ignoring trace for unregistered project', {
-        traceId: typedTrace.trace_id,
-        projectPath: typedTrace.metadata?.projectPath,
-      });
+      const rawProjectPath = typeof typedTrace.metadata?.projectPath === 'string'
+        ? typedTrace.metadata.projectPath
+        : null;
+      const registration = rawProjectPath ? getProjectRegistration(rawProjectPath) : null;
+      if (registration?.monitoringState === 'paused') {
+        logger.info('Skipped trace because project monitoring is paused', {
+          traceId: typedTrace.trace_id,
+          projectPath: rawProjectPath,
+          pausedAt: registration.pausedAt ?? null,
+        });
+      } else {
+        logger.debug('Ignoring trace for unregistered project', {
+          traceId: typedTrace.trace_id,
+          projectPath: typedTrace.metadata?.projectPath,
+        });
+      }
       return;
     }
 
@@ -419,6 +457,32 @@ export class Daemon {
     }
 
     const normalizedTracePath = resolve(rawProjectPath);
+    const registeredProjects = listProjects().map((project) => ({
+      ...project,
+      projectRoot: resolve(project.path),
+    }));
+    const matchedProject = [...registeredProjects]
+      .sort((left, right) => right.projectRoot.length - left.projectRoot.length)
+      .find((project) => {
+        return (
+          normalizedTracePath === project.projectRoot ||
+          normalizedTracePath.startsWith(project.projectRoot + sep)
+        );
+      });
+
+    if (!matchedProject) {
+      return null;
+    }
+
+    if (matchedProject.monitoringState === 'paused') {
+      logger.debug('Ignoring trace for paused project monitoring', {
+        traceId: trace.trace_id,
+        projectRoot: matchedProject.projectRoot,
+        pausedAt: matchedProject.pausedAt ?? null,
+      });
+      return null;
+    }
+
     const activeMatch = this.findBestProjectMatch(
       normalizedTracePath,
       Array.from(this.projectRuntimes.keys())
@@ -427,16 +491,8 @@ export class Daemon {
       return activeMatch;
     }
 
-    const registeredMatch = this.findBestProjectMatch(
-      normalizedTracePath,
-      this.getRegisteredProjectRoots()
-    );
-    if (!registeredMatch) {
-      return null;
-    }
-
-    await this.ensureProjectRuntime(registeredMatch);
-    return registeredMatch;
+    await this.ensureProjectRuntime(matchedProject.projectRoot);
+    return matchedProject.projectRoot;
   }
 
   private findBestProjectMatch(tracePath: string, projectRoots: string[]): string | null {
@@ -478,6 +534,22 @@ export class Daemon {
       projectRoot,
       queueSize: this.retryQueue.size,
     });
+  }
+
+  private clearRetryQueueForProject(projectRoot: string): void {
+    let removed = 0;
+    for (const [traceId, entry] of this.retryQueue.entries()) {
+      if (entry.projectRoot !== projectRoot) continue;
+      this.retryQueue.delete(traceId);
+      removed += 1;
+    }
+
+    if (removed > 0) {
+      logger.info('Cleared retry queue entries for project runtime', {
+        projectRoot,
+        removed,
+      });
+    }
   }
 
   private processRetryQueue(): void {

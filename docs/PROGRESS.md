@@ -15,6 +15,9 @@
 
 ### 2026-04-17
 
+- ✅ 打通 dashboard 技能版本卡片到优化 scope 的跳转：自动优化生成的新版本现在会把 `activityScopeId` 落进版本元数据，版本历史中的蓝色原因标签会升级成可点击按钮，直接打开对应 scope 的时间线弹窗
+- 📝 记录交互经验：版本历史卡片上的跨面板跳转不能依赖“用户之前是否已经打开过活动列表”这种隐式前置条件；像 scope 详情这类深链入口，必须直接基于 canonical `scopeId` 拉详情，而不是复用某个页面的行缓存
+- 📝 记录测试经验：这类“UI 标签可点开后端实体”的功能不能只测渲染；还要同时覆盖写侧元数据落盘和读侧按钮生成，否则很容易出现按钮在 mock 数据里能显示、真实自动优化版本却没有可跳转 scope 的假完成
 - ✅ 降低 observer / decision-explainer 告警噪音：`CodexObserver` 现在会对同一路径的连续 reconciliation 大增量恢复做冷却节流，避免同一活跃 session 每隔几秒重复刷 warn；`decision-explainer` 在第一次拿不到有效 JSON 时会自动带强约束再重试一次，并把最终失败日志补上原始响应摘要，减少无信息量 warn
 - 📝 记录调试经验：实时监听链路里的恢复告警不能只看“有没有补偿”，还要看“同一问题是否在短时间内重复刷屏”；对于这类连续恢复，warn 更应该表达“进入异常状态”，而不是把每次补偿都单独记成新的故障
 - 📝 记录协议经验：要求模型输出 JSON 的链路，第一次解析失败时不要立刻放弃；先用更严格的“只返回 JSON 对象”约束重试一次，通常能显著降低 reasoning 模型偶发吐出 prose / markdown 的概率
@@ -335,6 +338,16 @@
 
 ## 更新日志
 
+### 2026-04-17
+
+- ✅ Dashboard 项目列表新增开始/暂停按钮：可以逐项目暂停或恢复监听，不再只能依赖全局 daemon 开关
+- ✅ 项目注册表新增 `monitoringState` / `pausedAt` 持久状态；dashboard server 与 snapshot 会把暂停态直接返回给 sidebar 和总览面板
+- ✅ Global daemon 现在会在路由每一条 trace 前检查项目暂停态；暂停项目的 trace 会被即时跳过，不需要等下一轮 registry sync 才生效
+- ✅ 暂停时会移除对应项目 runtime 并清空该项目 retry queue，避免 pause 期间继续消耗 LM 分析与重试链路
+- ✅ 恢复后继续使用 observer 的实时增量流；暂停期间被跳过的 trace 不做补回，和“从恢复时刻开始继续监控”的语义保持一致
+- ✅ 新增回归测试：覆盖 dashboard monitoring API、sidebar 开始/暂停交互，以及 daemon 在 pause/resume 间的 trace 路由切换
+- 📝 运维经验：排查“为什么某段时间没有 trace / 分析事件”时，先看项目注册表里的 `monitoringState` 与 `pausedAt`。若项目在该时间窗处于 paused，缺失数据属于预期行为，不应再去追查 observer 丢事件或 LLM 链路异常
+
 ### 2026-04-15
 
 - ✅ 修复实时追踪“看起来几小时没更新”的快照取数缺陷：dashboard 快照现在会在最新 trace 之外，额外回填一小批最近带 `skill_refs` 的 trace，避免大量空 `skill_refs` 工具事件把真正的技能调用完全冲出业务看板
@@ -392,5 +405,5 @@
 
 ---
 
-_最后更新：2026-04-15_
+_最后更新：2026-04-17_
 _更新人：OrnnSkills Team_

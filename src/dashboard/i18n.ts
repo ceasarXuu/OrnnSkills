@@ -23,8 +23,11 @@ export interface I18nStrings {
   sidebarAddHint: string;
   sidebarNoProjects: string;
   sidebarRunning: string;
+  sidebarPaused: string;
   sidebarStopped: string;
   sidebarSkills: string;
+  sidebarPause: string;
+  sidebarResume: string;
 
   // Main Panel
   mainSelectProject: string;
@@ -62,6 +65,14 @@ export interface I18nStrings {
   configLlmSafetyRequestsLabel: string;
   configLlmSafetyConcurrentLabel: string;
   configLlmSafetyTokensLabel: string;
+  configPromptOverridesLabel: string;
+  configPromptOverridesHelp: string;
+  configPromptSkillCallAnalyzerLabel: string;
+  configPromptSkillCallAnalyzerPlaceholder: string;
+  configPromptDecisionExplainerLabel: string;
+  configPromptDecisionExplainerPlaceholder: string;
+  configPromptReadinessProbeLabel: string;
+  configPromptReadinessProbePlaceholder: string;
   configProvidersExample: string;
   configCheckConnectivity: string;
   configConnectivityChecking: string;
@@ -131,6 +142,7 @@ export interface I18nStrings {
   daemonLastOptimization: string;
   daemonLastError: string;
   daemonRunning: string;
+  daemonPaused: string;
   daemonStopped: string;
 
   // States
@@ -347,12 +359,26 @@ export interface I18nStrings {
   modalRestore: string;
   modalClickToLoad: string;
   modalLoadError: string;
+  modalSave: string;
   modalSaving: string;
   modalNoChanges: string;
   modalSavedVersionPrefix: string;
   modalManualEditReason: string;
   modalSaveFailed: string;
   modalVersionActionFailed: string;
+  modalApplyAllButton: string;
+  modalApplyAllTitle: string;
+  modalApplyAllCancel: string;
+  modalApplyAllConfirm: string;
+  modalApplyAllSavingLine: string;
+  modalApplyAllTargetsLine: string;
+  modalApplyAllOneOffLine: string;
+  modalApplyAllRunning: string;
+  modalApplyAllFailed: string;
+  modalApplyAllSummaryPrefix: string;
+  modalApplyAllSummaryUpdated: string;
+  modalApplyAllSummarySkipped: string;
+  modalApplyAllSummaryFailed: string;
 
   // Time
   timeAgo: string;
@@ -383,8 +409,11 @@ const en: I18nStrings = {
   sidebarAddHint: 'Press Enter to add',
   sidebarNoProjects: 'No projects registered',
   sidebarRunning: 'RUNNING',
+  sidebarPaused: 'PAUSED',
   sidebarStopped: 'STOPPED',
   sidebarSkills: 'skills',
+  sidebarPause: 'Pause',
+  sidebarResume: 'Resume',
 
   // Main Panel
   mainSelectProject: '← Select a project',
@@ -429,6 +458,18 @@ const en: I18nStrings = {
   configLlmSafetyRequestsLabel: 'Max Requests / Window',
   configLlmSafetyConcurrentLabel: 'Max Concurrent Requests',
   configLlmSafetyTokensLabel: 'Max Estimated Tokens / Window',
+  configPromptOverridesLabel: 'Prompt Overrides',
+  configPromptOverridesHelp:
+    'Append project-specific instructions to Ornn internal system prompts. Leave blank to keep the built-in defaults.',
+  configPromptSkillCallAnalyzerLabel: 'Skill Call Analyzer',
+  configPromptSkillCallAnalyzerPlaceholder:
+    'Extra decision policy for window triage, attribution, and apply_optimization thresholds.',
+  configPromptDecisionExplainerLabel: 'Decision Explainer',
+  configPromptDecisionExplainerPlaceholder:
+    'Extra writing style or explanation constraints for dashboard-facing summaries.',
+  configPromptReadinessProbeLabel: 'Readiness Probe',
+  configPromptReadinessProbePlaceholder:
+    'Extra readiness rules for deciding when to wait, split, or start deep analysis.',
   configProvidersExample:
     '',
   configCheckConnectivity: 'Check Connectivity',
@@ -499,6 +540,7 @@ const en: I18nStrings = {
   daemonLastOptimization: 'Last Optimization',
   daemonLastError: 'Last Error',
   daemonRunning: 'RUNNING',
+  daemonPaused: 'PAUSED',
   daemonStopped: 'STOPPED',
 
   // States
@@ -715,12 +757,27 @@ const en: I18nStrings = {
   modalRestore: 'Restore',
   modalClickToLoad: 'Click to load',
   modalLoadError: 'Error loading skill content.',
+  modalSave: 'Save',
   modalSaving: 'Saving...',
   modalNoChanges: 'No changes detected',
   modalSavedVersionPrefix: 'Saved. Created v',
   modalManualEditReason: 'Manual edit from dashboard',
   modalSaveFailed: 'Save failed',
   modalVersionActionFailed: 'Failed to update version state.',
+  modalApplyAllButton: 'Apply to all same-named skills',
+  modalApplyAllTitle: 'Apply to all same-named skills',
+  modalApplyAllCancel: 'Cancel',
+  modalApplyAllConfirm: 'Apply now',
+  modalApplyAllSavingLine: 'The current editor content will be saved as the latest version first if it has changed.',
+  modalApplyAllTargetsLine:
+    'Then Ornn will copy this content to the latest version of every same-named skill across all registered projects and deploy it to the corresponding host path immediately.',
+  modalApplyAllOneOffLine: 'This is a one-time manual action. It will not keep syncing future changes.',
+  modalApplyAllRunning: 'Applying...',
+  modalApplyAllFailed: 'Failed to apply to same-named skills',
+  modalApplyAllSummaryPrefix: 'Applied to same-named skills:',
+  modalApplyAllSummaryUpdated: 'updated',
+  modalApplyAllSummarySkipped: 'skipped',
+  modalApplyAllSummaryFailed: 'failed',
 
   // Time
   timeAgo: 'ago',
@@ -751,8 +808,11 @@ const zh: I18nStrings = {
   sidebarAddHint: '按回车键添加',
   sidebarNoProjects: '暂无注册的项目',
   sidebarRunning: '运行中',
+  sidebarPaused: '已暂停',
   sidebarStopped: '已停止',
   sidebarSkills: '个技能',
+  sidebarPause: '暂停',
+  sidebarResume: '开始',
 
   // Main Panel
   mainSelectProject: '← 选择一个项目',
@@ -797,6 +857,18 @@ const zh: I18nStrings = {
   configLlmSafetyRequestsLabel: '窗口内最大请求数',
   configLlmSafetyConcurrentLabel: '最大并发请求数',
   configLlmSafetyTokensLabel: '窗口内最大预计 Tokens',
+  configPromptOverridesLabel: '提示词覆写',
+  configPromptOverridesHelp:
+    '把项目级附加规则追加到 Ornn 的内部 system prompt。留空时继续使用内置默认逻辑。',
+  configPromptSkillCallAnalyzerLabel: 'Skill 调用分析器',
+  configPromptSkillCallAnalyzerPlaceholder:
+    '补充窗口分诊、归因判断、apply_optimization 触发阈值等规则。',
+  configPromptDecisionExplainerLabel: '决策解释器',
+  configPromptDecisionExplainerPlaceholder:
+    '补充 dashboard 文案风格、长度、语气等解释约束。',
+  configPromptReadinessProbeLabel: 'Readiness Probe',
+  configPromptReadinessProbePlaceholder:
+    '补充何时继续等待、拆分窗口或启动深度分析的判断规则。',
   configProvidersExample:
     '',
   configCheckConnectivity: '检查连通性',
@@ -867,6 +939,7 @@ const zh: I18nStrings = {
   daemonLastOptimization: '上次优化',
   daemonLastError: '上次错误',
   daemonRunning: '运行中',
+  daemonPaused: '已暂停',
   daemonStopped: '已停止',
 
   // States
@@ -1083,12 +1156,27 @@ const zh: I18nStrings = {
   modalRestore: '恢复',
   modalClickToLoad: '点击加载',
   modalLoadError: '加载技能内容失败。',
+  modalSave: '保存',
   modalSaving: '保存中...',
   modalNoChanges: '内容未变化',
   modalSavedVersionPrefix: '保存成功，已创建 v',
   modalManualEditReason: '通过 dashboard 手动编辑',
   modalSaveFailed: '保存失败',
   modalVersionActionFailed: '更新版本状态失败。',
+  modalApplyAllButton: '应用到所有同名技能',
+  modalApplyAllTitle: '应用到所有同名技能',
+  modalApplyAllCancel: '取消',
+  modalApplyAllConfirm: '立即应用',
+  modalApplyAllSavingLine: '会先保存当前编辑器内容；如果内容有变化，会创建当前 skill 的最新版本。',
+  modalApplyAllTargetsLine:
+    '然后 Ornn 会把这份内容复制到所有已注册项目里所有同名 skill 的最新版本，并立即部署到对应宿主路径。',
+  modalApplyAllOneOffLine: '这是一次性的手动操作，不会持续监听或自动同步后续变更。',
+  modalApplyAllRunning: '批量应用中...',
+  modalApplyAllFailed: '批量应用失败',
+  modalApplyAllSummaryPrefix: '已应用到同名技能：',
+  modalApplyAllSummaryUpdated: '个更新',
+  modalApplyAllSummarySkipped: '个跳过',
+  modalApplyAllSummaryFailed: '个失败',
 
   // Time
   timeAgo: '前',

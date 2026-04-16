@@ -25,6 +25,7 @@ type FakeElement = {
 };
 
 function createFakeElement(id = ''): FakeElement {
+  const classes = new Set<string>();
   return {
     id,
     innerHTML: '',
@@ -36,10 +37,33 @@ function createFakeElement(id = ''): FakeElement {
     selectionStart: null,
     selectionEnd: null,
     classList: {
-      add: () => undefined,
-      remove: () => undefined,
-      toggle: () => false,
-      contains: () => false,
+      add: (...tokens: string[]) => {
+        for (const token of tokens) {
+          classes.add(token);
+        }
+      },
+      remove: (...tokens: string[]) => {
+        for (const token of tokens) {
+          classes.delete(token);
+        }
+      },
+      toggle: (token: string, force?: boolean) => {
+        if (force === true) {
+          classes.add(token);
+          return true;
+        }
+        if (force === false) {
+          classes.delete(token);
+          return false;
+        }
+        if (classes.has(token)) {
+          classes.delete(token);
+          return false;
+        }
+        classes.add(token);
+        return true;
+      },
+      contains: (token: string) => classes.has(token),
     },
     style: {},
     focus: () => undefined,
@@ -56,6 +80,7 @@ function loadDashboardTestHarness(
   options: {
     lang?: 'zh' | 'en';
     fetchMap?: Record<string, unknown>;
+    onFetch?: (url: string, init?: Record<string, unknown>) => void;
     fetchImpl?: (url: string, init?: Record<string, unknown>) => Promise<{ ok: boolean; status?: number; statusText?: string; json: () => Promise<unknown> }>;
   } = {}
 ) {
@@ -222,6 +247,7 @@ function loadDashboardTestHarness(
     },
     fetch: async (url: string, init?: Record<string, unknown>) => {
       fetchCalls.push({ url: String(url), init });
+      options.onFetch?.(String(url), init);
       if (options.fetchImpl) {
         return options.fetchImpl(String(url), init);
       }
@@ -260,7 +286,7 @@ function loadDashboardTestHarness(
   const script = scriptMatch[1]
     .replace(/\binit\(\);\s*$/, '')
     .concat(
-      '\n;globalThis.__dashboardTest = { state, init, switchLang, selectProject, selectMainTab, renderMainPanel, safeRenderMainPanel, renderSidebar, buildActivityRows, copyActivityDetail, openActivityDetail, renderCostPanel, viewSkill, loadVersion, handleUpdate, triggerProjectPicker: openProjectPicker };'
+      '\n;globalThis.__dashboardTest = { state, init, switchLang, selectProject, selectMainTab, renderMainPanel, safeRenderMainPanel, renderSidebar, buildActivityRows, copyActivityDetail, openActivityDetail, renderCostPanel, viewSkill, loadVersion, handleUpdate, openApplyToAllSkillModal, closeApplyToAllSkillModal, confirmApplyCurrentSkillToAll, triggerProjectPicker: openProjectPicker, toggleProjectMonitoring, saveProjectConfig };'
     );
 
   vm.runInNewContext(script, runtime);
@@ -283,7 +309,12 @@ function loadDashboardTestHarness(
         viewSkill: (projectPath: string, skillId: string, runtime?: string) => Promise<void>;
         loadVersion: (encProject: string, encSkill: string, encRuntime: string, version: number) => Promise<void>;
         handleUpdate: (data: Record<string, unknown>) => Promise<void> | void;
+        openApplyToAllSkillModal: () => void;
+        closeApplyToAllSkillModal: () => void;
+        confirmApplyCurrentSkillToAll: () => Promise<void>;
         triggerProjectPicker: () => Promise<void>;
+        toggleProjectMonitoring: (projectPath: string, paused: boolean) => Promise<void>;
+        saveProjectConfig: (options?: Record<string, unknown>) => Promise<void>;
       };
     }).__dashboardTest,
     getElement(id: string) {
@@ -294,6 +325,9 @@ function loadDashboardTestHarness(
     },
     getFetchCalls() {
       return fetchCalls.map((call) => call.url);
+    },
+    getFetchRequests() {
+      return fetchCalls.slice();
     },
     clearFetchCalls() {
       fetchCalls.length = 0;
@@ -649,6 +683,132 @@ describe('dashboard ui recovery', () => {
     expect(dashboard.state.selectedProjectId).toBe(projectPath);
     expect(getFetchCalls()).toContain('/api/projects/pick');
     expect(getFetchCalls()).toContain(`/api/projects/${encodedPath}/snapshot`);
+  });
+
+  it('renders pause and resume controls in the sidebar and calls the monitoring api', async () => {
+    const projectPath = '/tmp/pauseable-project';
+    const encodedPath = encodeURIComponent(projectPath);
+    const projects = [
+      {
+        path: projectPath,
+        name: 'Pauseable',
+        isRunning: true,
+        skillCount: 3,
+        monitoringState: 'active',
+        pausedAt: null,
+      },
+    ];
+
+    const { dashboard, getElement, getFetchRequests } = loadDashboardTestHarness({}, {
+      fetchImpl: async (url, init) => {
+        if (url === '/api/projects') {
+          return {
+            ok: true,
+            status: 200,
+            statusText: 'OK',
+            json: async () => ({ projects: projects.map((project) => ({ ...project })) }),
+          };
+        }
+        if (url === `/api/projects/${encodedPath}/snapshot`) {
+          const project = projects[0];
+          return {
+            ok: true,
+            status: 200,
+            statusText: 'OK',
+            json: async () => ({
+              daemon: {
+                isRunning: project.monitoringState !== 'paused',
+                pid: 1,
+                startedAt: '2026-04-17T08:00:00.000Z',
+                processedTraces: 3,
+                lastCheckpointAt: '2026-04-17T08:20:00.000Z',
+                retryQueueSize: 0,
+                monitoringState: project.monitoringState,
+                pausedAt: project.pausedAt,
+                optimizationStatus: {
+                  currentState: 'idle',
+                  currentSkillId: null,
+                  lastOptimizationAt: null,
+                  lastError: null,
+                  queueSize: 0,
+                },
+              },
+              skills: [],
+              traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
+              recentTraces: [],
+              decisionEvents: [],
+              activityScopes: [],
+              agentUsage: {
+                callCount: 0,
+                promptTokens: 0,
+                completionTokens: 0,
+                totalTokens: 0,
+                durationMsTotal: 0,
+                avgDurationMs: 0,
+                lastCallAt: null,
+                byModel: {},
+                byScope: {},
+                bySkill: {},
+              },
+            }),
+          };
+        }
+        if (url === `/api/projects/${encodedPath}/monitoring`) {
+          const body = init?.body ? JSON.parse(String(init.body)) as { paused?: boolean } : {};
+          projects[0] = {
+            ...projects[0],
+            monitoringState: body.paused ? 'paused' : 'active',
+            pausedAt: body.paused ? '2026-04-17T09:00:00.000Z' : null,
+            isRunning: !body.paused,
+          };
+          return {
+            ok: true,
+            status: 200,
+            statusText: 'OK',
+            json: async () => ({
+              ok: true,
+              project: {
+                ...projects[0],
+                isPaused: body.paused === true,
+              },
+              projects: projects.map((project) => ({
+                ...project,
+                isPaused: project.monitoringState === 'paused',
+              })),
+            }),
+          };
+        }
+        return {
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          json: async () => ({ lines: [], buildId: 'test-build-id', pid: 1, providers: [], projects: [] }),
+        };
+      },
+    });
+
+    await dashboard.init();
+    expect(getElement('projectList').innerHTML).toContain('Pause');
+
+    await dashboard.toggleProjectMonitoring(projectPath, true);
+    expect(getFetchRequests()).toContainEqual({
+      url: `/api/projects/${encodedPath}/monitoring`,
+      init: expect.objectContaining({
+        method: 'PATCH',
+        body: JSON.stringify({ paused: true }),
+      }),
+    });
+    expect(getElement('projectList').innerHTML).toContain('Resume');
+
+    await dashboard.toggleProjectMonitoring(projectPath, false);
+    expect(getFetchRequests()).toContainEqual({
+      url: `/api/projects/${encodedPath}/monitoring`,
+      init: expect.objectContaining({
+        method: 'PATCH',
+        body: JSON.stringify({ paused: false }),
+      }),
+    });
+    expect(getElement('projectList').innerHTML).toContain('Pause');
   });
 
   it('reuses one global config payload when switching projects on the config tab', async () => {
@@ -1803,6 +1963,144 @@ describe('dashboard ui recovery', () => {
     expect(html).toContain(`onclick="loadVersion('${encodedProject}','${encodedSkill}','${runtimeId}',2)"`);
   });
 
+  it('renders an apply-to-all button and one-off confirmation copy in the skill modal', () => {
+    const zhHtml = getDashboardHtml(47432, 'zh', 'test-build-id');
+    expect(zhHtml).toContain('应用到所有同名技能');
+    expect(zhHtml).toContain('这是一次性的手动操作');
+    expect(zhHtml).toContain('不会持续监听或自动同步后续变更');
+
+    const enHtml = getDashboardHtml(47432, 'en', 'test-build-id');
+    expect(enHtml).toContain('Apply to all same-named skills');
+    expect(enHtml).toContain('This is a one-time manual action');
+    expect(enHtml).toContain('It will not keep syncing future changes');
+  });
+
+  it('opens the apply-to-all confirmation and posts the current editor content', async () => {
+    const projectPath = '/tmp/ornn-project';
+    const skillId = 'test-driven-development';
+    const runtimeId = 'codex';
+    const encodedProject = encodeURIComponent(projectPath);
+    const encodedSkill = encodeURIComponent(skillId);
+    const applyEndpoint = `/api/projects/${encodedProject}/skills/${encodedSkill}/apply-to-all?runtime=${runtimeId}`;
+    const { dashboard, getElement, getFetchRequests } = loadDashboardTestHarness({}, {
+      lang: 'zh',
+      fetchMap: {
+        [`/api/projects/${encodedProject}/skills/${encodedSkill}?runtime=${runtimeId}`]: {
+          content: '# base content',
+          versions: [],
+          effectiveVersion: null,
+        },
+        [applyEndpoint]: {
+          ok: true,
+          skillId,
+          runtime: runtimeId,
+          source: {
+            saved: true,
+            version: 4,
+          },
+          totalTargets: 3,
+          updatedTargets: 2,
+          skippedTargets: 1,
+          failedTargets: 0,
+        },
+      },
+    });
+
+    dashboard.state.selectedProjectId = projectPath;
+    getElement('skillModal');
+    getElement('modalSkillName');
+    getElement('modalSkillStatus');
+    getElement('modalSaveHint');
+    getElement('modalSaveBtn');
+    getElement('modalApplyAllBtn');
+    getElement('modalContent');
+    getElement('versionList');
+    getElement('applyAllSkillModal');
+    getElement('applyAllConfirmTitle');
+    getElement('applyAllConfirmBody');
+    getElement('applyAllConfirmBtn');
+    getElement('applyAllCancelBtn');
+
+    await dashboard.viewSkill(projectPath, skillId, runtimeId);
+    getElement('modalContent').value = '# propagated content';
+
+    dashboard.openApplyToAllSkillModal();
+
+    expect(getElement('applyAllConfirmTitle').textContent).toContain('应用到所有同名技能');
+    expect(getElement('applyAllConfirmBody').innerHTML).toContain('会先保存当前编辑器内容');
+    expect(getElement('applyAllConfirmBody').innerHTML).toContain('不会持续监听或自动同步后续变更');
+
+    await dashboard.confirmApplyCurrentSkillToAll();
+
+    const applyRequest = getFetchRequests().find((entry) => entry.url === applyEndpoint);
+    expect(applyRequest).toBeTruthy();
+    expect(applyRequest?.init?.method).toBe('POST');
+    expect(JSON.parse(String(applyRequest?.init?.body))).toMatchObject({
+      content: '# propagated content',
+      runtime: runtimeId,
+    });
+    expect(getElement('modalSaveHint').textContent).toContain('2');
+  });
+
+  it('renders an interactive scope tag for auto-optimized versions', async () => {
+    const projectPath = '/tmp/ornn-project';
+    const skillId = 'test-driven-development';
+    const runtimeId = 'codex';
+    const encodedProject = encodeURIComponent(projectPath);
+    const encodedSkill = encodeURIComponent(skillId);
+    const { dashboard, getElement } = loadDashboardTestHarness({}, {
+      lang: 'zh',
+      fetchMap: {
+        [`/api/projects/${encodedProject}/skills/${encodedSkill}?runtime=${runtimeId}`]: {
+          content: 'v3 optimized content',
+          versions: [1, 2, 3],
+          effectiveVersion: 3,
+        },
+        [`/api/projects/${encodedProject}/skills/${encodedSkill}/versions/1?runtime=${runtimeId}`]: {
+          content: 'v1',
+          metadata: {
+            createdAt: '2026-04-06T00:00:00.000Z',
+            reason: 'Bootstrap source sync (project -> project)',
+            isDisabled: false,
+          },
+        },
+        [`/api/projects/${encodedProject}/skills/${encodedSkill}/versions/2?runtime=${runtimeId}`]: {
+          content: 'v2',
+          metadata: {
+            createdAt: '2026-04-08T00:00:00.000Z',
+            reason: '通过 dashboard 手动编辑',
+            isDisabled: false,
+          },
+        },
+        [`/api/projects/${encodedProject}/skills/${encodedSkill}/versions/3?runtime=${runtimeId}`]: {
+          content: 'v3',
+          metadata: {
+            createdAt: '2026-04-10T05:24:00.000Z',
+            reason: '自动优化：收紧触发条件',
+            isDisabled: false,
+            activityScopeId: 'scope-ep-1',
+          },
+        },
+      },
+    });
+
+    getElement('skillModal');
+    getElement('modalSkillName');
+    getElement('modalSkillStatus');
+    getElement('modalSaveHint');
+    getElement('modalSaveBtn');
+    getElement('modalContent');
+    getElement('versionList');
+
+    await dashboard.viewSkill(projectPath, skillId, runtimeId);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const html = getElement('versionList').innerHTML;
+    expect(html).toContain('version-change version-scope-link');
+    expect(html).toContain('自动优化：收紧触发条件');
+    expect(html).toContain(`onclick="openVersionScopeDetail('${encodedProject}','scope-ep-1');event.stopPropagation()"`);
+  });
+
 
   it('degrades to a project-level fallback when main panel rendering throws', () => {
     const { dashboard, getElement } = loadDashboardTestHarness({}, { lang: 'zh' });
@@ -2223,6 +2521,124 @@ describe('dashboard ui recovery', () => {
     expect(html).not.toContain('<option value="__custom__" selected>');
     expect(html).toContain('class="config-input cfg_model_custom" value=""');
     expect(html).toContain('display:none;');
+  });
+
+  it('renders prompt override editors in the config panel', () => {
+    const { dashboard, getElement } = loadDashboardTestHarness({}, { lang: 'zh' });
+    const projectPath = '/tmp/ornn-project';
+
+    getElement('mainPanel');
+    dashboard.state.selectedMainTab = 'config';
+    dashboard.state.selectedProjectId = projectPath;
+    dashboard.state.configByProject = {
+      [projectPath]: {
+        autoOptimize: true,
+        userConfirm: false,
+        runtimeSync: true,
+        llmSafety: {
+          enabled: true,
+          windowMs: 60000,
+          maxRequestsPerWindow: 12,
+          maxConcurrentRequests: 2,
+          maxEstimatedTokensPerWindow: 48000,
+        },
+        promptOverrides: {
+          skillCallAnalyzer: '当前窗口必须严格按团队规范判断。',
+          decisionExplainer: '输出必须控制在三句话内。',
+          readinessProbe: '优先等待关键失败信号。',
+        },
+        defaultProvider: 'deepseek',
+        logLevel: 'info',
+        providers: [],
+      },
+    };
+    dashboard.state.projectData = {
+      [projectPath]: {
+        daemon: {},
+        skills: [],
+        traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
+        recentTraces: [],
+        decisionEvents: [],
+        agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
+      },
+    };
+
+    dashboard.renderMainPanel(projectPath);
+    const html = getElement('mainPanel').innerHTML;
+    expect(html).toContain('提示词覆写');
+    expect(html).toContain('cfg_prompt_skill_call_analyzer');
+    expect(html).toContain('cfg_prompt_decision_explainer');
+    expect(html).toContain('cfg_prompt_readiness_probe');
+    expect(html).toContain('当前窗口必须严格按团队规范判断。');
+    expect(html).toContain('输出必须控制在三句话内。');
+    expect(html).toContain('优先等待关键失败信号。');
+  });
+
+  it('includes prompt override edits when saving config', async () => {
+    const projectPath = '/tmp/ornn-project';
+    const { dashboard, getElement, getFetchRequests } = loadDashboardTestHarness({}, {
+      lang: 'en',
+      fetchMap: {
+        '/api/config': { ok: true },
+        [`/api/provider-health?projectPath=${encodeURIComponent(projectPath)}`]: {
+          health: {
+            level: 'ok',
+            code: 'ok',
+            message: 'All providers are healthy',
+            checkedAt: '2026-04-10T00:00:00.000Z',
+            results: [],
+          },
+        },
+      },
+    });
+
+    dashboard.state.selectedProjectId = projectPath;
+    dashboard.state.selectedMainTab = 'config';
+    dashboard.state.configByProject = {
+      [projectPath]: {
+        autoOptimize: true,
+        userConfirm: false,
+        runtimeSync: true,
+        llmSafety: {
+          enabled: true,
+          windowMs: 60000,
+          maxRequestsPerWindow: 12,
+          maxConcurrentRequests: 2,
+          maxEstimatedTokensPerWindow: 48000,
+        },
+        promptOverrides: {
+          skillCallAnalyzer: '',
+          decisionExplainer: '',
+          readinessProbe: '',
+        },
+        defaultProvider: '',
+        logLevel: 'info',
+        providers: [],
+      },
+    };
+
+    getElement('cfg_llm_safety_enabled').checked = true;
+    getElement('cfg_llm_safety_window_ms').value = '60000';
+    getElement('cfg_llm_safety_max_requests').value = '12';
+    getElement('cfg_llm_safety_max_concurrent').value = '2';
+    getElement('cfg_llm_safety_max_tokens').value = '48000';
+    getElement('cfg_prompt_skill_call_analyzer').value = 'Use the project rubric first.';
+    getElement('cfg_prompt_decision_explainer').value = 'Explain in one paragraph.';
+    getElement('cfg_prompt_readiness_probe').value = 'Prefer waiting for retries.';
+
+    await dashboard.saveProjectConfig();
+
+    const configRequest = getFetchRequests().find((entry) => entry.url === '/api/config');
+    expect(configRequest).toBeTruthy();
+    expect(JSON.parse(String(configRequest?.init?.body))).toMatchObject({
+      config: {
+        promptOverrides: {
+          skillCallAnalyzer: 'Use the project rubric first.',
+          decisionExplainer: 'Explain in one paragraph.',
+          readinessProbe: 'Prefer waiting for retries.',
+        },
+      },
+    });
   });
 
 });

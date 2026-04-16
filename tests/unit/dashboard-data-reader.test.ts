@@ -2,7 +2,12 @@ import { beforeEach, describe, expect, it, afterEach } from 'vitest';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { readProjectSnapshot, readProjectSnapshotVersion, readRecentTraces } from '../../src/dashboard/data-reader.js';
+import {
+  readDaemonStatus,
+  readProjectSnapshot,
+  readProjectSnapshotVersion,
+  readRecentTraces,
+} from '../../src/dashboard/data-reader.js';
 
 describe('dashboard data reader snapshot version', () => {
   const testDir = join(tmpdir(), 'ornn-dashboard-data-reader-' + Date.now());
@@ -121,6 +126,118 @@ describe('dashboard data reader snapshot version', () => {
 
       const after = readProjectSnapshotVersion(testDir);
       expect(after).not.toBe(before);
+    } finally {
+      process.env.HOME = oldHome;
+    }
+  });
+
+  it('changes snapshot version when the project registry monitoring state changes', async () => {
+    const oldHome = process.env.HOME;
+    const fakeHome = join(testDir, 'registry-home-snapshot-version');
+    mkdirSync(join(fakeHome, '.ornn'), { recursive: true });
+    process.env.HOME = fakeHome;
+
+    try {
+      const registryPath = join(fakeHome, '.ornn', 'projects.json');
+      writeFileSync(
+        registryPath,
+        JSON.stringify({
+          projects: [
+            {
+              path: testDir,
+              name: 'test-project',
+              registeredAt: '2026-04-17T08:00:00.000Z',
+              lastSeenAt: '2026-04-17T08:00:00.000Z',
+              monitoringState: 'active',
+              pausedAt: null,
+            },
+          ],
+        }),
+        'utf-8'
+      );
+
+      const before = readProjectSnapshotVersion(testDir);
+
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      writeFileSync(
+        registryPath,
+        JSON.stringify({
+          projects: [
+            {
+              path: testDir,
+              name: 'test-project',
+              registeredAt: '2026-04-17T08:00:00.000Z',
+              lastSeenAt: '2026-04-17T08:30:00.000Z',
+              monitoringState: 'paused',
+              pausedAt: '2026-04-17T08:30:00.000Z',
+            },
+          ],
+        }),
+        'utf-8'
+      );
+
+      const after = readProjectSnapshotVersion(testDir);
+      expect(after).not.toBe(before);
+    } finally {
+      process.env.HOME = oldHome;
+    }
+  });
+
+  it('marks daemon status as paused when the project registry pauses monitoring', () => {
+    const oldHome = process.env.HOME;
+    const fakeHome = join(testDir, 'registry-home-daemon-status');
+    mkdirSync(join(fakeHome, '.ornn'), { recursive: true });
+    process.env.HOME = fakeHome;
+
+    try {
+      writeFileSync(join(fakeHome, '.ornn', 'daemon.pid'), String(process.pid), 'utf-8');
+      writeFileSync(
+        join(testDir, '.ornn', 'state', 'daemon-checkpoint.json'),
+        JSON.stringify({
+          isRunning: true,
+          startedAt: '2026-04-17T08:00:00.000Z',
+          processedTraces: 12,
+          lastCheckpointAt: '2026-04-17T08:20:00.000Z',
+          retryQueueSize: 2,
+          optimizationStatus: {
+            currentState: 'analyzing',
+            currentSkillId: 'demo-skill',
+            lastOptimizationAt: null,
+            lastError: 'stale error',
+            queueSize: 1,
+          },
+        }),
+        'utf-8'
+      );
+      writeFileSync(
+        join(fakeHome, '.ornn', 'projects.json'),
+        JSON.stringify({
+          projects: [
+            {
+              path: testDir,
+              name: 'test-project',
+              registeredAt: '2026-04-17T08:00:00.000Z',
+              lastSeenAt: '2026-04-17T08:30:00.000Z',
+              monitoringState: 'paused',
+              pausedAt: '2026-04-17T08:30:00.000Z',
+            },
+          ],
+        }),
+        'utf-8'
+      );
+
+      const daemon = readDaemonStatus(testDir);
+      expect(daemon.isRunning).toBe(false);
+      expect(daemon.isPaused).toBe(true);
+      expect(daemon.monitoringState).toBe('paused');
+      expect(daemon.pausedAt).toBe('2026-04-17T08:30:00.000Z');
+      expect(daemon.optimizationStatus).toEqual({
+        currentState: 'idle',
+        currentSkillId: null,
+        lastOptimizationAt: null,
+        lastError: null,
+        queueSize: 0,
+      });
     } finally {
       process.env.HOME = oldHome;
     }

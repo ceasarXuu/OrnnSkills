@@ -23,6 +23,7 @@ import type { DecisionEventRecord } from '../core/decision-events/index.js';
 import { normalizeAgentUsageModelId, type AgentUsageSummary } from '../core/agent-usage/index.js';
 import type { TaskEpisodeSnapshot } from '../core/task-episode/index.js';
 import type { AgentUsageRecord, Trace } from '../types/index.js';
+import { getProjectRegistration } from './projects-registry.js';
 import {
   buildActivityScopeSummariesFromData,
   type ActivityScopeSummary,
@@ -32,11 +33,14 @@ import {
 
 export interface DaemonStatus {
   isRunning: boolean;
+  isPaused?: boolean;
   pid: number | null;
   startedAt: string | null;
   processedTraces: number;
   lastCheckpointAt: string | null;
   retryQueueSize: number;
+  monitoringState?: 'active' | 'paused';
+  pausedAt?: string | null;
   optimizationStatus: {
     currentState: 'idle' | 'analyzing' | 'optimizing' | 'error';
     currentSkillId: string | null;
@@ -54,6 +58,7 @@ export interface SkillVersionMeta {
   previousVersion: number | null;
   isDisabled?: boolean;
   disabledAt?: string | null;
+  activityScopeId?: string;
 }
 
 export interface SkillInfo extends ShadowEntry {
@@ -236,12 +241,28 @@ export function readDaemonStatus(projectRoot: string): DaemonStatus {
   }
 
   const backfilled = backfillOptimizationStatus(projectRoot, checkpoint.optimizationStatus);
+  const registration = getProjectRegistration(projectRoot);
+  const monitoringState = registration?.monitoringState === 'paused' ? 'paused' : 'active';
+  const isPaused = monitoringState === 'paused';
+  const pausedAt = isPaused ? registration?.pausedAt ?? null : null;
+  const effectiveOptimizationStatus = isPaused
+    ? {
+        ...backfilled,
+        currentState: 'idle' as const,
+        currentSkillId: null,
+        lastError: null,
+        queueSize: 0,
+      }
+    : backfilled;
 
   return {
     ...checkpoint,
-    isRunning,
+    isRunning: isPaused ? false : isRunning,
+    isPaused,
     pid,
-    optimizationStatus: backfilled,
+    monitoringState,
+    pausedAt,
+    optimizationStatus: effectiveOptimizationStatus,
   };
 }
 
@@ -654,6 +675,7 @@ export function readProjectSnapshotVersion(projectRoot: string): string {
     readFileSignature(join(stateDir, 'agent-usage.ndjson')),
     readFileSignature(join(stateDir, 'agent-usage-summary.json')),
     readFileSignature(join(shadowsDir, 'index.json')),
+    readFileSignature(join(homedir(), '.ornn', 'projects.json')),
   ];
   return parts.join('|');
 }
