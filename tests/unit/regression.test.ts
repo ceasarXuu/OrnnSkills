@@ -4,7 +4,6 @@ import { join } from 'node:path';
 import { mkdirSync, rmSync, existsSync, writeFileSync } from 'node:fs';
 import { createShadowRegistry } from '../../src/core/shadow-registry/index.js';
 import { createJournalManager } from '../../src/core/journal/index.js';
-import { parseAnalysisOutput } from '../../src/core/analyzer/output-parser.js';
 import { cliInfo, cliWarn, cliError } from '../../src/utils/cli-output.js';
 import { createShadowManager } from '../../src/core/shadow-manager/index.js';
 
@@ -90,41 +89,6 @@ describe('Regression Tests', () => {
       expect(String(null)).toBe('null');
       expect(String(undefined)).toBe('undefined');
       expect(JSON.stringify({ key: 'value' })).toBe('{"key":"value"}');
-    });
-  });
-
-  describe('T06: Output Parser runtime validation', () => {
-    it('rejects malformed LLM responses', () => {
-      const result = parseAnalysisOutput('not json at all');
-      if ('error' in result) {
-        expect(result.error).toContain('No JSON found');
-      }
-    });
-
-    it('rejects JSON missing required fields', () => {
-      const result = parseAnalysisOutput(JSON.stringify({ analysis: {} }));
-      if ('error' in result) {
-        expect(result.error).toBeDefined();
-      }
-    });
-
-    it('accepts well-formed responses', () => {
-      const validResponse = JSON.stringify({
-        analysis: {
-          summary: 'test',
-          strengths: [],
-          weaknesses: [],
-          missingScenarios: [],
-          userPainPoints: [],
-        },
-        suggestions: [],
-        improvedSkill: '# Test',
-        confidence: 0.8,
-      });
-      const result = parseAnalysisOutput(validResponse);
-      if ('error' in result) {
-        expect(result.error).toBeUndefined();
-      }
     });
   });
 

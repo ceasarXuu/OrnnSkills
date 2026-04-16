@@ -1,8 +1,8 @@
 /**
  * End-to-End Integration Tests
- * 
+ *
  * Tests the complete data flow:
- * Observer -> Router -> SkillEvolution -> Analyzer -> VersionManager -> Deployer
+ * Observer -> Router -> SkillEvolution -> VersionManager -> Deployer
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -210,53 +210,5 @@ describe('End-to-End Integration', () => {
       expect(result.triggered).toBe(true);
       expect(result.reason).toContain('threshold');
     });
-  });
-});
-
-describe('Output Parser Integration', () => {
-  it('should parse valid LLM response', async () => {
-    const { parseAnalysisOutput } = await import('../../src/core/analyzer/output-parser.js');
-
-    const response = JSON.stringify({
-      analysis: {
-        summary: 'Test summary',
-        strengths: ['Good'],
-        weaknesses: ['Needs improvement'],
-        missingScenarios: ['Edge case'],
-        userPainPoints: ['Slow'],
-      },
-      suggestions: [
-        {
-          type: 'modify',
-          section: 'instructions',
-          description: 'Add more details',
-          rationale: 'Better clarity',
-          priority: 'high',
-        },
-      ],
-      improvedSkill: '# Improved Skill\n\nBetter content',
-      confidence: 0.85,
-    });
-
-    const result = parseAnalysisOutput(response);
-
-    // Check if parsing succeeded by checking for analysis property
-    if ('analysis' in result) {
-      expect(result.analysis.summary).toBe('Test summary');
-      expect(result.suggestions).toHaveLength(1);
-      expect(result.improvedSkill).toContain('Improved');
-      expect(result.confidence).toBe(0.85);
-    } else {
-      // If failed, check error message
-      expect(result.success).toBe(false);
-    }
-  });
-
-  it('should handle malformed JSON', async () => {
-    const { parseAnalysisOutput } = await import('../../src/core/analyzer/output-parser.js');
-
-    const result = parseAnalysisOutput('This is not JSON');
-
-    expect(result.success).toBe(false);
   });
 });

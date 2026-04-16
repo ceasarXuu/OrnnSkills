@@ -362,6 +362,81 @@ describe('SkillCallAnalyzer', () => {
     expect(userMessage).not.toContain('这个尾巴不应该原样进入模型。');
   });
 
+  it('teaches the model an explicit triage rubric before asking for a decision', async () => {
+    readProjectLanguageMock.mockResolvedValue('zh');
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: '{"decision":"need_more_context","reason":"当前证据还不稳定","confidence":0.6,"evidence":["只看到一次失败"],"next_window_hint":{"suggested_trace_delta":6,"suggested_turn_delta":2,"wait_for_event_types":[],"mode":"count_driven"}}',
+            },
+          },
+        ],
+        usage: {
+          prompt_tokens: 140,
+          completion_tokens: 32,
+          total_tokens: 172,
+        },
+        model: 'gpt-4o-mini',
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const analyzer = createSkillCallAnalyzer();
+    const result = await analyzer.analyzeWindow('/tmp/project', {
+      windowId: 'window-rubric',
+      skillId: 'systematic-debugging',
+      runtime: 'codex',
+      sessionId: 'session-1',
+      closeReason: 'completed',
+      startedAt: '2026-04-10T00:00:00.000Z',
+      lastTraceAt: '2026-04-10T00:01:00.000Z',
+      traces: [
+        {
+          trace_id: 'trace-1',
+          runtime: 'codex',
+          session_id: 'session-1',
+          turn_id: 'turn-1',
+          event_type: 'user_input',
+          timestamp: '2026-04-10T00:00:10.000Z',
+          user_input: '用 systematic-debugging 帮我查一下这个问题',
+          status: 'success',
+        },
+        {
+          trace_id: 'trace-2',
+          runtime: 'codex',
+          session_id: 'session-1',
+          turn_id: 'turn-2',
+          event_type: 'tool_result',
+          timestamp: '2026-04-10T00:00:20.000Z',
+          tool_name: 'exec_command',
+          tool_result: {
+            exit_code: 1,
+            stderr: 'npm test failed',
+          },
+          status: 'failure',
+        },
+      ],
+    } as never, 'skill content');
+
+    expect(result.success).toBe(true);
+    const [, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const requestBody = JSON.parse(String(requestInit.body)) as {
+      messages: Array<{ role: string; content: string }>;
+    };
+    const systemMessage = requestBody.messages.find((message) => message.role === 'system')?.content || '';
+
+    expect(systemMessage).toContain('先按下面顺序做判断');
+    expect(systemMessage).toContain('第一步：确认当前窗口里是否真的存在 skill 相关信号');
+    expect(systemMessage).toContain('只有同时满足以下条件，才允许返回 apply_optimization');
+    expect(systemMessage).toContain('如果问题主要来自宿主故障、工具故障、权限限制、网络/环境异常，默认不能返回 apply_optimization');
+    expect(systemMessage).toContain('need_more_context 适用于“怀疑 skill 有问题，但证据、归因或定位还不稳定”');
+    expect(systemMessage).toContain('当 decision=apply_optimization 时，evidence 至少提供 2 条');
+  });
+
   it('recovers structured json from reasoning_content-only responses', async () => {
     readDashboardConfigMock.mockResolvedValue({
       autoOptimize: true,

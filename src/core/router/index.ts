@@ -11,10 +11,3 @@ export {
   type RouterOptions,
   type RouteResult,
 } from './router.js';
-
-export {
-  LLMRouterAgent,
-  createLLMRouterAgent,
-  type LLMRouterAgentOptions,
-  type SkillRecognitionResult,
-} from './llm-router-agent.js';
