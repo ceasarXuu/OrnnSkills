@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createServer } from 'node:net';
 
 const mocks = vi.hoisted(() => ({
@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   readProjectSnapshotVersion: vi.fn(),
   readGlobalLogs: vi.fn(),
   readLogsSince: vi.fn(),
+  createGlobalLogCursor: vi.fn(),
   readDashboardConfig: vi.fn(),
   writeDashboardConfig: vi.fn(),
   checkProvidersConnectivity: vi.fn(),
@@ -75,6 +76,7 @@ vi.mock('../../src/dashboard/data-reader.js', () => ({
   readProjectSnapshotVersion: mocks.readProjectSnapshotVersion,
   readGlobalLogs: mocks.readGlobalLogs,
   readLogsSince: mocks.readLogsSince,
+  createGlobalLogCursor: mocks.createGlobalLogCursor,
 }));
 
 vi.mock('../../src/config/manager.js', () => ({
@@ -163,6 +165,15 @@ async function readFirstUpdateEvent(port: number): Promise<Record<string, unknow
 }
 
 describe('dashboard server sse bootstrap', () => {
+  beforeEach(() => {
+    mocks.createGlobalLogCursor.mockReturnValue({ path: null, offset: 0 });
+    mocks.readLogsSince.mockReturnValue({
+      lines: [],
+      newOffset: 0,
+      cursor: { path: null, offset: 0 },
+    });
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
@@ -470,7 +481,6 @@ describe('dashboard server sse bootstrap', () => {
       },
     });
     mocks.readGlobalLogs.mockReturnValue([{ ts: '2026-04-15T00:00:00.000Z', line: 'boot' }]);
-    mocks.readLogsSince.mockReturnValue({ lines: [], newOffset: 0 });
     mocks.readProjectSnapshotVersion.mockReturnValue('v1');
 
     const { createDashboardServer } = await import('../../src/dashboard/server.js');
@@ -534,8 +544,6 @@ describe('dashboard server sse bootstrap', () => {
     });
     mocks.readProjectSnapshotVersion.mockReturnValue('steady-version');
     mocks.readGlobalLogs.mockReturnValue([]);
-    mocks.readLogsSince.mockReturnValue({ lines: [], newOffset: 0 });
-
     const { createDashboardServer } = await import('../../src/dashboard/server.js');
     const dashboard = createDashboardServer(port, 'zh');
     await dashboard.start();
@@ -570,7 +578,6 @@ describe('dashboard server sse bootstrap', () => {
     mocks.readDaemonStatus.mockReturnValue({ isRunning: true });
     mocks.readSkills.mockReturnValue([{ skillId: 'demo-skill' }]);
     mocks.readGlobalLogs.mockReturnValue([]);
-    mocks.readLogsSince.mockReturnValue({ lines: [], newOffset: 0 });
     mocks.readProjectSnapshotVersion
       .mockReturnValueOnce('v1')
       .mockReturnValueOnce('v2');
@@ -670,7 +677,6 @@ describe('dashboard server sse bootstrap', () => {
     mocks.readDaemonStatus.mockReturnValue({ isRunning: false });
     mocks.readSkills.mockReturnValue([]);
     mocks.readGlobalLogs.mockReturnValue([]);
-    mocks.readLogsSince.mockReturnValue({ lines: [], newOffset: 0 });
     mocks.readProjectSnapshotVersion.mockReturnValue('v1');
 
     const { createDashboardServer } = await import('../../src/dashboard/server.js');

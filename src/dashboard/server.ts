@@ -8,9 +8,6 @@
  */
 
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { statSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
 import {
   listProjects,
   addProject,
@@ -33,6 +30,8 @@ import {
   readProjectSnapshotVersion,
   readGlobalLogs,
   readLogsSince,
+  createGlobalLogCursor,
+  type LogCursor,
   type ProjectData,
 } from './data-reader.js';
 import { getDashboardHtml } from './ui.js';
@@ -97,7 +96,7 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
   let currentLang: Language = defaultLang;
   const clients: Set<SseClient> = new Set();
   let sseInterval: ReturnType<typeof setInterval> | null = null;
-  let logByteOffset = 0;
+  let logCursor: LogCursor = { path: null, offset: 0 };
   const buildId = `${Date.now()}`;
   const startedAt = new Date().toISOString();
   const clientErrors: DashboardClientErrorEvent[] = [];
@@ -428,8 +427,8 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
     const projectPaths = new Set(projects.map((project) => project.path));
     const projectsSignature = buildProjectsSignature(projects);
 
-    const { lines: newLogs, newOffset } = readLogsSince(logByteOffset);
-    logByteOffset = newOffset;
+    const { lines: newLogs, cursor } = readLogsSince(logCursor);
+    logCursor = cursor;
 
     for (const client of clients) {
       for (const existingPath of Array.from(client.projectSnapshotVersions.keys())) {
@@ -1384,13 +1383,8 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
       return Promise.resolve(); // Already running
     }
 
-    // Initialize log offset to current file end so we only stream new lines
-    try {
-      const logPath = join(homedir(), '.ornn', 'logs', 'combined.log');
-      logByteOffset = statSync(logPath).size;
-    } catch {
-      logByteOffset = 0;
-    }
+    // Initialize the log cursor at the latest active rotated file.
+    logCursor = createGlobalLogCursor();
 
     return new Promise((resolve, reject) => {
       const onError = (err: Error) => {

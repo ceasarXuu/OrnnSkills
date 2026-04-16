@@ -16,7 +16,7 @@ import {
   lstatSync,
   readlinkSync,
 } from 'node:fs';
-import { basename, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { homedir } from 'node:os';
 import type { ShadowEntry } from '../core/shadow-registry/index.js';
 import type { DecisionEventRecord } from '../core/decision-events/index.js';
@@ -588,6 +588,11 @@ export interface LogLine {
   message: string;
 }
 
+export interface LogCursor {
+  path: string | null;
+  offset: number;
+}
+
 function parseLogLine(raw: string): LogLine {
   // Format: [YYYY-MM-DD HH:mm:ss] LEVEL  [context] message
   const match = raw.match(/^\[([^\]]+)\]\s+(\w+)\s+(?:\[([^\]]+)\]\s+)?(.*)$/);
@@ -603,28 +608,131 @@ function parseLogLine(raw: string): LogLine {
   return { raw, level: 'INFO', timestamp: '', context: '', message: raw };
 }
 
+function getGlobalLogPath(fileName: string): string {
+  return join(homedir(), '.ornn', 'logs', fileName);
+}
+
+function listMatchingLogPaths(baseLogPath: string): string[] {
+  const logDir = dirname(baseLogPath);
+  if (!existsSync(logDir)) return [];
+
+  const baseName = basename(baseLogPath);
+  const stem = baseName.endsWith('.log') ? baseName.slice(0, -4) : baseName;
+
+  try {
+    return readdirSync(logDir, { withFileTypes: true })
+      .filter((entry) => entry.isFile())
+      .map((entry) => entry.name)
+      .filter((name) => {
+        if (name === baseName) return true;
+        return new RegExp(`^${stem}\\d+\\.log$`).test(name);
+      })
+      .map((name) => join(logDir, name));
+  } catch {
+    return existsSync(baseLogPath) ? [baseLogPath] : [];
+  }
+}
+
+function compareLogPathsByMtime(left: string, right: string): number {
+  try {
+    const leftStat = statSync(left);
+    const rightStat = statSync(right);
+    if (leftStat.mtimeMs !== rightStat.mtimeMs) {
+      return leftStat.mtimeMs - rightStat.mtimeMs;
+    }
+  } catch {
+    // fall back to lexical ordering
+  }
+  return left.localeCompare(right);
+}
+
+function getLatestLogPath(baseLogPath: string): string | null {
+  const candidates = listMatchingLogPaths(baseLogPath).sort(compareLogPathsByMtime);
+  return candidates.at(-1) ?? null;
+}
+
+function readRecentLogLines(baseLogPath: string, lastN: number): string[] {
+  const chunks: string[][] = [];
+  let remaining = lastN;
+  const candidates = listMatchingLogPaths(baseLogPath).sort(compareLogPathsByMtime).reverse();
+
+  for (const filePath of candidates) {
+    if (remaining <= 0) break;
+    const lines = tailNdjson(filePath, remaining);
+    if (lines.length === 0) continue;
+    chunks.unshift(lines);
+    remaining -= lines.length;
+  }
+
+  return chunks.flat().slice(-lastN);
+}
+
+export function createGlobalLogCursor(fileName = 'combined.log'): LogCursor {
+  const baseLogPath = getGlobalLogPath(fileName);
+  const latestLogPath = getLatestLogPath(baseLogPath);
+  if (!latestLogPath) {
+    return { path: null, offset: 0 };
+  }
+
+  try {
+    return {
+      path: latestLogPath,
+      offset: statSync(latestLogPath).size,
+    };
+  } catch {
+    return {
+      path: latestLogPath,
+      offset: 0,
+    };
+  }
+}
+
 export function readGlobalLogs(lastN = 200): LogLine[] {
-  const logPath = join(homedir(), '.ornn', 'logs', 'combined.log');
-  const lines = tailNdjson(logPath, lastN);
+  const logPath = getGlobalLogPath('combined.log');
+  const lines = readRecentLogLines(logPath, lastN);
   return lines.map(parseLogLine);
 }
 
 /**
  * 读取全局日志文件，返回从 byteOffset 开始的新内容和新的 offset
  */
-export function readLogsSince(byteOffset: number): { lines: LogLine[]; newOffset: number } {
-  const logPath = join(homedir(), '.ornn', 'logs', 'combined.log');
-  if (!existsSync(logPath)) return { lines: [], newOffset: byteOffset };
+export function readLogsSince(
+  cursor: number | LogCursor
+): { lines: LogLine[]; newOffset: number; cursor: LogCursor } {
+  const baseLogPath = getGlobalLogPath('combined.log');
+  const latestLogPath = getLatestLogPath(baseLogPath);
+  const normalizedCursor: LogCursor =
+    typeof cursor === 'number'
+      ? { path: baseLogPath, offset: cursor }
+      : cursor;
 
-  const fileSize = statSync(logPath).size;
-  if (fileSize <= byteOffset) return { lines: [], newOffset: byteOffset };
+  if (!latestLogPath) {
+    return {
+      lines: [],
+      newOffset: normalizedCursor.offset,
+      cursor: { path: null, offset: normalizedCursor.offset },
+    };
+  }
 
-  const readSize = fileSize - byteOffset;
-  const fd = openSync(logPath, 'r');
+  const fileSize = statSync(latestLogPath).size;
+  let readOffset = normalizedCursor.offset;
+  if (normalizedCursor.path !== latestLogPath || readOffset > fileSize) {
+    readOffset = 0;
+  }
+  if (fileSize <= readOffset) {
+    return {
+      lines: [],
+      newOffset: fileSize,
+      cursor: { path: latestLogPath, offset: fileSize },
+    };
+  }
+
+  const readSize = fileSize - readOffset;
+  const fd = openSync(latestLogPath, 'r');
   let newContent: string;
   try {
     const buf = Buffer.alloc(readSize);
-    readSync(fd, buf, 0, readSize, byteOffset);
+    readSync(fd, buf, 0, readSize, readOffset);
     newContent = buf.toString('utf-8');
   } finally {
     closeSync(fd);
@@ -635,7 +743,11 @@ export function readLogsSince(byteOffset: number): { lines: LogLine[]; newOffset
     .filter((l) => l.trim())
     .map(parseLogLine);
 
-  return { lines, newOffset: fileSize };
+  return {
+    lines,
+    newOffset: fileSize,
+    cursor: { path: latestLogPath, offset: fileSize },
+  };
 }
 
 // ─── Full Project Snapshot ────────────────────────────────────────────────────

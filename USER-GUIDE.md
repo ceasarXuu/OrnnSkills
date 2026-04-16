@@ -513,6 +513,11 @@ cat ~/.ornn/logs/error.log
 tail -100 ~/.ornn/logs/error.log
 ```
 
+**补充排查**：
+
+- Dashboard 日志看板读取的是 `~/.ornn/logs/` 下最新的 `combined*.log` 文件。
+- 如果 `combined.log` 已经轮转成 `combined1.log`、`combined2.log` 等，优先检查最新修改时间的文件，而不是只盯 `combined.log`。
+
 ---
 
 ## ✅ 最佳实践

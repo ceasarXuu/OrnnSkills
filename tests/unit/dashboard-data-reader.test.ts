@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, afterEach } from 'vitest';
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
   readDaemonStatus,
+  readGlobalLogs,
+  readLogsSince,
   readProjectSnapshot,
   readProjectSnapshotVersion,
   readRecentTraces,
@@ -366,5 +368,67 @@ describe('dashboard data reader snapshot version', () => {
     const snapshotBytes = Buffer.byteLength(JSON.stringify(snapshot), 'utf-8');
 
     expect(snapshotBytes).toBeLessThan(96 * 1024);
+  });
+
+  it('reads latest dashboard logs from the rotated combined log file', async () => {
+    const oldHome = process.env.HOME;
+    const fakeHome = join(testDir, 'rotated-log-home-read');
+    const logDir = join(fakeHome, '.ornn', 'logs');
+    mkdirSync(logDir, { recursive: true });
+    process.env.HOME = fakeHome;
+
+    try {
+      writeFileSync(
+        join(logDir, 'combined.log'),
+        '[2026-04-17 03:00:01] INFO  [daemon] old log line\n',
+        'utf-8'
+      );
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      writeFileSync(
+        join(logDir, 'combined1.log'),
+        '[2026-04-17 05:09:07] INFO  [daemon] new rotated log line\n',
+        'utf-8'
+      );
+
+      const logs = readGlobalLogs(10);
+
+      expect(logs.at(-1)?.message).toContain('new rotated log line');
+      expect(logs.some((line) => line.message.includes('old log line'))).toBe(true);
+    } finally {
+      process.env.HOME = oldHome;
+    }
+  });
+
+  it('continues streaming dashboard logs after rotation to a new combined log file', async () => {
+    const oldHome = process.env.HOME;
+    const fakeHome = join(testDir, 'rotated-log-home-stream');
+    const logDir = join(fakeHome, '.ornn', 'logs');
+    mkdirSync(logDir, { recursive: true });
+    process.env.HOME = fakeHome;
+
+    try {
+      const originalLogPath = join(logDir, 'combined.log');
+      writeFileSync(
+        originalLogPath,
+        '[2026-04-17 03:00:01] INFO  [daemon] old log line '.repeat(40) + '\n',
+        'utf-8'
+      );
+      const previousOffset = statSync(originalLogPath).size;
+
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      writeFileSync(
+        join(logDir, 'combined1.log'),
+        '[2026-04-17 05:09:07] INFO  [daemon] new rotated log line\n',
+        'utf-8'
+      );
+
+      const { lines, newOffset } = readLogsSince(previousOffset);
+
+      expect(lines).toHaveLength(1);
+      expect(lines[0]?.message).toContain('new rotated log line');
+      expect(newOffset).toBeGreaterThan(0);
+    } finally {
+      process.env.HOME = oldHome;
+    }
   });
 });
