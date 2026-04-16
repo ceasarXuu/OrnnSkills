@@ -44,6 +44,7 @@ interface ProjectRuntime {
 }
 
 const CHECKPOINT_FILE = '.ornn/state/daemon-checkpoint.json';
+const REGISTRY_SYNC_INTERVAL_MS = 1000;
 
 export class Daemon {
   private launchContext: string;
@@ -245,7 +246,7 @@ export class Daemon {
 
     this.registrySyncInterval = setInterval(() => {
       void this.syncRegisteredProjects();
-    }, 5000);
+    }, REGISTRY_SYNC_INTERVAL_MS);
 
     logger.debug('Daemon maintenance tasks started');
   }

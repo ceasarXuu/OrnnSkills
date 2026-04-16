@@ -46,6 +46,7 @@ import { getLiteLLMCatalog } from '../config/litellm-catalog.js';
 import { buildActivityScopeDetailFromData } from './activity-scope-reader.js';
 import { resolveLLMSafetyOptions } from '../llm/request-guard.js';
 import { pickProjectDirectory } from './native-project-picker.js';
+import { ensureMonitoringDaemon, ensureProjectInitialized } from './project-onboarding.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -244,6 +245,28 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
       message: 'All providers are healthy',
       checkedAt,
       results,
+    };
+  }
+
+  async function onboardProjectForMonitoring(projectPath: string, name?: string) {
+    const initialization = await ensureProjectInitialized(projectPath);
+    addProject(initialization.projectPath, name);
+    await writeProjectLanguage(initialization.projectPath, currentLang);
+    const monitoring = await ensureMonitoringDaemon(initialization.projectPath);
+
+    logger.info('Project onboarded for dashboard monitoring', {
+      projectPath: initialization.projectPath,
+      initialized: initialization.initialized,
+      daemonStarted: monitoring.daemonStarted,
+      daemonRunning: monitoring.daemonRunning,
+      source: 'dashboard.project_onboarding',
+    });
+
+    return {
+      projectPath: initialization.projectPath,
+      initialized: initialization.initialized,
+      daemonStarted: monitoring.daemonStarted,
+      daemonRunning: monitoring.daemonRunning,
     };
   }
 
@@ -578,14 +601,22 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
             json(res, { ok: false, cancelled: true });
             return;
           }
-          addProject(projectPath);
-          await writeProjectLanguage(projectPath, currentLang);
+          const onboarding = await onboardProjectForMonitoring(projectPath);
           logger.info('Native project picker selected project', {
-            projectPath,
+            projectPath: onboarding.projectPath,
             lang: currentLang,
             source: 'api.projects.pick',
+            initialized: onboarding.initialized,
+            daemonStarted: onboarding.daemonStarted,
           });
-          json(res, { ok: true, path: projectPath, projects: getProjectsWithStatus() });
+          json(res, {
+            ok: true,
+            path: onboarding.projectPath,
+            initialized: onboarding.initialized,
+            daemonStarted: onboarding.daemonStarted,
+            daemonRunning: onboarding.daemonRunning,
+            projects: getProjectsWithStatus(),
+          });
         } catch (error) {
           logger.error('Native project picker failed', { error: String(error) });
           json(res, { ok: false, error: String(error) }, 500);
@@ -600,14 +631,20 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
             json(res, { ok: false, error: 'path is required' }, 400);
             return;
           }
-          addProject(body.path, body.name);
-          await writeProjectLanguage(body.path, currentLang);
+          const onboarding = await onboardProjectForMonitoring(body.path, body.name);
           logger.debug('Initialized project dashboard language', {
-            projectPath: body.path,
+            projectPath: onboarding.projectPath,
             lang: currentLang,
             source: 'api.projects.add',
           });
-          json(res, { ok: true, projects: getProjectsWithStatus() });
+          json(res, {
+            ok: true,
+            path: onboarding.projectPath,
+            initialized: onboarding.initialized,
+            daemonStarted: onboarding.daemonStarted,
+            daemonRunning: onboarding.daemonRunning,
+            projects: getProjectsWithStatus(),
+          });
         } catch (e) {
           json(res, { ok: false, error: String(e) }, 400);
         }

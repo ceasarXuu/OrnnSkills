@@ -5,6 +5,8 @@ const mocks = vi.hoisted(() => ({
   listProjects: vi.fn(),
   addProject: vi.fn(),
   pickProjectDirectory: vi.fn(),
+  ensureProjectInitialized: vi.fn(),
+  ensureMonitoringDaemon: vi.fn(),
   writeProjectLanguage: vi.fn(),
   readDaemonStatus: vi.fn(),
   readSkills: vi.fn(),
@@ -33,6 +35,11 @@ vi.mock('../../src/dashboard/language-state.js', () => ({
 
 vi.mock('../../src/dashboard/native-project-picker.js', () => ({
   pickProjectDirectory: mocks.pickProjectDirectory,
+}));
+
+vi.mock('../../src/dashboard/project-onboarding.js', () => ({
+  ensureProjectInitialized: mocks.ensureProjectInitialized,
+  ensureMonitoringDaemon: mocks.ensureMonitoringDaemon,
 }));
 
 vi.mock('../../src/dashboard/data-reader.js', () => ({
@@ -280,6 +287,8 @@ describe('dashboard server sse bootstrap', () => {
       },
     ]);
     mocks.pickProjectDirectory.mockResolvedValue(projectPath);
+    mocks.ensureProjectInitialized.mockResolvedValue({ projectPath, initialized: true });
+    mocks.ensureMonitoringDaemon.mockResolvedValue({ daemonStarted: true, daemonRunning: true });
     mocks.readDaemonStatus.mockReturnValue({ isRunning: false });
     mocks.readSkills.mockReturnValue([]);
     mocks.readGlobalLogs.mockReturnValue([]);
@@ -296,6 +305,9 @@ describe('dashboard server sse bootstrap', () => {
       await expect(response.json()).resolves.toEqual({
         ok: true,
         path: projectPath,
+        initialized: true,
+        daemonStarted: true,
+        daemonRunning: true,
         projects: [
           expect.objectContaining({
             path: projectPath,
@@ -306,8 +318,10 @@ describe('dashboard server sse bootstrap', () => {
         ],
       });
       expect(mocks.pickProjectDirectory).toHaveBeenCalledTimes(1);
-      expect(mocks.addProject).toHaveBeenCalledWith(projectPath);
+      expect(mocks.ensureProjectInitialized).toHaveBeenCalledWith(projectPath);
+      expect(mocks.addProject).toHaveBeenCalledWith(projectPath, undefined);
       expect(mocks.writeProjectLanguage).toHaveBeenCalledWith(projectPath, 'en');
+      expect(mocks.ensureMonitoringDaemon).toHaveBeenCalledWith(projectPath);
     } finally {
       await dashboard.stop();
     }

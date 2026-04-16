@@ -1048,6 +1048,10 @@ const state = {
   sortOrder: 'asc',
   selectedMainTab: 'overview',
   currentSkillRuntime: 'codex',
+  currentSkillVersion: null,
+  currentSkillVersions: [],
+  currentSkillVersionMeta: {},
+  currentSkillVersionContextKey: '',
   activityLayer: 'business',
   activityTagFilter: 'core_flow',
   activityRowsByProject: {},
@@ -1065,6 +1069,35 @@ const state = {
 };
 
 const GLOBAL_CONFIG_SCOPE = '__global__';
+
+function getSkillVersionContextKey(encProject, encSkill, encRuntime) {
+  return String(encProject) + '::' + String(encSkill) + '::' + String(encRuntime);
+}
+
+function renderVersionHistory(encProject, encSkill, encRuntime) {
+  const versionList = document.getElementById('versionList');
+  if (!versionList) return;
+  const versions = Array.isArray(state.currentSkillVersions) ? state.currentSkillVersions : [];
+  if (versions.length === 0) {
+    versionList.innerHTML = '<div style="font-size:11px;color:var(--muted)">' + t('modalNoVersions') + '</div>';
+    return;
+  }
+  const selectedVersion = state.currentSkillVersion ?? Math.max(...versions);
+  const metaByVersion = state.currentSkillVersionMeta || {};
+  versionList.innerHTML = versions.slice().reverse().map(v => {
+    const isSelected = v === selectedVersion;
+    const meta = metaByVersion[v];
+    const createdAt = meta?.createdAt?.slice(0, 10) ?? '';
+    const reason = meta?.reason ? escHtml(meta.reason.slice(0, 40)) : '';
+    const metaHtml = meta
+      ? '<span>' + createdAt + '</span>' + (reason ? '<br><span class="version-change">' + reason + '</span>' : '')
+      : t('modalClickToLoad');
+    return '<div class="version-item ' + (isSelected ? 'current' : '') + '" onclick="loadVersion(\\'' + encProject + '\\',\\'' + encSkill + '\\',\\'' + encRuntime + '\\',' + v + ')">' +
+          '<div class="version-num">v' + v + ' ' + (isSelected ? '(' + t('modalCurrent') + ')' : '') + '</div>' +
+          '<div id="vmeta_' + v + '" class="version-meta">' + metaHtml + '</div>' +
+        '</div>';
+  }).join('');
+}
 
 function getConfigScopeId() {
   return GLOBAL_CONFIG_SCOPE;
@@ -4187,18 +4220,13 @@ async function viewSkill(projectPath, skillId, runtime = 'codex') {
     document.getElementById('modalContent').value = data.content ?? t('modalNoContent');
 
     // Render version history
-    const versionList = document.getElementById('versionList');
     const versions = data.versions ?? [];
-    if (versions.length === 0) {
-      versionList.innerHTML = '<div style="font-size:11px;color:var(--muted)">' + t('modalNoVersions') + '</div>';
-    } else {
-      versionList.innerHTML = versions.slice().reverse().map(v => {
-        const isCurrent = v === Math.max(...versions);
-        return \`<div class="version-item \${isCurrent?'current':''}" onclick="loadVersion('\${enc}','\${encSkill}','\${encRuntime}',\${v})">
-          <div class="version-num">v\${v} \${isCurrent ? '(' + t('modalCurrent') + ')':''}</div>
-          <div id="vmeta_\${v}" class="version-meta">\${t('modalClickToLoad')}</div>
-        </div>\`;
-      }).join('');
+    state.currentSkillVersions = Array.isArray(versions) ? versions.slice() : [];
+    state.currentSkillVersion = versions.length > 0 ? Math.max(...versions) : null;
+    state.currentSkillVersionMeta = {};
+    state.currentSkillVersionContextKey = getSkillVersionContextKey(enc, encSkill, encRuntime);
+    renderVersionHistory(enc, encSkill, encRuntime);
+    if (versions.length > 0) {
       // Preload metadata for every card so the history summary is visible before any click.
       await Promise.allSettled(versions.map((version) => loadVersionMeta(enc, encSkill, encRuntime, version)));
     }
@@ -4209,10 +4237,17 @@ async function viewSkill(projectPath, skillId, runtime = 'codex') {
 }
 
 async function loadVersionMeta(encProject, encSkill, encRuntime, version) {
+  const contextKey = getSkillVersionContextKey(encProject, encSkill, encRuntime);
   try {
     const r = await fetch(\`/api/projects/\${encProject}/skills/\${encSkill}/versions/\${version}?runtime=\${encRuntime}\`);
     if (!r.ok) return;
     const data = await r.json();
+    if (state.currentSkillVersionContextKey !== contextKey) return;
+    if (!state.currentSkillVersionMeta || typeof state.currentSkillVersionMeta !== 'object') {
+      state.currentSkillVersionMeta = {};
+    }
+    state.currentSkillVersionMeta[version] = data.metadata || null;
+    renderVersionHistory(encProject, encSkill, encRuntime);
     const el = document.getElementById(\`vmeta_\${version}\`);
     if (el && data.metadata) {
       const m = data.metadata;
@@ -4225,12 +4260,22 @@ async function loadVersionMeta(encProject, encSkill, encRuntime, version) {
 }
 
 async function loadVersion(encProject, encSkill, encRuntime, version) {
+  const contextKey = getSkillVersionContextKey(encProject, encSkill, encRuntime);
   try {
     const r = await fetch(\`/api/projects/\${encProject}/skills/\${encSkill}/versions/\${version}?runtime=\${encRuntime}\`);
     if (!r.ok) {
       throw new Error(\`HTTP \${r.status}: \${r.statusText}\`);
     }
     const data = await r.json();
+    if (state.currentSkillVersionContextKey === contextKey) {
+      state.currentSkillVersion = version;
+      if (!state.currentSkillVersionMeta || typeof state.currentSkillVersionMeta !== 'object') {
+        state.currentSkillVersionMeta = {};
+      }
+      state.currentSkillVersionMeta[version] = data.metadata || state.currentSkillVersionMeta[version] || null;
+      renderVersionHistory(encProject, encSkill, encRuntime);
+      console.debug('[dashboard] selected skill version', { encProject, encSkill, encRuntime, version });
+    }
     document.getElementById('modalContent').value = data.content ?? t('modalNoContent');
     await loadVersionMeta(encProject, encSkill, encRuntime, version);
   } catch (e) {

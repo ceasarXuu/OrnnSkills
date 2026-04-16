@@ -260,7 +260,7 @@ function loadDashboardTestHarness(
   const script = scriptMatch[1]
     .replace(/\binit\(\);\s*$/, '')
     .concat(
-      '\n;globalThis.__dashboardTest = { state, init, switchLang, selectProject, selectMainTab, renderMainPanel, safeRenderMainPanel, renderSidebar, buildActivityRows, copyActivityDetail, openActivityDetail, renderCostPanel, viewSkill, triggerProjectPicker: openProjectPicker };'
+      '\n;globalThis.__dashboardTest = { state, init, switchLang, selectProject, selectMainTab, renderMainPanel, safeRenderMainPanel, renderSidebar, buildActivityRows, copyActivityDetail, openActivityDetail, renderCostPanel, viewSkill, loadVersion, triggerProjectPicker: openProjectPicker };'
     );
 
   vm.runInNewContext(script, runtime);
@@ -281,6 +281,7 @@ function loadDashboardTestHarness(
         openActivityDetail: (projectPath: string, rowId: string) => Promise<void>;
         renderCostPanel: (projectPath: string) => string;
         viewSkill: (projectPath: string, skillId: string, runtime?: string) => Promise<void>;
+        loadVersion: (encProject: string, encSkill: string, encRuntime: string, version: number) => Promise<void>;
         triggerProjectPicker: () => Promise<void>;
       };
     }).__dashboardTest,
@@ -1508,6 +1509,61 @@ describe('dashboard ui recovery', () => {
     expect(getElement('vmeta_1').innerHTML).toContain('Bootstrap source sync');
     expect(getElement('vmeta_2').innerHTML).toContain('Manual edit from dashboard');
     expect(getElement('vmeta_3').innerHTML).toContain('Manual edit from dashboard');
+  });
+
+  it('moves the selected history state to the clicked version card', async () => {
+    const projectPath = '/tmp/ornn-project';
+    const skillId = 'test-driven-development';
+    const runtimeId = 'codex';
+    const encodedProject = encodeURIComponent(projectPath);
+    const encodedSkill = encodeURIComponent(skillId);
+    const { dashboard, getElement } = loadDashboardTestHarness({}, {
+      fetchMap: {
+        [`/api/projects/${encodedProject}/skills/${encodedSkill}?runtime=${runtimeId}`]: {
+          content: '# test-driven-development',
+          versions: [1, 2, 3],
+        },
+        [`/api/projects/${encodedProject}/skills/${encodedSkill}/versions/1?runtime=${runtimeId}`]: {
+          content: 'v1',
+          metadata: {
+            createdAt: '2026-04-06T00:00:00.000Z',
+            reason: 'Bootstrap source sync (project -> project)',
+          },
+        },
+        [`/api/projects/${encodedProject}/skills/${encodedSkill}/versions/2?runtime=${runtimeId}`]: {
+          content: 'v2',
+          metadata: {
+            createdAt: '2026-04-06T00:00:00.000Z',
+            reason: 'Manual edit from dashboard',
+          },
+        },
+        [`/api/projects/${encodedProject}/skills/${encodedSkill}/versions/3?runtime=${runtimeId}`]: {
+          content: 'v3',
+          metadata: {
+            createdAt: '2026-04-06T00:00:00.000Z',
+            reason: 'Manual edit from dashboard',
+          },
+        },
+      },
+    });
+
+    getElement('skillModal');
+    getElement('modalSkillName');
+    getElement('modalSkillStatus');
+    getElement('modalSaveHint');
+    getElement('modalSaveBtn');
+    getElement('modalContent');
+    getElement('versionList');
+
+    await dashboard.viewSkill(projectPath, skillId, runtimeId);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(getElement('versionList').innerHTML).toContain(`version-item current" onclick="loadVersion('${encodedProject}','${encodedSkill}','${runtimeId}',3)`);
+
+    await dashboard.loadVersion(encodedProject, encodedSkill, runtimeId, 2);
+
+    expect(getElement('versionList').innerHTML).toContain(`version-item current" onclick="loadVersion('${encodedProject}','${encodedSkill}','${runtimeId}',2)`);
+    expect(getElement('versionList').innerHTML).not.toContain(`version-item current" onclick="loadVersion('${encodedProject}','${encodedSkill}','${runtimeId}',3)`);
   });
 
 
