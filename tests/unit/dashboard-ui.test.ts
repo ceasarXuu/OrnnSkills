@@ -1579,6 +1579,7 @@ describe('dashboard ui recovery', () => {
     const encodedProject = encodeURIComponent(projectPath);
     const encodedSkill = encodeURIComponent(skillId);
     const { dashboard, getElement } = loadDashboardTestHarness({}, {
+      lang: 'en',
       fetchMap: {
         [`/api/projects/${encodedProject}/skills/${encodedSkill}?runtime=${runtimeId}`]: {
           content: '# test-driven-development',
@@ -1619,12 +1620,75 @@ describe('dashboard ui recovery', () => {
     await dashboard.viewSkill(projectPath, skillId, runtimeId);
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(getElement('versionList').innerHTML).toContain(`version-item current" onclick="loadVersion('${encodedProject}','${encodedSkill}','${runtimeId}',3)`);
+    expect(getElement('versionList').innerHTML).toContain(`version-item current `);
+    expect(getElement('versionList').innerHTML).toContain(`onclick="loadVersion('${encodedProject}','${encodedSkill}','${runtimeId}',3)"`);
 
     await dashboard.loadVersion(encodedProject, encodedSkill, runtimeId, 2);
 
-    expect(getElement('versionList').innerHTML).toContain(`version-item current" onclick="loadVersion('${encodedProject}','${encodedSkill}','${runtimeId}',2)`);
-    expect(getElement('versionList').innerHTML).not.toContain(`version-item current" onclick="loadVersion('${encodedProject}','${encodedSkill}','${runtimeId}',3)`);
+    expect(getElement('versionList').innerHTML).toContain(`version-item current `);
+    expect(getElement('versionList').innerHTML).toContain(`onclick="loadVersion('${encodedProject}','${encodedSkill}','${runtimeId}',2)"`);
+    expect(getElement('versionList').innerHTML).not.toContain(`version-item current " onclick="loadVersion('${encodedProject}','${encodedSkill}','${runtimeId}',3)"`);
+  });
+
+  it('renders invalidate or restore actions and effective status for each version card', async () => {
+    const projectPath = '/tmp/ornn-project';
+    const skillId = 'test-driven-development';
+    const runtimeId = 'codex';
+    const encodedProject = encodeURIComponent(projectPath);
+    const encodedSkill = encodeURIComponent(skillId);
+    const { dashboard, getElement } = loadDashboardTestHarness({}, {
+      lang: 'en',
+      fetchMap: {
+        [`/api/projects/${encodedProject}/skills/${encodedSkill}?runtime=${runtimeId}`]: {
+          content: 'v2 active content',
+          versions: [1, 2, 3],
+          effectiveVersion: 2,
+        },
+        [`/api/projects/${encodedProject}/skills/${encodedSkill}/versions/1?runtime=${runtimeId}`]: {
+          content: 'v1',
+          metadata: {
+            createdAt: '2026-04-06T00:00:00.000Z',
+            reason: 'Bootstrap source sync (project -> project)',
+            isDisabled: false,
+          },
+        },
+        [`/api/projects/${encodedProject}/skills/${encodedSkill}/versions/2?runtime=${runtimeId}`]: {
+          content: 'v2',
+          metadata: {
+            createdAt: '2026-04-06T00:00:00.000Z',
+            reason: 'Manual edit from dashboard',
+            isDisabled: false,
+          },
+        },
+        [`/api/projects/${encodedProject}/skills/${encodedSkill}/versions/3?runtime=${runtimeId}`]: {
+          content: 'v3',
+          metadata: {
+            createdAt: '2026-04-06T00:00:00.000Z',
+            reason: 'Manual edit from dashboard',
+            isDisabled: true,
+          },
+        },
+      },
+    });
+
+    getElement('skillModal');
+    getElement('modalSkillName');
+    getElement('modalSkillStatus');
+    getElement('modalSaveHint');
+    getElement('modalSaveBtn');
+    getElement('modalContent');
+    getElement('versionList');
+
+    await dashboard.viewSkill(projectPath, skillId, runtimeId);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const html = getElement('versionList').innerHTML;
+    expect(html).toContain('Restore');
+    expect(html).toContain('Invalidate');
+    expect(html).toContain('effective');
+    expect(html).toContain('invalid');
+    expect(html).toContain(`version-item current `);
+    expect(html).toContain(`onclick="loadVersion('${encodedProject}','${encodedSkill}','${runtimeId}',2)"`);
   });
 
 

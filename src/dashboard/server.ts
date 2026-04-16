@@ -703,6 +703,11 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
           const content = readSkillContent(projectPath, skillId, runtime);
           const skills = readSkills(projectPath);
           const skill = skills.find((s) => s.skillId === skillId && (s.runtime ?? 'codex') === runtime);
+          const versionManager = new SkillVersionManager({
+            projectPath,
+            skillId,
+            runtime,
+          });
           if (content === null) {
             logger.warn('Skill content not found for dashboard request', {
               projectPath,
@@ -715,6 +720,7 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
             runtime,
             content,
             versions: skill?.versionsAvailable ?? [],
+            effectiveVersion: versionManager.getEffectiveVersion()?.version ?? skill?.effectiveVersion ?? null,
             status: skill?.status,
           });
           return;
@@ -825,6 +831,101 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
 
         // GET /api/projects/:id/skills/:skillId/versions/:v
         const versionMatch = subPath.match(/^\/skills\/([^/]+)\/versions\/(\d+)$/);
+        if (versionMatch && method === 'PATCH') {
+          const skillId = decodeURIComponent(versionMatch[1]);
+          const version = parseInt(versionMatch[2], 10);
+          const body = (await parseBody(req)) as { disabled?: unknown };
+          if (typeof body.disabled !== 'boolean') {
+            json(res, { ok: false, error: 'disabled must be a boolean' }, 400);
+            return;
+          }
+
+          const runtimeParam = url.searchParams.get('runtime');
+          const runtime: RuntimeType =
+            runtimeParam === 'claude' || runtimeParam === 'opencode' || runtimeParam === 'codex'
+              ? runtimeParam
+              : 'codex';
+
+          try {
+            const versionManager = new SkillVersionManager({
+              projectPath,
+              skillId,
+              runtime,
+            });
+            const updatedVersion = versionManager.setVersionDisabled(version, body.disabled);
+            if (!updatedVersion) {
+              notFound(res);
+              return;
+            }
+
+            const effectiveVersion = versionManager.getEffectiveVersion();
+            if (!effectiveVersion) {
+              json(res, { ok: false, error: 'No effective version available after update' }, 400);
+              return;
+            }
+
+            const shadowRegistry = createShadowRegistry(projectPath);
+            shadowRegistry.init();
+            const updatedShadow = shadowRegistry.updateContent(skillId, effectiveVersion.content, runtime);
+            if (!updatedShadow) {
+              notFound(res);
+              return;
+            }
+
+            const deployer = createSkillDeployer({
+              runtime,
+              projectPath,
+            });
+            const deployResult = deployer.deploy(skillId, effectiveVersion);
+            if (!deployResult.success) {
+              logger.error('Dashboard version state updated but failed to deploy effective version', {
+                projectPath,
+                skillId,
+                runtime,
+                version,
+                effectiveVersion: effectiveVersion.version,
+                error: deployResult.error,
+              });
+              json(
+                res,
+                {
+                  ok: false,
+                  error: `Version state updated but deploy failed`,
+                  detail: deployResult.error,
+                  version,
+                  effectiveVersion: effectiveVersion.version,
+                },
+                500
+              );
+              return;
+            }
+
+            logger.info('Dashboard toggled skill version state', {
+              projectPath,
+              skillId,
+              runtime,
+              version,
+              disabled: body.disabled,
+              effectiveVersion: effectiveVersion.version,
+            });
+
+            json(res, {
+              ok: true,
+              skillId,
+              runtime,
+              version,
+              disabled: !!updatedVersion.metadata.isDisabled,
+              effectiveVersion: effectiveVersion.version,
+              metadata: updatedVersion.metadata,
+            });
+            return;
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            json(res, { ok: false, error: message }, 400);
+            return;
+          }
+        }
+
         if (versionMatch && method === 'GET') {
           const skillId = decodeURIComponent(versionMatch[1]);
           const version = parseInt(versionMatch[2], 10);

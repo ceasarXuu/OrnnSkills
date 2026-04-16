@@ -110,7 +110,7 @@ export function createSyncCommand(): Command {
           skillId,
           runtime: targetRuntime,
         });
-        const latest = versionManager.getLatestVersion();
+        const latest = versionManager.getEffectiveVersion() || versionManager.getLatestVersion();
         const version =
           latest && latest.content === shadowContent
             ? latest

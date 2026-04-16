@@ -718,9 +718,19 @@ export function getDashboardHtml(_port: number, lang: Language = 'en', buildId =
   }
   .version-item:hover { border-color: var(--blue); }
   .version-item.current { border-color: var(--green); }
+  .version-item.invalid { opacity: .72; }
   .version-num { font-size: 11px; font-weight: 500; }
   .version-meta { font-size: 10px; color: var(--muted); margin-top: 3px; }
   .version-change { display: inline-block; font-size: 9px; padding: 1px 5px; border-radius: 8px; margin-top: 3px; background: rgba(88,166,255,.1); color: var(--blue); }
+  .version-flags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+  .version-flag {
+    display: inline-flex; align-items: center; font-size: 9px; line-height: 1;
+    padding: 2px 6px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted);
+  }
+  .version-flag.effective { border-color: rgba(63,185,80,.55); color: var(--green); background: rgba(63,185,80,.12); }
+  .version-flag.invalid { border-color: rgba(248,81,73,.5); color: var(--red); background: rgba(248,81,73,.12); }
+  .version-actions { display: flex; justify-content: flex-end; margin-top: 8px; }
+  .version-actions .btn-secondary { font-size: 10px; padding: 3px 8px; }
   #eventModal .modal {
     height: auto;
     max-height: calc(100vh - 48px);
@@ -1062,6 +1072,7 @@ const state = {
   selectedMainTab: 'overview',
   currentSkillRuntime: 'codex',
   currentSkillVersion: null,
+  currentSkillEffectiveVersion: null,
   currentSkillVersions: [],
   currentSkillVersionMeta: {},
   currentSkillVersionContextKey: '',
@@ -1096,18 +1107,29 @@ function renderVersionHistory(encProject, encSkill, encRuntime) {
     return;
   }
   const selectedVersion = state.currentSkillVersion ?? Math.max(...versions);
+  const effectiveVersion = state.currentSkillEffectiveVersion ?? selectedVersion;
   const metaByVersion = state.currentSkillVersionMeta || {};
   versionList.innerHTML = versions.slice().reverse().map(v => {
     const isSelected = v === selectedVersion;
     const meta = metaByVersion[v];
+    const isDisabled = !!meta?.isDisabled;
+    const isEffective = !isDisabled && v === effectiveVersion;
     const createdAt = meta?.createdAt?.slice(0, 10) ?? '';
     const reason = meta?.reason ? escHtml(meta.reason.slice(0, 40)) : '';
     const metaHtml = meta
       ? '<span>' + createdAt + '</span>' + (reason ? '<br><span class="version-change">' + reason + '</span>' : '')
       : t('modalClickToLoad');
-    return '<div class="version-item ' + (isSelected ? 'current' : '') + '" onclick="loadVersion(\\'' + encProject + '\\',\\'' + encSkill + '\\',\\'' + encRuntime + '\\',' + v + ')">' +
-          '<div class="version-num">v' + v + ' ' + (isSelected ? '(' + t('modalCurrent') + ')' : '') + '</div>' +
+    const flags = []
+      .concat(isEffective ? ['<span class="version-flag effective">' + t('modalEffective') + '</span>'] : [])
+      .concat(isDisabled ? ['<span class="version-flag invalid">' + t('modalInvalid') + '</span>'] : [])
+      .join('');
+    const actionLabel = isDisabled ? t('modalRestore') : t('modalInvalidate');
+    const actionTarget = isDisabled ? 'false' : 'true';
+    return '<div class="version-item ' + (isSelected ? 'current ' : '') + (isDisabled ? 'invalid' : '') + '" onclick="loadVersion(\\'' + encProject + '\\',\\'' + encSkill + '\\',\\'' + encRuntime + '\\',' + v + ')">' +
+          '<div class="version-num">v' + v + '</div>' +
+          (flags ? '<div class="version-flags">' + flags + '</div>' : '') +
           '<div id="vmeta_' + v + '" class="version-meta">' + metaHtml + '</div>' +
+          '<div class="version-actions"><button class="btn-secondary" type="button" onclick="toggleSkillVersionDisabled(\\'' + encProject + '\\',\\'' + encSkill + '\\',\\'' + encRuntime + '\\',' + v + ',' + actionTarget + ');event.stopPropagation()">' + actionLabel + '</button></div>' +
         '</div>';
   }).join('');
 }
@@ -4173,6 +4195,7 @@ function renderSkillCard(skill, projectPath) {
   const statusCls = 'status-' + (skill.status || 'pending');
   const versions = skill.versionsAvailable?.length ?? 0;
   const runtime = skill.runtime || 'codex';
+  const effectiveVersion = skill.effectiveVersion ?? maxVersion(skill);
   const highlightedName = highlightText(skill.skillId, state.searchQuery);
   return \`<div class="skill-card" onclick="viewSkill('\${escJsStr(projectPath)}','\${escJsStr(skill.skillId)}','\${escJsStr(runtime)}')">
     <div class="skill-top">
@@ -4185,7 +4208,7 @@ function renderSkillCard(skill, projectPath) {
       </div>
     </div>
     <div class="skill-meta">
-      <span>v\${skill.current_revision ?? skill.version ?? 1}</span>
+      <span>v\${effectiveVersion}</span>
       <span>\${runtime}</span>
       <span>\${skill.traceCount ?? 0} \${t('skillTraces')}</span>
       \${skill.analysisResult?.confidence !== undefined ? \`<span>\${t('skillConfidence')}: \${(skill.analysisResult.confidence * 100).toFixed(0)}%</span>\` : ''}
@@ -4279,7 +4302,10 @@ async function viewSkill(projectPath, skillId, runtime = 'codex') {
     // Render version history
     const versions = data.versions ?? [];
     state.currentSkillVersions = Array.isArray(versions) ? versions.slice() : [];
-    state.currentSkillVersion = versions.length > 0 ? Math.max(...versions) : null;
+    state.currentSkillEffectiveVersion = typeof data.effectiveVersion === 'number' ? data.effectiveVersion : null;
+    state.currentSkillVersion = typeof data.effectiveVersion === 'number'
+      ? data.effectiveVersion
+      : (versions.length > 0 ? Math.max(...versions) : null);
     state.currentSkillVersionMeta = {};
     state.currentSkillVersionContextKey = getSkillVersionContextKey(enc, encSkill, encRuntime);
     renderVersionHistory(enc, encSkill, encRuntime);
@@ -4337,6 +4363,53 @@ async function loadVersion(encProject, encSkill, encRuntime, version) {
     await loadVersionMeta(encProject, encSkill, encRuntime, version);
   } catch (e) {
     console.error('[dashboard] failed to load version content', { encProject, encSkill, version, error: String(e) });
+  }
+}
+
+async function toggleSkillVersionDisabled(encProject, encSkill, encRuntime, version, disabled) {
+  const contextKey = getSkillVersionContextKey(encProject, encSkill, encRuntime);
+  const hintEl = document.getElementById('modalSaveHint');
+  try {
+    const r = await fetch('/api/projects/' + encProject + '/skills/' + encSkill + '/versions/' + version + '?runtime=' + encRuntime, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ disabled: !!disabled }),
+    });
+    if (!r.ok) {
+      const errorBody = await r.json().catch(() => ({}));
+      throw new Error((errorBody && errorBody.error) || ('HTTP ' + r.status + ': ' + r.statusText));
+    }
+    const data = await r.json();
+    if (state.currentSkillVersionContextKey !== contextKey) return;
+    if (!state.currentSkillVersionMeta || typeof state.currentSkillVersionMeta !== 'object') {
+      state.currentSkillVersionMeta = {};
+    }
+    state.currentSkillVersionMeta[version] = data.metadata || state.currentSkillVersionMeta[version] || null;
+    state.currentSkillEffectiveVersion = typeof data.effectiveVersion === 'number' ? data.effectiveVersion : state.currentSkillEffectiveVersion;
+    renderVersionHistory(encProject, encSkill, encRuntime);
+
+    const projectPath = decodeURIComponent(encProject);
+    const runtime = decodeURIComponent(encRuntime);
+    const skillId = decodeURIComponent(encSkill);
+    const pd = state.projectData[projectPath];
+    const skills = Array.isArray(pd?.skills) ? pd.skills : [];
+    const skill = skills.find((item) => item.skillId === skillId && (item.runtime || 'codex') === runtime);
+    if (skill) {
+      skill.effectiveVersion = state.currentSkillEffectiveVersion;
+    }
+    if (state.selectedProjectId === projectPath && state.selectedMainTab === 'skills') {
+      updateSkillsList();
+    }
+
+    if (hintEl) {
+      hintEl.textContent = '';
+    }
+    console.info('[dashboard] toggled skill version state', { encProject, encSkill, encRuntime, version, disabled, effectiveVersion: state.currentSkillEffectiveVersion });
+  } catch (e) {
+    console.error('[dashboard] failed to toggle skill version state', { encProject, encSkill, encRuntime, version, disabled, error: String(e) });
+    if (hintEl) {
+      hintEl.textContent = t('modalVersionActionFailed');
+    }
   }
 }
 

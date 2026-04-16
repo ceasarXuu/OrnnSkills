@@ -22,6 +22,21 @@ const mocks = vi.hoisted(() => ({
   writeDashboardConfig: vi.fn(),
   checkProvidersConnectivity: vi.fn(),
   getLiteLLMCatalog: vi.fn(),
+  shadowRegistry: {
+    init: vi.fn(),
+    updateContent: vi.fn(),
+  },
+  createShadowRegistry: vi.fn(),
+  versionManager: {
+    createVersion: vi.fn(),
+    setVersionDisabled: vi.fn(),
+    getEffectiveVersion: vi.fn(),
+  },
+  SkillVersionManager: vi.fn(),
+  deployer: {
+    deploy: vi.fn(),
+  },
+  createSkillDeployer: vi.fn(),
 }));
 
 vi.mock('../../src/dashboard/projects-registry.js', () => ({
@@ -63,6 +78,20 @@ vi.mock('../../src/config/manager.js', () => ({
 
 vi.mock('../../src/config/litellm-catalog.js', () => ({
   getLiteLLMCatalog: mocks.getLiteLLMCatalog,
+}));
+
+vi.mock('../../src/core/shadow-registry/index.js', () => ({
+  createShadowRegistry: mocks.createShadowRegistry,
+}));
+
+vi.mock('../../src/core/skill-version/index.js', () => ({
+  SkillVersionManager: function SkillVersionManager() {
+    return mocks.versionManager;
+  },
+}));
+
+vi.mock('../../src/core/skill-deployer/index.js', () => ({
+  createSkillDeployer: mocks.createSkillDeployer,
 }));
 
 async function getFreePort(): Promise<number> {
@@ -128,6 +157,83 @@ describe('dashboard server sse bootstrap', () => {
     vi.unstubAllGlobals();
     vi.clearAllMocks();
     vi.resetModules();
+  });
+
+  it('toggles a skill version disabled state and redeploys the latest effective version', async () => {
+    const projectPath = '/tmp/demo-project';
+    const skillId = 'demo-skill';
+    const runtime = 'codex';
+    const port = await getFreePort();
+    mocks.createShadowRegistry.mockReturnValue(mocks.shadowRegistry);
+    mocks.SkillVersionManager.mockImplementation(() => mocks.versionManager);
+    mocks.createSkillDeployer.mockReturnValue(mocks.deployer);
+    mocks.versionManager.setVersionDisabled.mockReturnValue({
+      version: 4,
+      content: '# muted',
+      metadata: {
+        version: 4,
+        createdAt: '2026-04-17T00:00:00.000Z',
+        reason: 'latest',
+        traceIds: [],
+        previousVersion: 3,
+        isDisabled: true,
+      },
+    });
+    mocks.versionManager.getEffectiveVersion.mockReturnValue({
+      version: 3,
+      content: '# active v3',
+      metadata: {
+        version: 3,
+        createdAt: '2026-04-16T00:00:00.000Z',
+        reason: 'previous',
+        traceIds: [],
+        previousVersion: 2,
+        isDisabled: false,
+      },
+    });
+    mocks.shadowRegistry.updateContent.mockReturnValue({ skillId, runtime });
+    mocks.deployer.deploy.mockReturnValue({
+      success: true,
+      deployedPath: `/tmp/project/.${runtime}/skills/${skillId}/SKILL.md`,
+      version: 3,
+    });
+
+    const { createDashboardServer } = await import('../../src/dashboard/server.js');
+    const dashboard = createDashboardServer(port, 'en');
+    await dashboard.start();
+
+    try {
+      const response = await fetch(
+        `http://127.0.0.1:${port}/api/projects/${encodeURIComponent(projectPath)}/skills/${encodeURIComponent(skillId)}/versions/4?runtime=${runtime}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ disabled: true }),
+        }
+      );
+
+      expect(response.ok).toBe(true);
+      await expect(response.json()).resolves.toEqual({
+        ok: true,
+        skillId,
+        runtime,
+        version: 4,
+        disabled: true,
+        effectiveVersion: 3,
+        metadata: expect.objectContaining({
+          version: 4,
+          isDisabled: true,
+        }),
+      });
+      expect(mocks.versionManager.setVersionDisabled).toHaveBeenCalledWith(4, true);
+      expect(mocks.shadowRegistry.updateContent).toHaveBeenCalledWith(skillId, '# active v3', runtime);
+      expect(mocks.deployer.deploy).toHaveBeenCalledWith(
+        skillId,
+        expect.objectContaining({ version: 3, content: '# active v3' })
+      );
+    } finally {
+      await dashboard.stop();
+    }
   });
 
   it('does not send full project snapshots in the initial sse payload', async () => {

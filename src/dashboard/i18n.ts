@@ -341,6 +341,10 @@ export interface I18nStrings {
   modalVersionHistory: string;
   modalNoVersions: string;
   modalCurrent: string;
+  modalEffective: string;
+  modalInvalid: string;
+  modalInvalidate: string;
+  modalRestore: string;
   modalClickToLoad: string;
   modalLoadError: string;
   modalSaving: string;
@@ -348,6 +352,7 @@ export interface I18nStrings {
   modalSavedVersionPrefix: string;
   modalManualEditReason: string;
   modalSaveFailed: string;
+  modalVersionActionFailed: string;
 
   // Time
   timeAgo: string;
@@ -704,6 +709,10 @@ const en: I18nStrings = {
   modalVersionHistory: 'Version History',
   modalNoVersions: 'No versions yet',
   modalCurrent: 'current',
+  modalEffective: 'effective',
+  modalInvalid: 'invalid',
+  modalInvalidate: 'Invalidate',
+  modalRestore: 'Restore',
   modalClickToLoad: 'Click to load',
   modalLoadError: 'Error loading skill content.',
   modalSaving: 'Saving...',
@@ -711,6 +720,7 @@ const en: I18nStrings = {
   modalSavedVersionPrefix: 'Saved. Created v',
   modalManualEditReason: 'Manual edit from dashboard',
   modalSaveFailed: 'Save failed',
+  modalVersionActionFailed: 'Failed to update version state.',
 
   // Time
   timeAgo: 'ago',
@@ -1067,6 +1077,10 @@ const zh: I18nStrings = {
   modalVersionHistory: '版本历史',
   modalNoVersions: '暂无版本',
   modalCurrent: '当前',
+  modalEffective: '生效中',
+  modalInvalid: '无效',
+  modalInvalidate: '无效',
+  modalRestore: '恢复',
   modalClickToLoad: '点击加载',
   modalLoadError: '加载技能内容失败。',
   modalSaving: '保存中...',
@@ -1074,6 +1088,7 @@ const zh: I18nStrings = {
   modalSavedVersionPrefix: '保存成功，已创建 v',
   modalManualEditReason: '通过 dashboard 手动编辑',
   modalSaveFailed: '保存失败',
+  modalVersionActionFailed: '更新版本状态失败。',
 
   // Time
   timeAgo: '前',

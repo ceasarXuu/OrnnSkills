@@ -31,6 +31,8 @@ export interface VersionMetadata {
   reason: string;
   traceIds: string[];
   previousVersion: number | null;
+  isDisabled?: boolean;
+  disabledAt?: string | null;
   analyzerModel?: string;
   tokenUsage?: {
     prompt: number;
@@ -65,6 +67,7 @@ export class SkillVersionManager {
   private options: VersionManagerOptions;
   private versionsDir: string;
   private currentVersion: number = 0;
+  private effectiveVersion: number = 0;
 
   constructor(options: VersionManagerOptions) {
     this.options = options;
@@ -100,6 +103,7 @@ export class SkillVersionManager {
   private scanExistingVersions(): void {
     if (!existsSync(this.versionsDir)) {
       this.currentVersion = 0;
+      this.effectiveVersion = 0;
       return;
     }
 
@@ -110,7 +114,52 @@ export class SkillVersionManager {
       .filter((num) => !isNaN(num));
 
     this.currentVersion = versionDirs.length > 0 ? Math.max(...versionDirs) : 0;
+    this.effectiveVersion = this.findLatestEnabledVersionNumber();
+    if (this.effectiveVersion > 0) {
+      this.updateLatestSymlink(this.effectiveVersion);
+    }
     logger.debug(`Scanned versions for ${this.options.skillId}: current v${this.currentVersion}`);
+  }
+
+  private normalizeMetadata(metadata: VersionMetadata): VersionMetadata {
+    return {
+      ...metadata,
+      isDisabled: !!metadata.isDisabled,
+      disabledAt: metadata.isDisabled ? (metadata.disabledAt ?? null) : null,
+    };
+  }
+
+  private readVersionMetadata(version: number): VersionMetadata | null {
+    const metadataPath = join(this.versionsDir, `v${version}`, 'metadata.json');
+    if (!existsSync(metadataPath)) {
+      return null;
+    }
+
+    try {
+      const metadata = JSON.parse(readFileSync(metadataPath, 'utf-8')) as VersionMetadata;
+      return this.normalizeMetadata(metadata);
+    } catch (error) {
+      logger.error(`Failed to read version metadata v${version}:`, error);
+      return null;
+    }
+  }
+
+  private writeVersionMetadata(version: number, metadata: VersionMetadata): void {
+    const metadataPath = join(this.versionsDir, `v${version}`, 'metadata.json');
+    const tempMetadataPath = metadataPath + '.tmp';
+    writeFileSync(tempMetadataPath, JSON.stringify(this.normalizeMetadata(metadata), null, 2), 'utf-8');
+    renameSync(tempMetadataPath, metadataPath);
+  }
+
+  private findLatestEnabledVersionNumber(): number {
+    const versions = this.listVersions().slice().sort((a, b) => b - a);
+    for (const version of versions) {
+      const metadata = this.readVersionMetadata(version);
+      if (metadata && !metadata.isDisabled) {
+        return version;
+      }
+    }
+    return 0;
   }
 
   /**
@@ -138,6 +187,8 @@ export class SkillVersionManager {
         reason,
         traceIds,
         previousVersion: this.currentVersion > 0 ? this.currentVersion : null,
+        isDisabled: false,
+        disabledAt: null,
         analyzerModel,
         tokenUsage,
       };
@@ -156,6 +207,7 @@ export class SkillVersionManager {
 
       // Update current version only after successful write
       this.currentVersion = newVersion;
+      this.effectiveVersion = newVersion;
 
       // Update latest symlink
       this.updateLatestSymlink(newVersion);
@@ -269,7 +321,9 @@ export class SkillVersionManager {
       }
 
       const content = readFileSync(contentPath, 'utf-8');
-      const metadata = JSON.parse(readFileSync(metadataPath, 'utf-8')) as VersionMetadata;
+      const metadata = this.normalizeMetadata(
+        JSON.parse(readFileSync(metadataPath, 'utf-8')) as VersionMetadata
+      );
 
       return {
         version,
@@ -291,6 +345,24 @@ export class SkillVersionManager {
       return null;
     }
     return this.getVersion(this.currentVersion);
+  }
+
+  /**
+   * Get the currently effective version.
+   * This excludes disabled versions and matches the runtime deployment target.
+   */
+  getEffectiveVersion(): SkillVersion | null {
+    if (this.effectiveVersion === 0) {
+      return null;
+    }
+    return this.getVersion(this.effectiveVersion);
+  }
+
+  /**
+   * Get current effective version number.
+   */
+  getEffectiveVersionNumber(): number {
+    return this.effectiveVersion;
   }
 
   /**
@@ -338,6 +410,51 @@ export class SkillVersionManager {
    */
   getCurrentVersion(): number {
     return this.currentVersion;
+  }
+
+  /**
+   * Disable or restore a version while preserving its numeric slot.
+   * Disabling the last active version is rejected because the runtime would have no effective content.
+   */
+  setVersionDisabled(version: number, disabled: boolean): SkillVersion | null {
+    const current = this.getVersion(version);
+    if (!current) {
+      return null;
+    }
+
+    const metadata = this.normalizeMetadata(current.metadata);
+    if (!!metadata.isDisabled === disabled) {
+      return current;
+    }
+
+    if (disabled && version === this.effectiveVersion) {
+      const fallback = this.listVersions()
+        .slice()
+        .sort((a, b) => b - a)
+        .find((candidate) => candidate !== version && !(this.readVersionMetadata(candidate)?.isDisabled));
+      if (!fallback) {
+        throw new Error(`Cannot disable v${version} because it is the last active version`);
+      }
+    }
+
+    const nextMetadata: VersionMetadata = {
+      ...metadata,
+      isDisabled: disabled,
+      disabledAt: disabled ? new Date().toISOString() : null,
+    };
+    this.writeVersionMetadata(version, nextMetadata);
+
+    this.effectiveVersion = this.findLatestEnabledVersionNumber();
+    if (this.effectiveVersion > 0) {
+      this.updateLatestSymlink(this.effectiveVersion);
+    }
+
+    logger.info(`${disabled ? 'Disabled' : 'Restored'} version v${version} for ${this.options.skillId}`, {
+      effectiveVersion: this.effectiveVersion,
+      runtime: this.options.runtime,
+    });
+
+    return this.getVersion(version);
   }
 
   /**

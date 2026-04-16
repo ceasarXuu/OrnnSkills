@@ -13,6 +13,8 @@ import {
   openSync,
   readSync,
   closeSync,
+  lstatSync,
+  readlinkSync,
 } from 'node:fs';
 import { basename, join } from 'node:path';
 import { homedir } from 'node:os';
@@ -50,10 +52,13 @@ export interface SkillVersionMeta {
   reason: string;
   traceIds: string[];
   previousVersion: number | null;
+  isDisabled?: boolean;
+  disabledAt?: string | null;
 }
 
 export interface SkillInfo extends ShadowEntry {
   versionsAvailable: number[];
+  effectiveVersion?: number | null;
 }
 
 export interface TraceEntry {
@@ -308,6 +313,34 @@ function listVersionsForSkill(
   return [];
 }
 
+function readEffectiveVersionForSkill(
+  projectRoot: string,
+  skillId: string,
+  runtime: 'codex' | 'claude' | 'opencode' = 'codex'
+): number | null {
+  const candidates = [
+    join(projectRoot, '.ornn', 'skills', runtime, skillId, 'versions', 'latest'),
+    join(projectRoot, '.ornn', 'skills', skillId, 'versions', 'latest'),
+  ];
+
+  for (const latestPath of candidates) {
+    if (!existsSync(latestPath)) continue;
+    try {
+      const stats = lstatSync(latestPath);
+      if (!stats.isSymbolicLink()) continue;
+      const target = readlinkSync(latestPath);
+      const match = target.match(/v(\d+)/);
+      if (match) {
+        return parseInt(match[1], 10);
+      }
+    } catch {
+      // try next candidate
+    }
+  }
+
+  return null;
+}
+
 export function readSkills(projectRoot: string): SkillInfo[] {
   const indexPath = join(projectRoot, '.ornn', 'shadows', 'index.json');
   if (!existsSync(indexPath)) return [];
@@ -322,6 +355,11 @@ export function readSkills(projectRoot: string): SkillInfo[] {
       content: '',
       runtime: entry.runtime ?? 'codex',
       versionsAvailable: listVersionsForSkill(
+        projectRoot,
+        entry.skillId,
+        (entry.runtime ?? 'codex') as 'codex' | 'claude' | 'opencode'
+      ),
+      effectiveVersion: readEffectiveVersionForSkill(
         projectRoot,
         entry.skillId,
         (entry.runtime ?? 'codex') as 'codex' | 'claude' | 'opencode'

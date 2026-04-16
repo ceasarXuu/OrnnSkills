@@ -100,6 +100,39 @@ describe('SkillVersionManager', () => {
     });
   });
 
+  describe('version invalidation', () => {
+    it('falls back to the previous active version when the latest version is disabled', () => {
+      const manager = new SkillVersionManager({ projectPath: testDir, skillId: 'my-skill', runtime: 'codex' });
+      manager.createVersion('v1', 'initial', []);
+      manager.createVersion('v2', 'update', []);
+      manager.createVersion('v3', 'latest', []);
+
+      const muted = manager.setVersionDisabled(3, true);
+
+      expect(muted?.metadata.isDisabled).toBe(true);
+      expect(manager.getLatestVersion()?.version).toBe(3);
+      expect(manager.getEffectiveVersion()?.version).toBe(2);
+      expect(manager.getLatestVersionViaSymlink()?.version).toBe(2);
+
+      const v4 = manager.createVersion('v4', 'new version after mute', []);
+      expect(v4.version).toBe(4);
+    });
+
+    it('restores a disabled version and makes it effective again when it is the highest enabled version', () => {
+      const manager = new SkillVersionManager({ projectPath: testDir, skillId: 'my-skill', runtime: 'codex' });
+      manager.createVersion('v1', 'initial', []);
+      manager.createVersion('v2', 'update', []);
+      manager.createVersion('v3', 'latest', []);
+
+      manager.setVersionDisabled(3, true);
+      const restored = manager.setVersionDisabled(3, false);
+
+      expect(restored?.metadata.isDisabled).toBe(false);
+      expect(manager.getEffectiveVersion()?.version).toBe(3);
+      expect(manager.getLatestVersionViaSymlink()?.version).toBe(3);
+    });
+  });
+
   describe('listVersions', () => {
     it('should return empty array when no versions', () => {
       const manager = new SkillVersionManager({ projectPath: testDir, skillId: 'my-skill', runtime: 'codex' });
