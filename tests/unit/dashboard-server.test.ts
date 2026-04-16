@@ -350,6 +350,77 @@ describe('dashboard server sse bootstrap', () => {
     }
   });
 
+  it('broadcasts changed project ids instead of embedding full project snapshots', async () => {
+    const originalSetInterval = globalThis.setInterval;
+    vi.stubGlobal('setInterval', ((handler: TimerHandler, _timeout?: number, ...args: unknown[]) => {
+      return originalSetInterval(handler, 20, ...args);
+    }) as typeof setInterval);
+
+    const projectPath = '/tmp/demo-project';
+    const port = await getFreePort();
+    mocks.listProjects.mockReturnValue([
+      {
+        path: projectPath,
+        name: 'demo-project',
+        registeredAt: '2026-04-15T00:00:00.000Z',
+        lastSeenAt: '2026-04-15T00:00:00.000Z',
+      },
+    ]);
+    mocks.readDaemonStatus.mockReturnValue({ isRunning: true });
+    mocks.readSkills.mockReturnValue([{ skillId: 'demo-skill' }]);
+    mocks.readGlobalLogs.mockReturnValue([]);
+    mocks.readLogsSince.mockReturnValue({ lines: [], newOffset: 0 });
+    mocks.readProjectSnapshotVersion
+      .mockReturnValueOnce('v1')
+      .mockReturnValueOnce('v2');
+
+    const { createDashboardServer } = await import('../../src/dashboard/server.js');
+    const dashboard = createDashboardServer(port, 'en');
+    await dashboard.start();
+
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/events`);
+      expect(response.ok).toBe(true);
+      expect(response.body).toBeTruthy();
+
+      const reader = response.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      const payloads: Array<Record<string, unknown>> = [];
+
+      const readUntilUpdateCount = async (count: number) => {
+        while (payloads.length < count) {
+          const { value, done } = await reader.read();
+          if (done) {
+            throw new Error('sse stream ended before receiving expected updates');
+          }
+          buffer += decoder.decode(value, { stream: true });
+          while (true) {
+            const boundary = buffer.indexOf('\n\n');
+            if (boundary === -1) break;
+            const chunk = buffer.slice(0, boundary);
+            buffer = buffer.slice(boundary + 2);
+            const dataLine = chunk
+              .split('\n')
+              .find((line) => line.startsWith('data: '));
+            if (!dataLine) continue;
+            payloads.push(JSON.parse(dataLine.slice(6)));
+          }
+        }
+      };
+
+      await readUntilUpdateCount(2);
+
+      expect(payloads[1]).toEqual({
+        changedProjects: [projectPath],
+      });
+      expect(mocks.readProjectSnapshot).not.toHaveBeenCalled();
+      reader.cancel().catch(() => undefined);
+    } finally {
+      await dashboard.stop();
+    }
+  });
+
   it('persists the selected dashboard language for the requested project', async () => {
     const projectPath = '/tmp/demo-project';
     const port = await getFreePort();

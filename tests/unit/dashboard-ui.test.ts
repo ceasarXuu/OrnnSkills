@@ -260,7 +260,7 @@ function loadDashboardTestHarness(
   const script = scriptMatch[1]
     .replace(/\binit\(\);\s*$/, '')
     .concat(
-      '\n;globalThis.__dashboardTest = { state, init, switchLang, selectProject, selectMainTab, renderMainPanel, safeRenderMainPanel, renderSidebar, buildActivityRows, copyActivityDetail, openActivityDetail, renderCostPanel, viewSkill, loadVersion, triggerProjectPicker: openProjectPicker };'
+      '\n;globalThis.__dashboardTest = { state, init, switchLang, selectProject, selectMainTab, renderMainPanel, safeRenderMainPanel, renderSidebar, buildActivityRows, copyActivityDetail, openActivityDetail, renderCostPanel, viewSkill, loadVersion, handleUpdate, triggerProjectPicker: openProjectPicker };'
     );
 
   vm.runInNewContext(script, runtime);
@@ -282,6 +282,7 @@ function loadDashboardTestHarness(
         renderCostPanel: (projectPath: string) => string;
         viewSkill: (projectPath: string, skillId: string, runtime?: string) => Promise<void>;
         loadVersion: (encProject: string, encSkill: string, encRuntime: string, version: number) => Promise<void>;
+        handleUpdate: (data: Record<string, unknown>) => Promise<void> | void;
         triggerProjectPicker: () => Promise<void>;
       };
     }).__dashboardTest,
@@ -390,6 +391,117 @@ describe('dashboard ui recovery', () => {
     expect(fetchCalls).not.toContain('/api/providers/catalog');
     expect(fetchCalls).toContain(`/api/provider-health?projectPath=${encodedPath}`);
     expect(fetchCalls).toContain(`/api/config?projectPath=${encodedPath}`);
+  });
+
+  it('refreshes only the selected project snapshot when sse reports changed projects', async () => {
+    const projectPath = '/tmp/ornn-project';
+    const otherProjectPath = '/tmp/other-project';
+    const encodedProjectPath = encodeURIComponent(projectPath);
+    let snapshotFetches = 0;
+
+    const { dashboard, getFetchCalls, clearFetchCalls } = loadDashboardTestHarness({}, {
+      fetchImpl: async (url) => {
+        if (url === '/api/projects') {
+          return {
+            ok: true,
+            status: 200,
+            statusText: 'OK',
+            json: async () => ({
+              projects: [
+                { path: projectPath, name: 'OrnnSkills', isRunning: true, skillCount: 1 },
+                { path: otherProjectPath, name: 'Other', isRunning: false, skillCount: 0 },
+              ],
+            }),
+          };
+        }
+        if (url === `/api/projects/${encodedProjectPath}/snapshot`) {
+          snapshotFetches += 1;
+          return {
+            ok: true,
+            status: 200,
+            statusText: 'OK',
+            json: async () => ({
+              daemon: {
+                isRunning: true,
+                pid: 1,
+                startedAt: '2026-04-10T00:00:00.000Z',
+                processedTraces: snapshotFetches,
+                lastCheckpointAt: null,
+                retryQueueSize: 0,
+                optimizationStatus: {
+                  currentState: 'idle',
+                  currentSkillId: null,
+                  lastOptimizationAt: null,
+                  lastError: null,
+                  queueSize: 0,
+                },
+              },
+              skills: [],
+              traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
+              recentTraces: [],
+              decisionEvents: [],
+              agentUsage: {
+                callCount: 0,
+                promptTokens: 0,
+                completionTokens: 0,
+                totalTokens: 0,
+                durationMsTotal: 0,
+                avgDurationMs: 0,
+                lastCallAt: null,
+                byModel: {},
+                byScope: {},
+                bySkill: {},
+              },
+            }),
+          };
+        }
+        return {
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          json: async () => ({ lines: [], buildId: 'test-build-id', pid: 1, providers: [], projects: [] }),
+        };
+      },
+    });
+
+    await dashboard.init();
+    clearFetchCalls();
+
+    dashboard.state.selectedProjectId = projectPath;
+    dashboard.state.selectedMainTab = 'overview';
+    dashboard.state.projectData[projectPath] = {
+      daemon: { isRunning: true, processedTraces: 1, optimizationStatus: { queueSize: 0 } },
+      skills: [],
+      traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
+      recentTraces: [],
+      decisionEvents: [],
+      activityScopes: [],
+      agentUsage: {
+        callCount: 0,
+        promptTokens: 0,
+        completionTokens: 0,
+        totalTokens: 0,
+        durationMsTotal: 0,
+        avgDurationMs: 0,
+        lastCallAt: null,
+        byModel: {},
+        byScope: {},
+        bySkill: {},
+      },
+    };
+
+    await (dashboard as unknown as { handleUpdate: (data: Record<string, unknown>) => Promise<void> }).handleUpdate({
+      changedProjects: [projectPath],
+    });
+
+    expect(getFetchCalls()).toContain(`/api/projects/${encodedProjectPath}/snapshot`);
+    expect(dashboard.state.projectData[projectPath].daemon.processedTraces).toBe(2);
+
+    clearFetchCalls();
+    await (dashboard as unknown as { handleUpdate: (data: Record<string, unknown>) => Promise<void> }).handleUpdate({
+      changedProjects: [otherProjectPath],
+    });
+    expect(getFetchCalls()).not.toContain(`/api/projects/${encodedProjectPath}/snapshot`);
   });
 
   it('renders api key inputs as hidden by default in the config tab', async () => {

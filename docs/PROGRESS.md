@@ -15,6 +15,8 @@
 
 ### 2026-04-17
 
+- ✅ 从协议层根治 dashboard SSE 大包：steady-state `/events` 广播不再内嵌 `projectData`，只发送 `projects / logs / changedProjects`；前端改成按需刷新当前选中项目的 `/snapshot`，非当前项目只标记为 stale，等真正切换过去时再拉详情
+- 📝 记录架构经验：SSE 最怕把“全量详情”当成实时协议本体。正确边界应该是“推变更信号，拉详细快照”；只要把重对象放回按需 HTTP 读取，连接数增长时成本才会近似保持常数级，而不是被 `客户端数 × 项目数 × 快照体积` 成倍放大
 - ✅ 二次收紧 dashboard SSE 快照预算：项目 snapshot 的 `decisionEvents` 窗口从 150 收到 35，`recentTraces` 窗口收紧到 30，并把 snapshot 内 `skills` 条目瘦身为 UI 真正使用的字段；当前双项目合并 `projectData` 体积已从约 291KB 降回约 128KB 内
 - 📝 记录性能经验：SSE 快照预算不能只盯单个大字段；`decisionEvents`、`recentTraces` 和 `skills` 这类“每项不算大、但会按项目数和连接数同步放大”的集合字段，必须一起做窗口和 schema 瘦身，否则单项优化后总包体积仍会卡在告警线附近
 - ✅ 补齐 dashboard 技能版本 mute/restore：版本历史卡片现在支持直接“无效 / 恢复”指定版本；被无效的版本会保留编号占位，但退出生效链路，实际部署、评估与后续读取都会自动回退到最新有效版本

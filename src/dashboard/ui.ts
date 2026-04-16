@@ -1061,6 +1061,7 @@ const state = {
   projects: [],
   selectedProjectId: null,
   projectData: {},
+  staleProjectData: {},
   allLogs: [],
   logFilter: 'ALL',
   configByProject: {},
@@ -1091,6 +1092,8 @@ const state = {
   configLoadingByProject: {},
   configLoadErrorByProject: {},
 };
+
+const projectSnapshotLoads = {};
 
 const GLOBAL_CONFIG_SCOPE = '__global__';
 
@@ -1292,7 +1295,7 @@ function connectSSE() {
   const src = new EventSource('/events');
   src.addEventListener('update', (e) => {
     const data = JSON.parse(e.data);
-    handleUpdate(data);
+    void handleUpdate(data);
   });
   src.addEventListener('open', () => setHeaderStatus('connected'));
   src.onerror = () => {
@@ -1301,7 +1304,89 @@ function connectSSE() {
   };
 }
 
-function handleUpdate(data) {
+function buildEmptyProjectData() {
+  return {
+    daemon: {
+      isRunning: false,
+      pid: null,
+      startedAt: null,
+      processedTraces: 0,
+      lastCheckpointAt: null,
+      retryQueueSize: 0,
+      optimizationStatus: {
+        currentState: 'idle',
+        currentSkillId: null,
+        lastOptimizationAt: null,
+        lastError: null,
+        queueSize: 0,
+      },
+    },
+    skills: [],
+    traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
+    recentTraces: [],
+    decisionEvents: [],
+    activityScopes: [],
+    agentUsage: {
+      callCount: 0,
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+      durationMsTotal: 0,
+      avgDurationMs: 0,
+      lastCallAt: null,
+      byModel: {},
+      byScope: {},
+      bySkill: {},
+    },
+  };
+}
+
+function applyProjectSnapshot(projectPath, snapshot) {
+  state.projectData[projectPath] = snapshot;
+  state.staleProjectData[projectPath] = false;
+  invalidateActivityScopeDetails(projectPath);
+  return snapshot;
+}
+
+async function loadProjectSnapshot(projectPath, options = {}) {
+  if (!projectPath) return null;
+  const force = !!options.force;
+  const existing = state.projectData[projectPath];
+  if (!force && existing && !state.staleProjectData[projectPath]) {
+    return existing;
+  }
+  if (projectSnapshotLoads[projectPath]) {
+    return projectSnapshotLoads[projectPath];
+  }
+
+  const request = (async () => {
+    try {
+      const enc = encodeURIComponent(projectPath);
+      let data = null;
+      try {
+        data = await fetchJsonWithTimeout('/api/projects/' + enc + '/snapshot', 8000);
+      } catch (firstErr) {
+        console.warn('[dashboard] project snapshot fetch failed, retrying', { path: projectPath, error: String(firstErr) });
+        data = await fetchJsonWithTimeout('/api/projects/' + enc + '/snapshot', 12000);
+      }
+      return applyProjectSnapshot(projectPath, data);
+    } catch (e) {
+      console.error('[dashboard] failed to load project snapshot', { path: projectPath, error: String(e), force });
+      if (existing) {
+        state.staleProjectData[projectPath] = true;
+        return existing;
+      }
+      return applyProjectSnapshot(projectPath, buildEmptyProjectData());
+    } finally {
+      delete projectSnapshotLoads[projectPath];
+    }
+  })();
+
+  projectSnapshotLoads[projectPath] = request;
+  return request;
+}
+
+async function handleUpdate(data) {
   let shouldRerenderMain = false;
 
   if (data.projects) {
@@ -1317,12 +1402,14 @@ function handleUpdate(data) {
       void selectProject(state.projects[0].path);
     }
   }
-  if (data.projectData) {
-    state.projectData = { ...state.projectData, ...data.projectData };
-    for (const projectPath of Object.keys(data.projectData)) {
+  const changedProjects = Array.isArray(data.changedProjects) ? data.changedProjects : [];
+  if (changedProjects.length > 0) {
+    for (const projectPath of changedProjects) {
+      state.staleProjectData[projectPath] = true;
       invalidateActivityScopeDetails(projectPath);
     }
-    if (state.selectedProjectId && Object.prototype.hasOwnProperty.call(data.projectData, state.selectedProjectId)) {
+    if (state.selectedProjectId && changedProjects.includes(state.selectedProjectId) && state.selectedMainTab !== 'config') {
+      await loadProjectSnapshot(state.selectedProjectId, { force: true });
       shouldRerenderMain = true;
     }
   }
@@ -1562,8 +1649,9 @@ function renderSidebar() {
   }
   list.innerHTML = state.projects.map(p => {
     const pd = state.projectData[p.path];
-    const running = pd?.daemon?.isRunning ?? p.isRunning;
-    const skills = pd?.skills?.length ?? p.skillCount ?? 0;
+    const useCachedSnapshot = !!pd && !state.staleProjectData[p.path];
+    const running = useCachedSnapshot ? (pd?.daemon?.isRunning ?? p.isRunning) : p.isRunning;
+    const skills = useCachedSnapshot ? (pd?.skills?.length ?? p.skillCount ?? 0) : (p.skillCount ?? 0);
     const dotClass = running === undefined ? 'dot-gray' : running ? 'dot-green' : 'dot-red';
     const statusText = running === undefined ? '' : running ? '● ' + t('sidebarRunning') : '○ ' + t('sidebarStopped');
     const statusColor = running === undefined ? 'color:var(--muted)' : running ? 'color:var(--green)' : 'color:var(--muted)';
@@ -1584,51 +1672,11 @@ async function selectProject(path) {
   state.selectedProjectId = path;
   renderSidebar();
   await persistDashboardLanguage(currentLang, path);
-  // Fetch project data if not cached
   if (!state.projectData[path]) {
     document.getElementById('mainPanel').innerHTML = '<div class="panel-inner"><div class="no-project">' + t('mainLoading') + '</div></div>';
-    try {
-      const enc = encodeURIComponent(path);
-      let data = null;
-      try {
-        data = await fetchJsonWithTimeout(\`/api/projects/\${enc}/snapshot\`, 8000);
-      } catch (firstErr) {
-        console.warn('[dashboard] first snapshot fetch failed, retrying', { path, error: String(firstErr) });
-        data = await fetchJsonWithTimeout(\`/api/projects/\${enc}/snapshot\`, 12000);
-      }
-      state.projectData[path] = data;
-    } catch (e) {
-      console.error('[dashboard] failed to load project snapshot', { path, error: String(e) });
-      state.projectData[path] = {
-        daemon: {
-          isRunning: false,
-          pid: null,
-          startedAt: null,
-          processedTraces: 0,
-          lastCheckpointAt: null,
-          retryQueueSize: 0,
-          optimizationStatus: {
-            currentState: 'idle',
-            currentSkillId: null,
-            lastOptimizationAt: null,
-            lastError: null,
-            queueSize: 0,
-          },
-        },
-        skills: [],
-        traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
-        recentTraces: [],
-        decisionEvents: [],
-        agentUsage: {
-          callCount: 0,
-          promptTokens: 0,
-          completionTokens: 0,
-          totalTokens: 0,
-          byModel: {},
-          byScope: {},
-        },
-      };
-    }
+  }
+  if (!state.projectData[path] || state.staleProjectData[path]) {
+    await loadProjectSnapshot(path, { force: !!state.staleProjectData[path] });
   }
   safeRenderMainPanel(path, 'selectProject');
   if (state.providerCatalog.length === 0 && !state.providerCatalogLoading) {
@@ -3455,6 +3503,13 @@ function selectMainTab(tab) {
   if (tab === 'config' && state.selectedProjectId) {
     ensureConfigTabDependencies(state.selectedProjectId);
   }
+  if (tab !== 'config' && state.selectedProjectId && state.staleProjectData[state.selectedProjectId]) {
+    void loadProjectSnapshot(state.selectedProjectId, { force: true }).then(() => {
+      if (state.selectedProjectId) {
+        safeRenderMainPanel(state.selectedProjectId, 'selectMainTab:refresh:' + tab);
+      }
+    });
+  }
   if (state.selectedProjectId) {
     safeRenderMainPanel(state.selectedProjectId, 'selectMainTab:' + tab);
   }
@@ -4445,9 +4500,8 @@ async function saveCurrentSkill() {
       ? t('modalNoChanges')
       : (t('modalSavedVersionPrefix') + data.version);
 
-    const sr = await fetch(\`/api/projects/\${encProject}/snapshot\`);
-    if (sr.ok) {
-      state.projectData[state.selectedProjectId] = await sr.json();
+    const snapshot = await loadProjectSnapshot(state.selectedProjectId, { force: true });
+    if (snapshot) {
       if (state.selectedMainTab === 'skills') updateSkillsList();
     }
     await viewSkill(state.selectedProjectId, state.currentSkillId, runtime);

@@ -297,7 +297,7 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
         }
       }
 
-      const projectData: Record<string, ProjectData> = {};
+      const changedProjects: string[] = [];
       for (const project of projects) {
         try {
           const version = readProjectSnapshotVersion(project.path);
@@ -305,21 +305,21 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
             continue;
           }
           client.projectSnapshotVersions.set(project.path, version);
-          projectData[project.path] = getProjectSnapshot(project.path);
+          changedProjects.push(project.path);
         } catch {
           client.projectSnapshotVersions.delete(project.path);
         }
       }
 
       const projectsChanged = client.projectsSignature !== projectsSignature;
-      if (!projectsChanged && Object.keys(projectData).length === 0 && newLogs.length === 0) {
+      if (!projectsChanged && changedProjects.length === 0 && newLogs.length === 0) {
         continue;
       }
       client.projectsSignature = projectsSignature;
 
       const payload = {
         ...(projectsChanged ? { projects } : {}),
-        ...(Object.keys(projectData).length > 0 ? { projectData } : {}),
+        ...(changedProjects.length > 0 ? { changedProjects } : {}),
         ...(newLogs.length > 0 ? { logs: newLogs } : {}),
       };
       const payloadBytes = Buffer.byteLength(JSON.stringify(payload), 'utf-8');
