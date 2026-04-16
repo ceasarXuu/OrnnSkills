@@ -1,6 +1,6 @@
 {
   "name": "ornn-skills",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "Skill Evolution Agent - Background meta-agent for automatic skill optimization",
   "main": "dist/index.js",
   "bin": {
