@@ -80,6 +80,8 @@ export interface I18nStrings {
   configCustomModelPlaceholder: string;
   configApiKeyStoredPlaceholder: string;
   configApiKeyPastePlaceholder: string;
+  configApiKeyShow: string;
+  configApiKeyHide: string;
   configRemoveProvider: string;
   configCatalogCustomOnly: string;
   configCustomOption: string;
@@ -441,6 +443,8 @@ const en: I18nStrings = {
   configCustomModelPlaceholder: 'Custom model (e.g. grok-3)',
   configApiKeyStoredPlaceholder: 'API key stored; leave blank to keep',
   configApiKeyPastePlaceholder: 'Paste API key',
+  configApiKeyShow: 'Show',
+  configApiKeyHide: 'Hide',
   configRemoveProvider: 'Remove',
   configCatalogCustomOnly: 'LiteLLM catalog not ready (custom only)',
   configCustomOption: 'Custom...',
@@ -802,6 +806,8 @@ const zh: I18nStrings = {
   configCustomModelPlaceholder: '自定义 model（例如：grok-3）',
   configApiKeyStoredPlaceholder: 'API Key 已保存；留空表示不修改',
   configApiKeyPastePlaceholder: '直接粘贴 API Key',
+  configApiKeyShow: '显示',
+  configApiKeyHide: '隐藏',
   configRemoveProvider: '删除',
   configCatalogCustomOnly: 'LiteLLM 列表未就绪（仅可自定义）',
   configCustomOption: '自定义',

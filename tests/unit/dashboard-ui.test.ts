@@ -392,6 +392,67 @@ describe('dashboard ui recovery', () => {
     expect(fetchCalls).toContain(`/api/config?projectPath=${encodedPath}`);
   });
 
+  it('renders api key inputs as hidden by default in the config tab', async () => {
+    const projectPath = '/tmp/ornn-project';
+    const encodedPath = encodeURIComponent(projectPath);
+    const { dashboard, getElement } = loadDashboardTestHarness({}, {
+      lang: 'en',
+      fetchMap: {
+        '/api/projects': {
+          projects: [{ path: projectPath, name: 'OrnnSkills', isRunning: true, skillCount: 1 }],
+        },
+        [`/api/projects/${encodedPath}/snapshot`]: {
+          daemon: {
+            isRunning: true,
+            pid: 1,
+            startedAt: '2026-04-10T00:00:00.000Z',
+            processedTraces: 1,
+            lastCheckpointAt: null,
+            retryQueueSize: 0,
+            optimizationStatus: { currentState: 'idle', currentSkillId: null, lastOptimizationAt: null, lastError: null, queueSize: 0 },
+          },
+          skills: [],
+          traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
+          recentTraces: [],
+          decisionEvents: [],
+          agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
+        },
+        [`/api/config?projectPath=${encodedPath}`]: {
+          config: {
+            autoOptimize: true,
+            userConfirm: false,
+            runtimeSync: true,
+            llmSafety: {
+              enabled: true,
+              windowMs: 60000,
+              maxRequestsPerWindow: 12,
+              maxConcurrentRequests: 2,
+              maxEstimatedTokensPerWindow: 48000,
+            },
+            defaultProvider: 'deepseek',
+            logLevel: 'info',
+            providers: [{
+              provider: 'deepseek',
+              modelName: 'deepseek/deepseek-reasoner',
+              apiKey: 'sk-test-secret',
+              apiKeyEnvVar: 'DEEPSEEK_API_KEY',
+              hasApiKey: true,
+            }],
+          },
+        },
+      },
+    });
+
+    await dashboard.init();
+    dashboard.selectMainTab('config');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const html = getElement('mainPanel').innerHTML;
+    expect(html).toContain('class="config-input cfg_api_key" type="password"');
+    expect(html).toContain('Show');
+  });
+
   it('keeps the running status visible in the sidebar for unselected projects', () => {
     const { dashboard, getElement } = loadDashboardTestHarness({}, { lang: 'zh' });
 
@@ -1919,8 +1980,10 @@ describe('dashboard ui recovery', () => {
     expect(html).not.toContain('Save Config');
     expect(html).toContain('Custom provider id (e.g. xai)');
     expect(html).toContain('Custom model (e.g. grok-3)');
-    expect(html).toContain('type="text"');
+    expect(html).toContain('class="config-input cfg_api_key" type="password"');
     expect(html).toContain('value="plain-visible-key"');
+    expect(html).toContain('cfg_api_key_toggle');
+    expect(html).toContain('Show');
     expect(html).toContain('mark exactly one provider as active');
     expect(html).toContain('cfg_provider_active');
     expect(html).toContain('cfg_row_check_btn');

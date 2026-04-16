@@ -858,6 +858,19 @@ export function getDashboardHtml(_port: number, lang: Language = 'en', buildId =
     margin: 0;
     white-space: nowrap;
   }
+  .config-secret-field {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .config-secret-field .cfg_api_key {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .config-secret-toggle {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
   .btn-danger {
     font-family: var(--font); font-size: 10px; padding: 4px 8px; border-radius: 4px;
     border: 1px solid rgba(248,81,73,.6); background: rgba(248,81,73,.1); color: var(--red);
@@ -3455,7 +3468,7 @@ function renderConfigPanel(projectPath) {
   const llmSafety = sanitizeLLMSafetyForState(config.llmSafety);
   const activeProviderIndex = getActiveProviderIndex(config.defaultProvider, providers);
   const rowsHtml = providers.length > 0
-    ? providers.map((row, index) => renderProviderRow(row, index, activeProviderIndex)).join('')
+    ? providers.map((row, index) => renderProviderRow(projectPath, row, index, activeProviderIndex)).join('')
     : \`<div class="config-help">\${t('configNoProviders')}</div>\`;
 
   return \`
@@ -3596,7 +3609,28 @@ function getActiveProviderIndex(defaultProvider, providers) {
   return matchedIndex >= 0 ? matchedIndex : 0;
 }
 
-function renderProviderRow(row, index, activeProviderIndex) {
+function getConfigApiKeyVisibility(projectPath) {
+  const configUi = getStoredConfigUi(projectPath);
+  const visibility = configUi?.apiKeyVisibilityByRow;
+  return visibility && typeof visibility === 'object' ? visibility : {};
+}
+
+function isConfigApiKeyVisible(projectPath, rowIndex) {
+  const visibility = getConfigApiKeyVisibility(projectPath);
+  return !!visibility[String(rowIndex)];
+}
+
+function setConfigApiKeyVisible(projectPath, rowIndex, visible) {
+  const visibility = getConfigApiKeyVisibility(projectPath);
+  setConfigUi(projectPath, {
+    apiKeyVisibilityByRow: {
+      ...visibility,
+      [String(rowIndex)]: !!visible,
+    },
+  });
+}
+
+function renderProviderRow(projectPath, row, index, activeProviderIndex) {
   const normalizedProvider = String(row.provider || '');
   const knownProvider = isKnownProvider(normalizedProvider);
   const providerOptions = getProviderOptionsHtml(knownProvider ? normalizedProvider : '__custom__');
@@ -3605,6 +3639,7 @@ function renderProviderRow(row, index, activeProviderIndex) {
   const modelIsCustom = !isKnownModel(normalizedProvider, normalizedModel);
   const apiKey = String(row.apiKey || '');
   const apiKeyEnvVar = String(row.apiKeyEnvVar || guessApiKeyEnvVar(normalizedProvider));
+  const apiKeyVisible = isConfigApiKeyVisible(projectPath, index);
   return \`
     <div class="provider-row" data-row-index="\${index}" data-has-api-key="\${row.hasApiKey ? 'true' : 'false'}" data-api-key-env-var="\${escHtml(apiKeyEnvVar)}">
       <select class="config-select cfg_provider" onchange="handleProviderChange(this)">
@@ -3618,7 +3653,10 @@ function renderProviderRow(row, index, activeProviderIndex) {
         <input class="config-input cfg_model_custom" value="\${modelIsCustom ? escHtml(normalizedModel) : ''}" placeholder="\${t('configCustomModelPlaceholder')}" style="margin-top:6px;\${modelIsCustom ? '' : 'display:none;'}" oninput="scheduleProjectConfigSave(500)" />
       </div>
       <div>
-        <input class="config-input cfg_api_key" type="text" value="\${escHtml(apiKey)}" placeholder="\${t('configApiKeyPastePlaceholder')}" oninput="scheduleProjectConfigSave(500)" />
+        <div class="config-secret-field">
+          <input class="config-input cfg_api_key" type="\${apiKeyVisible ? 'text' : 'password'}" value="\${escHtml(apiKey)}" placeholder="\${t('configApiKeyPastePlaceholder')}" oninput="scheduleProjectConfigSave(500)" />
+          <button class="btn-secondary config-secret-toggle cfg_api_key_toggle" type="button" onclick="toggleApiKeyVisibility(\${index}, this)">\${apiKeyVisible ? t('configApiKeyHide') : t('configApiKeyShow')}</button>
+        </div>
       </div>
       <div class="provider-actions">
         <label class="config-check">
@@ -3630,6 +3668,25 @@ function renderProviderRow(row, index, activeProviderIndex) {
       </div>
     </div>
   \`;
+}
+
+function toggleApiKeyVisibility(rowIndex, trigger) {
+  const projectPath = state.selectedProjectId;
+  if (!projectPath || !trigger) return;
+  const row = typeof trigger.closest === 'function' ? trigger.closest('.provider-row') : null;
+  const input = row && typeof row.querySelector === 'function' ? row.querySelector('.cfg_api_key') : null;
+  const nextVisible = input ? input.type === 'password' : !isConfigApiKeyVisible(projectPath, rowIndex);
+
+  if (input) {
+    input.type = nextVisible ? 'text' : 'password';
+  }
+  trigger.textContent = nextVisible ? t('configApiKeyHide') : t('configApiKeyShow');
+  setConfigApiKeyVisible(projectPath, rowIndex, nextVisible);
+  console.info('[dashboard] config api key visibility changed', {
+    projectPath,
+    rowIndex,
+    visible: nextVisible,
+  });
 }
 
 function getProviderOptionsHtml(selectedProvider) {
