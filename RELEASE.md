@@ -90,6 +90,24 @@ git push --follow-tags origin main
 npm publish
 ```
 
+### 发布前打包验收（必须执行）
+
+在真正 `npm publish` 前，先做一次 dry-run，确认 tarball 内容和体积符合预期：
+
+```bash
+npm pack --dry-run
+```
+
+重点检查：
+
+- 只包含 `dist/`、必要文档和 `package.json`
+- 不包含 `.ornn/` 运行时数据、日志、数据库
+- 不包含 `.agents/`、`.claude/`、`.codex/`、`.opencode/` 等本地技能副本
+- 不包含 `tests/`、`test/`、`docs/`、`.github/`、`node_modules/`
+- 包体积保持在可控范围，避免把整个仓库内容一起发到 npm
+
+建议在 `package.json` 中使用 `files` 白名单控制发布清单，不要依赖“排除式”忽略规则兜底。
+
 ---
 
 ## 📦 版本发布命令
@@ -210,6 +228,7 @@ v0.2.0
 npm run lint
 npm run typecheck
 npm test
+npm pack --dry-run
 ```
 
 ### 2. 版本号冲突

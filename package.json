@@ -7,11 +7,21 @@
     "ornn": "dist/cli/index.js"
   },
   "type": "module",
+  "files": [
+    "dist/",
+    "README.md",
+    "README.zh-CN.md",
+    "CHANGELOG.md",
+    "USER-GUIDE.md",
+    "ARCHITECTURE.md",
+    "SECURITY.md"
+  ],
   "scripts": {
     "build": "tsc && npm run ensure:cli-exec",
     "dev": "tsx watch src/cli/index.ts",
     "start": "node dist/cli/index.js",
     "ensure:cli-exec": "sh -c 'if [ -f dist/cli/index.js ]; then chmod +x dist/cli/index.js; fi'",
+    "prepack": "npm run build",
     "test": "vitest",
     "test:coverage": "vitest --coverage",
     "test:agent-poc": "tsx tests/agent-poc/run-all-tests.ts",

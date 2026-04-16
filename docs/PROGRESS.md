@@ -13,6 +13,11 @@
 - 📝 记录环境经验：本地源码变更后如果需要让全局 `ornn` 立即生效，稳定做法是先执行 `npm run build`，再执行 `npm install -g .`；这样会把当前仓库最新 `dist` 产物重新安装到全局包目录，而不依赖旧的 `npm link` 软链状态
 - 📝 记录环境经验：验证“是否真的装上了新 CLI”时，不要只看构建成功；至少同时检查 `which ornn`、软链目标以及 `ornn --version`。否则很容易出现仓库已编译成功，但终端实际还在跑旧全局包的错觉
 
+### 2026-04-17
+
+- ✅ 收紧 npm 发布清单：`package.json` 新增 `files` 白名单，并在 `prepack` 阶段强制执行 `npm run build`，避免把仓库里的本地技能副本、运行时状态和分析产物一起打进 npm 包
+- 📝 记录打包经验：发布 CLI/工具包时，不能只看“能不能 `npm publish`”；必须先跑 `npm pack --dry-run` 检查 tarball 实际内容。像 `.ornn/`、`.agents/`、`.codex/`、`.claude/`、`show-my-repo/` 这类本地运行或分析目录，默认很容易被带进包里，正确做法是用 `files` 白名单显式收口
+
 ### 2026-04-15
 
 - ✅ 修正实时追踪的业务语义分层：`analysis_failed` 仍保留为 `stability_feedback` 根因事件，但 dashboard 会额外合成一个 `analysis_interrupted` 核心流程终态，避免“核心流程”过滤下只剩“开始分析”，让每个 scope 都能看见本轮是否真正形成业务结论
