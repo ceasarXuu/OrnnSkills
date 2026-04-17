@@ -21,16 +21,16 @@
   2. `[x]` 抽出 `sse/hub`
   3. `[x]` 抽出 `services/project-onboarding`
   4. `[x]` 抽出 `services/skill-version`
-- [ ] P1 `src/dashboard/ui.ts`
+- [x] P1 `src/dashboard/ui.ts`
   当前顺序：
   1. `[x]` 抽出 `web/app-shell`
   2. `[x]` 抽出 `web/state`
   3. `[x]` 抽出 `web/panels/*`（已完成 `panels/cost-panel`、`panels/config-panel`、`panels/logs-panel`、`panels/overview-panel`、`panels/skills-panel`、`panels/activity-panel`）
   4. `[x]` 抽出 `web/render/*`（已完成 `render/skill-card`、`render/trace-bars`、`render/state-badge`、`render/metric-rows`、`render/cost-breakdown`、`render/activity-tables`）
   5. `[x]` 抽出 `web/styles`
-  6. `[ ]` 抽出 `web/activity/*`（已完成 `activity/business-events`、`activity/detail-view`、`activity/listing`）
-  7. `[ ]` 抽出 `web/config/*`
-  8. `[ ]` 收口 `ui.ts` 为 facade
+  6. `[x]` 抽出 `web/activity/*`（已完成 `activity/business-events`、`activity/detail-view`、`activity/listing`、`activity/shared-utils`）
+  7. `[x]` 抽出 `web/config/*`
+  8. `[x]` 收口 `ui.ts` 为 facade
 - [x] P1 `src/config/manager.ts`
   当前顺序：
   1. `[x]` 抽出 `dashboard-config`
@@ -70,7 +70,7 @@
   5. `[ ]` 保留 `ShadowManager` 作为 facade
 
 当前进行中：
-- [ ] `src/dashboard/ui.ts` 第 6 步：抽出 `web/activity/*`（下一项：`activity/shared-utils`）
+- [ ] `src/storage/sqlite.ts` 第 1 步：抽出共享 DB adapter
 
 ## 优先级总览
 
