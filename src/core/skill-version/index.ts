@@ -33,6 +33,7 @@ export interface VersionMetadata {
   previousVersion: number | null;
   isDisabled?: boolean;
   disabledAt?: string | null;
+  activityScopeId?: string;
   analyzerModel?: string;
   tokenUsage?: {
     prompt: number;
@@ -126,6 +127,10 @@ export class SkillVersionManager {
       ...metadata,
       isDisabled: !!metadata.isDisabled,
       disabledAt: metadata.isDisabled ? (metadata.disabledAt ?? null) : null,
+      activityScopeId:
+        typeof metadata.activityScopeId === 'string' && metadata.activityScopeId.trim().length > 0
+          ? metadata.activityScopeId.trim()
+          : undefined,
     };
   }
 
@@ -171,7 +176,8 @@ export class SkillVersionManager {
     reason: string,
     traceIds: string[],
     tokenUsage?: VersionMetadata['tokenUsage'],
-    analyzerModel?: string
+    analyzerModel?: string,
+    extras?: Pick<VersionMetadata, 'activityScopeId'>
   ): SkillVersion {
     const newVersion = this.currentVersion + 1;
     const versionDir = join(this.versionsDir, `v${newVersion}`);
@@ -189,6 +195,7 @@ export class SkillVersionManager {
         previousVersion: this.currentVersion > 0 ? this.currentVersion : null,
         isDisabled: false,
         disabledAt: null,
+        activityScopeId: extras?.activityScopeId,
         analyzerModel,
         tokenUsage,
       };

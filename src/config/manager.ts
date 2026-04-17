@@ -40,9 +40,29 @@ export interface OrnnConfig {
     max_concurrent_requests?: number;
     max_estimated_tokens_per_window?: number;
   };
+  prompt_overrides?: {
+    skill_call_analyzer?: string;
+    skillCallAnalyzer?: string;
+    decision_explainer?: string;
+    decisionExplainer?: string;
+    readiness_probe?: string;
+    readinessProbe?: string;
+  };
 }
 
 const DEFAULT_LOG_LEVEL = "info";
+export interface DashboardPromptOverrides {
+  skillCallAnalyzer: string;
+  decisionExplainer: string;
+  readinessProbe: string;
+}
+
+export const DEFAULT_DASHBOARD_PROMPT_OVERRIDES: DashboardPromptOverrides = {
+  skillCallAnalyzer: "",
+  decisionExplainer: "",
+  readinessProbe: "",
+};
+
 const GLOBAL_DASHBOARD_CONFIG_DIR = () => join(homedir(), ".ornn", "config");
 const GLOBAL_DASHBOARD_CONFIG_PATH = () => join(GLOBAL_DASHBOARD_CONFIG_DIR(), "settings.toml");
 const GLOBAL_DASHBOARD_ENV_PATH = () => join(GLOBAL_DASHBOARD_CONFIG_DIR(), ".env.local");
@@ -77,9 +97,11 @@ export function generateConfigContent(
   defaultProvider?: string,
   logLevel: string = DEFAULT_LOG_LEVEL,
   tracking: { autoOptimize?: boolean; userConfirm?: boolean; runtimeSync?: boolean } = {},
-  llmSafety?: Partial<LLMSafetyOptions>
+  llmSafety?: Partial<LLMSafetyOptions>,
+  promptOverrides: DashboardPromptOverrides = DEFAULT_DASHBOARD_PROMPT_OVERRIDES
 ): string {
   const normalizedSafety = resolveLLMSafetyOptions(llmSafety);
+  const normalizedPromptOverrides = resolveDashboardPromptOverrides(promptOverrides);
   let config = `[ornn]
 version = "0.1.9"
 log_level = "${logLevel}"
@@ -117,6 +139,15 @@ max_requests_per_window = ${normalizedSafety.maxRequestsPerWindow}
 max_concurrent_requests = ${normalizedSafety.maxConcurrentRequests}
 max_estimated_tokens_per_window = ${normalizedSafety.maxEstimatedTokensPerWindow}
 `;
+
+  if (hasPromptOverrides(normalizedPromptOverrides)) {
+    config += `
+[prompt_overrides]
+skill_call_analyzer = ${JSON.stringify(normalizedPromptOverrides.skillCallAnalyzer)}
+decision_explainer = ${JSON.stringify(normalizedPromptOverrides.decisionExplainer)}
+readiness_probe = ${JSON.stringify(normalizedPromptOverrides.readinessProbe)}
+`;
+  }
 
   return config.trim();
 }
@@ -166,7 +197,8 @@ export async function writeConfig(
       maxRequestsPerWindow: existingConfig?.llm_safety?.max_requests_per_window,
       maxConcurrentRequests: existingConfig?.llm_safety?.max_concurrent_requests,
       maxEstimatedTokensPerWindow: existingConfig?.llm_safety?.max_estimated_tokens_per_window,
-    }
+    },
+    normalizePromptOverridesFromConfig(existingConfig)
   );
 
   await writeFile(configPath, content);
@@ -307,7 +339,8 @@ export async function setDefaultProvider(
       maxRequestsPerWindow: config.llm_safety?.max_requests_per_window,
       maxConcurrentRequests: config.llm_safety?.max_concurrent_requests,
       maxEstimatedTokensPerWindow: config.llm_safety?.max_estimated_tokens_per_window,
-    }
+    },
+    normalizePromptOverridesFromConfig(config)
   );
 
   const configPath = join(projectPath, ".ornn", "config", "settings.toml");
@@ -329,6 +362,7 @@ export interface DashboardConfig {
   userConfirm: boolean;
   runtimeSync: boolean;
   llmSafety: LLMSafetyOptions;
+  promptOverrides: DashboardPromptOverrides;
   defaultProvider: string;
   logLevel: string;
   providers: DashboardProviderConfig[];
@@ -371,6 +405,46 @@ function normalizeProvidersFromConfig(config: OrnnConfig | null): ProviderConfig
   });
 }
 
+export function resolveDashboardPromptOverrides(
+  promptOverrides?: Partial<DashboardPromptOverrides> | null
+): DashboardPromptOverrides {
+  const raw = promptOverrides && typeof promptOverrides === "object" ? promptOverrides : {};
+  return {
+    skillCallAnalyzer:
+      typeof raw.skillCallAnalyzer === "string" ? raw.skillCallAnalyzer.trim() : "",
+    decisionExplainer:
+      typeof raw.decisionExplainer === "string" ? raw.decisionExplainer.trim() : "",
+    readinessProbe:
+      typeof raw.readinessProbe === "string" ? raw.readinessProbe.trim() : "",
+  };
+}
+
+function normalizePromptOverridesFromConfig(config: OrnnConfig | null): DashboardPromptOverrides {
+  const raw = config?.prompt_overrides;
+  if (!raw || typeof raw !== "object") {
+    return { ...DEFAULT_DASHBOARD_PROMPT_OVERRIDES };
+  }
+
+  return resolveDashboardPromptOverrides({
+    skillCallAnalyzer:
+      typeof raw.skill_call_analyzer === "string"
+        ? raw.skill_call_analyzer
+        : raw.skillCallAnalyzer,
+    decisionExplainer:
+      typeof raw.decision_explainer === "string"
+        ? raw.decision_explainer
+        : raw.decisionExplainer,
+    readinessProbe:
+      typeof raw.readiness_probe === "string"
+        ? raw.readiness_probe
+        : raw.readinessProbe,
+  });
+}
+
+function hasPromptOverrides(promptOverrides: DashboardPromptOverrides): boolean {
+  return Object.values(promptOverrides).some((value) => value.trim().length > 0);
+}
+
 async function readLegacyProjectDashboardConfig(projectPath: string): Promise<DashboardConfig | null> {
   const config = await readTomlConfigFile(PROJECT_DASHBOARD_CONFIG_PATH(projectPath));
   const providers = normalizeProvidersFromConfig(config);
@@ -390,6 +464,7 @@ async function readLegacyProjectDashboardConfig(projectPath: string): Promise<Da
       maxConcurrentRequests: config.llm_safety?.max_concurrent_requests,
       maxEstimatedTokensPerWindow: config.llm_safety?.max_estimated_tokens_per_window,
     }),
+    promptOverrides: normalizePromptOverridesFromConfig(config),
     defaultProvider: config.llm?.default_provider ?? '',
     logLevel: config.ornn?.log_level ?? DEFAULT_LOG_LEVEL,
     providers: providers.map((provider) => ({
@@ -442,6 +517,16 @@ function mergeDashboardConfigs(
     changed = true;
   }
 
+  const promptOverrides = resolveDashboardPromptOverrides(globalConfig.promptOverrides);
+  for (const [key, value] of Object.entries(legacyConfig.promptOverrides) as Array<
+    [keyof DashboardPromptOverrides, string]
+  >) {
+    if (!promptOverrides[key] && value.trim()) {
+      promptOverrides[key] = value.trim();
+      changed = true;
+    }
+  }
+
   if (mergedProviders.length === 0 && legacyConfig.providers.length > 0) {
     changed = true;
   }
@@ -450,6 +535,7 @@ function mergeDashboardConfigs(
     mergedConfig: {
       ...globalConfig,
       defaultProvider,
+      promptOverrides,
       providers: mergedProviders,
     },
     changed,
@@ -471,6 +557,7 @@ export async function readDashboardConfig(projectPath?: string): Promise<Dashboa
       maxConcurrentRequests: config?.llm_safety?.max_concurrent_requests,
       maxEstimatedTokensPerWindow: config?.llm_safety?.max_estimated_tokens_per_window,
     }),
+    promptOverrides: normalizePromptOverridesFromConfig(config),
     defaultProvider: config?.llm?.default_provider ?? '',
     logLevel: config?.ornn?.log_level ?? DEFAULT_LOG_LEVEL,
     providers: providers.map((provider) => ({
@@ -561,7 +648,8 @@ export async function writeDashboardConfig(
       userConfirm: payload.userConfirm,
       runtimeSync: payload.runtimeSync,
     },
-    payload.llmSafety
+    payload.llmSafety,
+    resolveDashboardPromptOverrides(payload.promptOverrides)
   );
   await writeFile(GLOBAL_DASHBOARD_CONFIG_PATH(), content, "utf-8");
 

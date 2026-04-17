@@ -570,7 +570,7 @@ export class ShadowManager {
   private async handleEvaluation(
     shadowId: string,
     evaluation: EvaluationResult,
-    _traces: Trace[],
+    traces: Trace[],
     context: ActivityEventContext,
     options: { skipAnalysisRequested?: boolean; closeOnSkip?: boolean } = {}
   ): Promise<TriggerOptimizeResult> {
@@ -651,6 +651,40 @@ export class ShadowManager {
         evaluation,
         detail: patchResult.error ?? '本轮优化未完成，但系统没有返回更具体的原因。',
       };
+    }
+
+    try {
+      const updatedContent = this.shadowRegistry.readContent(skillId, runtime);
+      if (updatedContent) {
+        createSkillVersionManager({
+          projectPath: this.projectRoot,
+          skillId,
+          runtime,
+        }).createVersion(
+          updatedContent,
+          evaluation.reason ?? 'Auto optimization',
+          traces.map((trace) => trace.trace_id).filter(Boolean),
+          undefined,
+          undefined,
+          context.episodeId ? { activityScopeId: context.episodeId } : undefined
+        );
+      } else {
+        logger.warn('Skipped skill version snapshot after patch because updated shadow content was empty', {
+          projectRoot: this.projectRoot,
+          skillId,
+          runtime,
+          shadowId,
+        });
+      }
+    } catch (error) {
+      logger.error('Failed to persist skill version after optimization patch', {
+        projectRoot: this.projectRoot,
+        skillId,
+        runtime,
+        shadowId,
+        episodeId: context.episodeId ?? null,
+        error,
+      });
     }
 
     this.decisionEvents.record(buildPatchAppliedEvent({

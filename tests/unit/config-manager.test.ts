@@ -310,6 +310,11 @@ window_ms = 45000
 max_requests_per_window = 9
 max_concurrent_requests = 1
 max_estimated_tokens_per_window = 12345
+
+[prompt_overrides]
+skill_call_analyzer = "decide carefully\\nwith project-specific policy"
+decision_explainer = "summarize for this team"
+readiness_probe = "wait for strong signals"
 `,
       'utf-8'
     );
@@ -328,6 +333,11 @@ max_estimated_tokens_per_window = 12345
       maxRequestsPerWindow: 9,
       maxConcurrentRequests: 1,
       maxEstimatedTokensPerWindow: 12345,
+    });
+    expect(config.promptOverrides).toEqual({
+      skillCallAnalyzer: 'decide carefully\nwith project-specific policy',
+      decisionExplainer: 'summarize for this team',
+      readinessProbe: 'wait for strong signals',
     });
     expect(config.providers).toHaveLength(2);
     expect(config.providers[0]?.apiKey).toBe('openai-secret');
@@ -358,6 +368,11 @@ max_estimated_tokens_per_window = 12345
         maxConcurrentRequests: 1,
         maxEstimatedTokensPerWindow: 12345,
       },
+      promptOverrides: {
+        skillCallAnalyzer: 'return only json',
+        decisionExplainer: 'stay concise',
+        readinessProbe: 'wait for stable evidence',
+      },
       defaultProvider: 'deepseek',
       logLevel: 'warn',
       providers: [
@@ -387,6 +402,10 @@ max_estimated_tokens_per_window = 12345
       max_concurrent_requests: 1,
       max_estimated_tokens_per_window: 12345,
     });
+    expect(rawConfig).toContain('[prompt_overrides]');
+    expect(rawConfig).toContain('skill_call_analyzer = "return only json"');
+    expect(rawConfig).toContain('decision_explainer = "stay concise"');
+    expect(rawConfig).toContain('readiness_probe = "wait for stable evidence"');
     } finally {
       process.env.HOME = oldHome;
       vi.resetModules();

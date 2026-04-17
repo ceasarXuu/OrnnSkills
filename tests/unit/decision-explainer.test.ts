@@ -156,4 +156,77 @@ describe('decision explainer', () => {
       expect.anything(),
     );
   });
+
+  it('appends configured prompt overrides to the decision explainer system prompt', async () => {
+    readDashboardConfigMock.mockResolvedValue({
+      autoOptimize: true,
+      userConfirm: false,
+      runtimeSync: true,
+      defaultProvider: 'deepseek',
+      logLevel: 'info',
+      promptOverrides: {
+        skillCallAnalyzer: '',
+        decisionExplainer: 'Team style: avoid bullets and keep the explanation dry.',
+        readinessProbe: '',
+      },
+      providers: [
+        {
+          provider: 'deepseek',
+          modelName: 'deepseek/deepseek-reasoner',
+          apiKeyEnvVar: 'DEEPSEEK_API_KEY',
+          apiKey: 'test-key',
+          hasApiKey: true,
+        },
+      ],
+    });
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                summary: 'Decision recorded.',
+                evidence_readout: [],
+                causal_chain: [],
+                decision_rationale: 'Stable result.',
+                recommended_action: 'Keep monitoring.',
+                uncertainties: [],
+                contradictions: [],
+              }),
+            },
+          },
+        ],
+        usage: {
+          prompt_tokens: 20,
+          completion_tokens: 20,
+          total_tokens: 40,
+        },
+        model: 'deepseek/deepseek-reasoner',
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { generateDecisionExplanation } = await import('../../src/core/decision-explainer/index.js');
+    await generateDecisionExplanation(
+      '/tmp/project',
+      'astartes-coding-custodes',
+      {
+        should_patch: false,
+        source_sessions: ['session-1'],
+        confidence: 0.62,
+        reason: 'Evidence looks stable.',
+      },
+      [],
+      null,
+    );
+
+    const [, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const requestBody = JSON.parse(String(requestInit.body)) as {
+      messages: Array<{ role: string; content: string }>;
+    };
+    const systemMessage = requestBody.messages.find((message) => message.role === 'system')?.content || '';
+    expect(systemMessage).toContain('Team style: avoid bullets and keep the explanation dry.');
+  });
 });

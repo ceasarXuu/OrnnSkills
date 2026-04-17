@@ -68,6 +68,21 @@ describe('SkillVersionManager', () => {
       manager.createVersion('v2', 'update', []);
       expect(existsSync(join(testDir, '.ornn', 'skills', 'codex', 'my-skill', 'versions', 'latest'))).toBe(true);
     });
+
+    it('persists activity scope metadata for optimization-linked versions', () => {
+      const manager = new SkillVersionManager({ projectPath: testDir, skillId: 'my-skill', runtime: 'codex' });
+      const version = manager.createVersion(
+        '# Content',
+        'Auto optimization',
+        ['trace-1'],
+        undefined,
+        undefined,
+        { activityScopeId: 'scope-ep-1' }
+      );
+
+      expect(version.metadata.activityScopeId).toBe('scope-ep-1');
+      expect(manager.getVersion(version.version)?.metadata.activityScopeId).toBe('scope-ep-1');
+    });
   });
 
   describe('getVersion', () => {

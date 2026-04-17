@@ -5,6 +5,7 @@ import { buildAgentUsageModelId, recordAgentUsage } from '../agent-usage/index.j
 import { readProjectLanguage } from '../../dashboard/language-state.js';
 import type { Language } from '../../dashboard/i18n.js';
 import { normalizeNarrativeArray, normalizeNarrativeString } from '../llm-localization/index.js';
+import { appendProjectPromptOverride } from '../prompt-overrides.js';
 import { buildTraceTimelineText } from '../trace-summary/index.js';
 import { extractJsonObject } from '../../utils/json-response.js';
 import type { Trace } from '../../types/index.js';
@@ -53,10 +54,11 @@ function buildFallbackProbeResult(episode: TaskEpisode, traces: Trace[], lang: L
 function buildPrompt(
   episode: TaskEpisode,
   traces: Trace[],
-  lang: Language
+  lang: Language,
+  promptOverride: string
 ): { systemPrompt: string; userPrompt: string } {
   const isZh = lang === 'zh';
-  const systemPrompt = isZh
+  const baseSystemPrompt = isZh
     ? [
         '你是 Ornn 的 readiness probe 分析器。',
         '你的任务是判断当前任务窗口是否已经收集到足够的 trace，可以进入深度 skill 优化分析。',
@@ -79,6 +81,7 @@ function buildPrompt(
         'next_probe_hint.mode must be count_driven or event_driven when provided.',
         'episode_action.close_current and episode_action.open_new must be booleans.',
       ].join('\n');
+  const systemPrompt = appendProjectPromptOverride(baseSystemPrompt, promptOverride, lang);
 
   const userPrompt = isZh
     ? [
@@ -192,9 +195,18 @@ export class ReadinessProbeAnalyzer {
     const fallback = buildFallbackProbeResult(episode, traces, lang);
     const config = await readDashboardConfig(projectPath);
     const activeProvider = config.providers[0];
+    const promptOverride = config.promptOverrides?.readinessProbe || '';
 
     if (!activeProvider || !activeProvider.apiKey) {
       return fallback;
+    }
+
+    if (promptOverride.trim()) {
+      logger.info('Applying readiness probe prompt override', {
+        projectPath,
+        episodeId: episode.episodeId,
+        overrideLength: promptOverride.trim().length,
+      });
     }
 
     const client = createLiteLLMClient({
@@ -203,7 +215,7 @@ export class ReadinessProbeAnalyzer {
       apiKey: activeProvider.apiKey,
       maxTokens: 900,
     });
-    const prompt = buildPrompt(episode, traces, lang);
+    const prompt = buildPrompt(episode, traces, lang, promptOverride);
     const model = buildAgentUsageModelId(activeProvider.provider, activeProvider.modelName);
     const started = Date.now();
 

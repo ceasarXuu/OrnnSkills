@@ -437,6 +437,70 @@ describe('SkillCallAnalyzer', () => {
     expect(systemMessage).toContain('当 decision=apply_optimization 时，evidence 至少提供 2 条');
   });
 
+  it('appends configured prompt overrides to the analyzer system prompt', async () => {
+    readProjectLanguageMock.mockResolvedValue('en');
+    readDashboardConfigMock.mockResolvedValue({
+      autoOptimize: true,
+      userConfirm: false,
+      runtimeSync: true,
+      defaultProvider: 'openai',
+      logLevel: 'info',
+      promptOverrides: {
+        skillCallAnalyzer: 'Project policy: prefer no_optimization unless evidence repeats.',
+        decisionExplainer: '',
+        readinessProbe: '',
+      },
+      providers: [
+        {
+          provider: 'openai',
+          modelName: 'gpt-4o-mini',
+          apiKeyEnvVar: 'OPENAI_API_KEY',
+          apiKey: 'test-key',
+          hasApiKey: true,
+        },
+      ],
+    });
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: '{"decision":"no_optimization","reason":"No change needed","confidence":0.8,"evidence":[]}',
+            },
+          },
+        ],
+        usage: {
+          prompt_tokens: 10,
+          completion_tokens: 10,
+          total_tokens: 20,
+        },
+        model: 'gpt-4o-mini',
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const analyzer = createSkillCallAnalyzer();
+    await analyzer.analyzeWindow('/tmp/project', {
+      windowId: 'window-override',
+      skillId: 'test-skill',
+      runtime: 'codex',
+      sessionId: 'session-1',
+      closeReason: 'completed',
+      startedAt: '2026-04-10T00:00:00.000Z',
+      lastTraceAt: '2026-04-10T00:01:00.000Z',
+      traces: [],
+    } as never, 'content');
+
+    const [, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const requestBody = JSON.parse(String(requestInit.body)) as {
+      messages: Array<{ role: string; content: string }>;
+    };
+    const systemMessage = requestBody.messages.find((message) => message.role === 'system')?.content || '';
+    expect(systemMessage).toContain('Project policy: prefer no_optimization unless evidence repeats.');
+  });
+
   it('recovers structured json from reasoning_content-only responses', async () => {
     readDashboardConfigMock.mockResolvedValue({
       autoOptimize: true,

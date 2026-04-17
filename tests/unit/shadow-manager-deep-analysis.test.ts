@@ -109,6 +109,19 @@ function readCheckpoint(projectRoot: string): {
   };
 }
 
+function readVersionMetadata(projectRoot: string, version: number) {
+  return JSON.parse(
+    readFileSync(
+      join(projectRoot, '.ornn', 'skills', 'codex', 'test-skill', 'versions', `v${version}`, 'metadata.json'),
+      'utf-8'
+    )
+  ) as {
+    reason: string;
+    traceIds: string[];
+    activityScopeId?: string;
+  };
+}
+
 describe('ShadowManager deep analysis recovery chain', () => {
   const testProjectPath = join(tmpdir(), `ornn-shadow-manager-deep-analysis-${Date.now()}`);
 
@@ -270,6 +283,11 @@ describe('ShadowManager deep analysis recovery chain', () => {
       currentSkillId: null,
       queueSize: 0,
     });
+
+    const versionMeta = readVersionMetadata(testProjectPath, 1);
+    expect(versionMeta.reason).toBe('需要删掉多余的回显说明');
+    expect(versionMeta.traceIds).toContain('trace-10');
+    expect(versionMeta.activityScopeId).toBeDefined();
   });
 
   it('records analysis failure and checkpoint error when deep analysis itself fails', async () => {

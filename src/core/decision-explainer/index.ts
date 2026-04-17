@@ -5,6 +5,7 @@ import { buildAgentUsageModelId, recordAgentUsage } from '../agent-usage/index.j
 import { readProjectLanguage } from '../../dashboard/language-state.js';
 import type { Language } from '../../dashboard/i18n.js';
 import { normalizeNarrativeArray, normalizeNarrativeString } from '../llm-localization/index.js';
+import { appendProjectPromptOverride } from '../prompt-overrides.js';
 import { buildTraceTimelineText } from '../trace-summary/index.js';
 import { extractJsonObject } from '../../utils/json-response.js';
 import type { DecisionEventEvidence, EvaluationResult, Trace } from '../../types/index.js';
@@ -49,10 +50,11 @@ function buildPrompt(
   evaluation: EvaluationResult,
   traces: Trace[],
   evidence: DecisionEventEvidence | null | undefined,
-  lang: Language
+  lang: Language,
+  promptOverride: string
 ): { systemPrompt: string; userPrompt: string } {
   const isZh = lang === 'zh';
-  const systemPrompt = isZh
+  const baseSystemPrompt = isZh
     ? [
         '你是 Ornn 的决策解释器。',
         '你的任务是把结构化优化决策转换成适合 dashboard 用户阅读的说明。',
@@ -70,6 +72,7 @@ function buildPrompt(
         'Output must be JSON with exactly these fields: summary, evidence_readout, causal_chain, decision_rationale, recommended_action, uncertainties, contradictions.',
         'All narrative fields must be arrays or strings of concise English sentences.',
       ].join('\n');
+  const systemPrompt = appendProjectPromptOverride(baseSystemPrompt, promptOverride, lang);
 
   const userPrompt = isZh
     ? [
@@ -175,9 +178,18 @@ export async function generateDecisionExplanation(
     : buildFallbackExplanation(skillId, evaluation);
   const config = await readDashboardConfig(projectPath);
   const activeProvider = config.providers[0];
+  const promptOverride = config.promptOverrides?.decisionExplainer || '';
 
   if (!activeProvider || !activeProvider.apiKey) {
     return fallback;
+  }
+
+  if (promptOverride.trim()) {
+    logger.info('Applying decision explainer prompt override', {
+      projectPath,
+      skillId,
+      overrideLength: promptOverride.trim().length,
+    });
   }
 
   const client = createLiteLLMClient({
@@ -186,7 +198,7 @@ export async function generateDecisionExplanation(
     apiKey: activeProvider.apiKey,
     maxTokens: 1200,
   });
-  const prompt = buildPrompt(skillId, evaluation, traces, evidence, lang);
+  const prompt = buildPrompt(skillId, evaluation, traces, evidence, lang, promptOverride);
   const model = buildAgentUsageModelId(activeProvider.provider, activeProvider.modelName);
   const started = Date.now();
 

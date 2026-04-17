@@ -3,5 +3,7 @@
   "createdAt": "2026-04-16T17:47:55.407Z",
   "reason": "通过 dashboard 手动编辑",
   "traceIds": [],
-  "previousVersion": 3
+  "previousVersion": 3,
+  "isDisabled": false,
+  "disabledAt": null
 }

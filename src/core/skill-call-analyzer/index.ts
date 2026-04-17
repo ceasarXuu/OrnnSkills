@@ -9,6 +9,7 @@ import {
   normalizeNarrativeArray,
   normalizeNarrativeString,
 } from '../llm-localization/index.js';
+import { appendProjectPromptOverride } from '../prompt-overrides.js';
 import { buildTraceTimelineText } from '../trace-summary/index.js';
 import { extractJsonObject } from '../../utils/json-response.js';
 import type {
@@ -146,10 +147,11 @@ function buildWindowSnapshot(window: SkillCallWindow, lang: Language): string[] 
 function buildPrompt(
   window: SkillCallWindow,
   skillContent: string,
-  lang: Language
+  lang: Language,
+  promptOverride: string
 ): { systemPrompt: string; userPrompt: string } {
   const isZh = lang === 'zh';
-  const systemPrompt = isZh
+  const baseSystemPrompt = isZh
     ? [
         '你是 Ornn 的技能调用窗口分析器。',
         '你的任务是基于当前窗口的完整上下文，返回唯一一个三元决策。',
@@ -208,6 +210,7 @@ function buildPrompt(
         'confidence must be a number between 0 and 1.',
         'When decision=apply_optimization, evidence must contain at least 2 short factual bullets grounded in the timeline.',
       ].join('\n');
+  const systemPrompt = appendProjectPromptOverride(baseSystemPrompt, promptOverride, lang);
 
   const timeline = buildTraceTimelineText(window.traces.slice(-60), lang).split('\n');
   const snapshot = buildWindowSnapshot(window, lang);
@@ -453,6 +456,7 @@ export class SkillCallAnalyzer {
     const lang = await readProjectLanguage(projectPath, 'en');
     const config = await readDashboardConfig(projectPath);
     const activeProvider = config.providers[0];
+    const promptOverride = config.promptOverrides?.skillCallAnalyzer || '';
     const fallbackHint = buildFallbackHint(window);
 
     if (!activeProvider || !activeProvider.apiKey) {
@@ -477,13 +481,22 @@ export class SkillCallAnalyzer {
       };
     }
 
+    if (promptOverride.trim()) {
+      logger.info('Applying skill call analyzer prompt override', {
+        projectPath,
+        windowId: window.windowId,
+        skillId: window.skillId,
+        overrideLength: promptOverride.trim().length,
+      });
+    }
+
     const client = createLiteLLMClient({
       provider: activeProvider.provider,
       modelName: activeProvider.modelName,
       apiKey: activeProvider.apiKey,
       maxTokens: 1600,
     });
-    const prompt = buildPrompt(window, skillContent, lang);
+    const prompt = buildPrompt(window, skillContent, lang, promptOverride);
     const model = buildAgentUsageModelId(activeProvider.provider, activeProvider.modelName);
     const started = Date.now();
 

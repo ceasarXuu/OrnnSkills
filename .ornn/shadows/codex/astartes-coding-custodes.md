@@ -3,12 +3,13 @@ name: astartes-coding-custodes
 description: Use this skill when iterative AI-assisted coding starts to degrade code quality, architecture consistency, or maintainability. It enforces staged implementation, architecture guardrails, duplication control, strict review, and entropy-reduction refactors.
 ---
 
-<!-- Ornn Version: v4 -->
+<!-- Ornn Version: v5 -->
 <!-- Origin: /Users/xuzhang/OrnnSkills/.ornn/skills/codex/astartes-coding-custodes -->
 <!-- Runtime: codex -->
 <!-- Project: /Users/xuzhang/OrnnSkills -->
-<!-- Last Optimized: 2026-04-16T17:47:55.407Z -->
-<!-- Optimization Reason: 通过 dashboard 手动编辑 -->
+<!-- Last Optimized: 2026-04-16T18:00:50.529Z -->
+<!-- Optimization Reason: Bootstrap source sync (project -> project-preferred) -->
+
 
 
 # astartes-coding-custodes
