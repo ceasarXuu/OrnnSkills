@@ -93,6 +93,55 @@ describe('daemon components', () => {
     expect(managers.get('/projects/beta')?.close).toHaveBeenCalledTimes(1);
   });
 
+  it('ignores traces for stale runtimes after a project is removed from the registry', async () => {
+    let isRegistered = true;
+    const registry = new ProjectRuntimeRegistry({
+      listProjects: () =>
+        isRegistered
+          ? [
+              {
+                path: '/projects/alpha',
+                name: 'alpha',
+                registeredAt: '',
+                lastSeenAt: '',
+                monitoringState: 'active',
+              },
+            ]
+          : [],
+      getProjectRegistration: (projectRoot) =>
+        isRegistered
+          ? {
+              path: projectRoot,
+              name: projectRoot,
+              registeredAt: '',
+              lastSeenAt: '',
+              monitoringState: 'active',
+              pausedAt: null,
+            }
+          : null,
+      createShadowManager: () => ({
+        init: vi.fn(async () => {}),
+        processTrace: vi.fn(async () => {}),
+        close: vi.fn(async () => {}),
+        cleanupOldTraces: vi.fn(() => 0),
+      }),
+      touchProject: vi.fn(),
+      startFileWatcher: () => null,
+    });
+
+    await registry.syncRegisteredProjects();
+    expect(Array.from(registry.keys())).toEqual(['/projects/alpha']);
+
+    isRegistered = false;
+
+    const matched = await registry.ensureRuntimeForTrace(
+      makeTrace('trace-stale', '/projects/alpha/subdir/file.ts')
+    );
+
+    expect(matched).toBeNull();
+    expect(Array.from(registry.keys())).toEqual(['/projects/alpha']);
+  });
+
   it('retry queue deduplicates traces, drops the oldest when full, and clears project entries', () => {
     const queue = new RetryQueueStore({
       maxRetries: 3,

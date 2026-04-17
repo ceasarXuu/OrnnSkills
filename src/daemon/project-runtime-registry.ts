@@ -53,6 +53,16 @@ function getProjectRegistrationSafely(projectRoot: string): RegistryProject | nu
   }
 }
 
+function findRegisteredProjectByRoot(
+  projectRoot: string,
+  listProjects: () => RegistryProject[]
+): RegistryProject | null {
+  const normalizedProjectRoot = resolve(projectRoot);
+  return (
+    listProjects().find((project) => resolve(project.path) === normalizedProjectRoot) ?? null
+  );
+}
+
 export class ProjectRuntimeRegistry {
   private readonly projectRuntimes = new Map<string, ProjectRuntime>();
 
@@ -99,9 +109,7 @@ export class ProjectRuntimeRegistry {
   }
 
   getProjectMonitoringState(projectRoot: string): ProjectMonitoringSnapshot {
-    const registration = (this.options.getProjectRegistration ?? getProjectRegistrationSafely)(
-      projectRoot
-    );
+    const registration = this.getRegisteredProject(projectRoot);
     return {
       monitoringState: registration?.monitoringState === 'paused' ? 'paused' : 'active',
       pausedAt: registration?.monitoringState === 'paused' ? registration.pausedAt ?? null : null,
@@ -198,12 +206,20 @@ export class ProjectRuntimeRegistry {
       Array.from(this.projectRuntimes.keys())
     );
     if (activeMatch) {
-      const monitoring = this.getProjectMonitoringState(activeMatch);
-      if (monitoring.monitoringState === 'paused') {
+      const registration = this.getRegisteredProject(activeMatch);
+      if (!registration) {
+        logger.debug('Ignoring trace for unregistered stale project runtime', {
+          traceId: trace.trace_id,
+          projectRoot: activeMatch,
+        });
+        return null;
+      }
+
+      if (registration.monitoringState === 'paused') {
         logger.debug('Ignoring trace for paused project monitoring', {
           traceId: trace.trace_id,
           projectRoot: activeMatch,
-          pausedAt: monitoring.pausedAt,
+          pausedAt: registration.pausedAt ?? null,
         });
         return null;
       }
@@ -250,5 +266,19 @@ export class ProjectRuntimeRegistry {
       }
     }
     return null;
+  }
+
+  private getRegisteredProject(projectRoot: string): RegistryProject | null {
+    const registration = (this.options.getProjectRegistration ?? getProjectRegistrationSafely)(
+      projectRoot
+    );
+    if (registration) {
+      return registration;
+    }
+
+    return findRegisteredProjectByRoot(
+      projectRoot,
+      this.options.listProjects ?? projectsRegistry.listProjects
+    );
   }
 }

@@ -4,6 +4,8 @@
 
 ### 2026-04-18
 
+- ✅ 修复 daemon stale runtime 路由回归：项目已从全局注册表移除但 runtime 尚未被下一轮 sync 清理时，daemon 现在会先核验注册表事实来源，不再继续处理该项目的新 trace
+- 📝 记录一致性经验：只要某个运行时对象的生命周期受全局注册表驱动，trace 路由就不能把“内存里还留着 runtime”当成项目仍然有效的事实来源；否则注册表与运行时缓存之间的短暂不同步就会直接变成行为回归
 - ✅ 完成 `src/daemon/index.ts` 拆分收口：将 project runtime 注册/同步、retry queue、checkpoint 持久化、daemon 生命周期管理拆到独立模块，`Daemon` 保留 facade 与旧测试入口，`src/daemon/index.ts` 已降到 346 行
 - 📝 记录测试经验：Vitest 的模块 mock 只要缺了某个 export，即使用 namespace import，也可能在读属性时由代理直接抛错；这类兼容层不要依赖“先判断 export 是否存在”，而应在真正读取注册表能力时显式 `try/catch` 并回退到安全默认值
 - 📝 记录重构经验：给旧代码外面再包一层“看起来无害”的 `async` facade，会改变微任务层级并悄悄打破依赖时序的历史测试；重构时如果目标是行为保持，就要优先复用原有 await 边界，而不是机械增加中转 async 方法
