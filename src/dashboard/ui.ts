@@ -15,6 +15,7 @@ import { renderDashboardLogsPanelSource } from './web/panels/logs-panel.js';
 import { renderDashboardOverviewPanelSource } from './web/panels/overview-panel.js';
 import { renderDashboardSkillsPanelSource } from './web/panels/skills-panel.js';
 import { renderDashboardSkillCardSource } from './web/render/skill-card.js';
+import { renderDashboardStateBadgeSource } from './web/render/state-badge.js';
 import { renderDashboardTraceBarsSource } from './web/render/trace-bars.js';
 import { renderDashboardStateSource } from './web/state.js';
 
@@ -27,6 +28,7 @@ export function getDashboardHtml(_port: number, lang: Language = 'en', buildId =
   const dashboardLogsPanelSource = renderDashboardLogsPanelSource();
   const dashboardOverviewPanelSource = renderDashboardOverviewPanelSource();
   const dashboardSkillCardSource = renderDashboardSkillCardSource();
+  const dashboardStateBadgeSource = renderDashboardStateBadgeSource();
   const dashboardSkillsPanelSource = renderDashboardSkillsPanelSource();
   const dashboardStateSource = renderDashboardStateSource();
   const dashboardTraceBarsSource = renderDashboardTraceBarsSource();
@@ -961,6 +963,7 @@ ${dashboardCostPanelSource}
 ${dashboardLogsPanelSource}
 ${dashboardOverviewPanelSource}
 ${dashboardSkillCardSource}
+${dashboardStateBadgeSource}
 ${dashboardSkillsPanelSource}
 ${dashboardTraceBarsSource}
 
@@ -3890,11 +3893,12 @@ async function checkProvidersConnectivity(targetRowIndex = null, btnEl = null) {
 }
 
 function renderStateBadge(state) {
-  const stateMap = {idle:'state-idle',analyzing:'state-analyzing',optimizing:'state-optimizing',error:'state-error'};
-  const dotMap = {idle:'dot-green',analyzing:'dot-blue',optimizing:'dot-yellow',error:'dot-red'};
-  const cls = stateMap[state] || 'state-idle';
-  const stateText = {idle:t('stateIdle'),analyzing:t('stateAnalyzing'),optimizing:t('stateOptimizing'),error:t('stateError')}[state] || t('stateIdle');
-  return \`<span class="state-badge \${cls}">\${stateText}</span>\`;
+  return renderDashboardStateBadge({
+    state,
+    deps: {
+      t,
+    },
+  });
 }
 
 function selectRuntimeTab(runtime) {
