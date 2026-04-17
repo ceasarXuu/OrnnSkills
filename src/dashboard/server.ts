@@ -18,7 +18,6 @@ import { writeProjectLanguage } from './language-state.js';
 import {
   readDaemonStatus,
   readSkills,
-  readSkillContent,
   readSkillVersion,
   readProjectSnapshotVersion,
   readGlobalLogs,
@@ -42,6 +41,7 @@ import { ensureMonitoringDaemon, ensureProjectInitialized } from './project-onbo
 import { handleGlobalConfigRoutes } from './routes/global-config-routes.js';
 import { handleProjectConfigRoutes } from './routes/project-config-routes.js';
 import { handleProjectReadRoutes } from './routes/project-read-routes.js';
+import { handleProjectSkillRoutes } from './routes/project-skill-routes.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -278,122 +278,6 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
       daemonStarted: monitoring.daemonStarted,
       daemonRunning: monitoring.daemonRunning,
     };
-  }
-
-  function resolveRuntime(
-    runtimeFromBody?: unknown,
-    runtimeFromQuery?: string | null
-  ): RuntimeType {
-    const runtimeCandidate =
-      typeof runtimeFromBody === 'string' && runtimeFromBody.length > 0
-        ? runtimeFromBody
-        : runtimeFromQuery;
-    return runtimeCandidate === 'claude' ||
-      runtimeCandidate === 'opencode' ||
-      runtimeCandidate === 'codex'
-      ? runtimeCandidate
-      : 'codex';
-  }
-
-  function saveSkillVersion(params: {
-    projectPath: string;
-    skillId: string;
-    runtime: RuntimeType;
-    content: string;
-    reason: string;
-    logContext: string;
-  }) {
-    const { projectPath, skillId, runtime, content, reason, logContext } = params;
-    const oldContent = readSkillContent(projectPath, skillId, runtime);
-    if (oldContent === null) {
-      return { ok: false as const, notFound: true as const };
-    }
-
-    const versionManager = new SkillVersionManager({
-      projectPath,
-      skillId,
-      runtime,
-    });
-    const currentEffectiveVersion = versionManager.getEffectiveVersion()?.version ?? null;
-    if (content === oldContent) {
-      return {
-        ok: true as const,
-        unchanged: true as const,
-        version: currentEffectiveVersion,
-      };
-    }
-
-    const shadowRegistry = createShadowRegistry(projectPath);
-    shadowRegistry.init();
-    const updated = shadowRegistry.updateContent(skillId, content, runtime);
-    if (!updated) {
-      return { ok: false as const, notFound: true as const };
-    }
-
-    const created = versionManager.createVersion(content, reason, []);
-    const deployer = createSkillDeployer({
-      runtime,
-      projectPath,
-    });
-    const deployResult = deployer.deploy(skillId, created);
-    if (!deployResult.success) {
-      logger.error(`${logContext} created version but failed to deploy latest`, {
-        projectPath,
-        skillId,
-        runtime,
-        version: created.version,
-        error: deployResult.error,
-      });
-      return {
-        ok: false as const,
-        version: created.version,
-        error: `Version created (v${created.version}) but deploy failed`,
-        detail: deployResult.error,
-      };
-    }
-
-    logger.info(logContext, {
-      projectPath,
-      skillId,
-      runtime,
-      version: created.version,
-      deployedPath: deployResult.deployedPath,
-    });
-
-    return {
-      ok: true as const,
-      unchanged: false as const,
-      version: created.version,
-      metadata: created.metadata,
-      deployedPath: deployResult.deployedPath,
-      created,
-    };
-  }
-
-  function listSameNamedSkillTargets(
-    sourceProjectPath: string,
-    skillId: string,
-    sourceRuntime: RuntimeType
-  ): Array<{ projectPath: string; runtime: RuntimeType }> {
-    const seen = new Set<string>();
-    const targets: Array<{ projectPath: string; runtime: RuntimeType }> = [];
-
-    for (const project of listProjects()) {
-      const skills = readSkills(project.path);
-      for (const skill of skills) {
-        if (skill.skillId !== skillId) continue;
-        const runtime: RuntimeType = skill.runtime ?? 'codex';
-        if (project.path === sourceProjectPath && runtime === sourceRuntime) {
-          continue;
-        }
-        const key = `${project.path}::${runtime}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        targets.push({ projectPath: project.path, runtime });
-      }
-    }
-
-    return targets;
   }
 
   // ── SSE Push Loop ────────────────────────────────────────────────────────
@@ -729,228 +613,16 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
           return;
         }
 
-        // GET /api/projects/:id/skills
-        if (subPath === '/skills' && method === 'GET') {
-          json(res, { skills: readSkills(projectPath) });
-          return;
-        }
-
-        // GET /api/projects/:id/skills/:skillId
-        const skillMatch = subPath.match(/^\/skills\/([^/]+)$/);
-        if (skillMatch && method === 'GET') {
-          const skillId = decodeURIComponent(skillMatch[1]);
-          const runtimeParam = url.searchParams.get('runtime');
-          const runtime =
-            runtimeParam === 'claude' || runtimeParam === 'opencode' || runtimeParam === 'codex'
-              ? runtimeParam
-              : 'codex';
-          const content = readSkillContent(projectPath, skillId, runtime);
-          const skills = readSkills(projectPath);
-          const skill = skills.find((s) => s.skillId === skillId && (s.runtime ?? 'codex') === runtime);
-          const versionManager = new SkillVersionManager({
-            projectPath,
-            skillId,
-            runtime,
-          });
-          if (content === null) {
-            logger.warn('Skill content not found for dashboard request', {
-              projectPath,
-              skillId,
-              runtime,
-            });
-          }
-          json(res, {
-            skillId,
-            runtime,
-            content,
-            versions: skill?.versionsAvailable ?? [],
-            effectiveVersion: versionManager.getEffectiveVersion()?.version ?? skill?.effectiveVersion ?? null,
-            status: skill?.status,
-          });
-          return;
-        }
-
-        // PUT /api/projects/:id/skills/:skillId
-        // Body: { content: string, runtime?: RuntimeType, reason?: string }
-        if (skillMatch && method === 'PUT') {
-          const skillId = decodeURIComponent(skillMatch[1]);
-          const body = (await parseBody(req)) as {
-            content?: unknown;
-            runtime?: unknown;
-            reason?: unknown;
-          };
-          if (typeof body.content !== 'string') {
-            json(res, { ok: false, error: 'content must be a string' }, 400);
-            return;
-          }
-
-          const runtime = resolveRuntime(body.runtime, url.searchParams.get('runtime'));
-          const reason =
-            typeof body.reason === 'string' && body.reason.trim().length > 0
-              ? body.reason.trim()
-              : 'Manual edit from dashboard';
-          const result = saveSkillVersion({
-            projectPath,
-            skillId,
-            runtime,
-            content: body.content,
-            reason,
-            logContext: 'Dashboard saved skill edit and created version',
-          });
-
-          if (!result.ok && result.notFound) {
-            notFound(res);
-            return;
-          }
-
-          if (!result.ok) {
-            json(
-              res,
-              {
-                ok: false,
-                error: result.error,
-                detail: result.detail,
-                version: result.version,
-              },
-              500
-            );
-            return;
-          }
-
-          json(res, {
-            ok: true,
-            unchanged: result.unchanged,
-            skillId,
-            runtime,
-            version: result.version,
-            metadata: result.metadata,
-            deployedPath: result.deployedPath,
-          });
-          return;
-        }
-
-        const applyToAllMatch = subPath.match(/^\/skills\/([^/]+)\/apply-to-all$/);
-        if (applyToAllMatch && method === 'POST') {
-          const skillId = decodeURIComponent(applyToAllMatch[1]);
-          const body = (await parseBody(req)) as {
-            content?: unknown;
-            runtime?: unknown;
-            reason?: unknown;
-          };
-          if (typeof body.content !== 'string') {
-            json(res, { ok: false, error: 'content must be a string' }, 400);
-            return;
-          }
-
-          const runtime = resolveRuntime(body.runtime, url.searchParams.get('runtime'));
-          const sourceReason =
-            typeof body.reason === 'string' && body.reason.trim().length > 0
-              ? body.reason.trim()
-              : 'Manual edit from dashboard';
-          const sourceResult = saveSkillVersion({
-            projectPath,
-            skillId,
-            runtime,
-            content: body.content,
-            reason: sourceReason,
-            logContext: 'Dashboard bulk apply saved source skill version',
-          });
-
-          if (!sourceResult.ok && sourceResult.notFound) {
-            notFound(res);
-            return;
-          }
-
-          if (!sourceResult.ok) {
-            json(
-              res,
-              {
-                ok: false,
-                error: sourceResult.error,
-                detail: sourceResult.detail,
-                version: sourceResult.version,
-              },
-              500
-            );
-            return;
-          }
-
-          const targets = listSameNamedSkillTargets(projectPath, skillId, runtime);
-          let updatedTargets = 0;
-          let skippedTargets = 0;
-          let failedTargets = 0;
-
-          for (const target of targets) {
-            const targetContent = readSkillContent(target.projectPath, skillId, target.runtime);
-            if (targetContent === null) {
-              failedTargets++;
-              logger.warn('Dashboard bulk apply target content not found', {
-                sourceProjectPath: projectPath,
-                targetProjectPath: target.projectPath,
-                skillId,
-                runtime: target.runtime,
-              });
-              continue;
-            }
-
-            if (targetContent === body.content) {
-              skippedTargets++;
-              continue;
-            }
-
-            const targetResult = saveSkillVersion({
-              projectPath: target.projectPath,
-              skillId,
-              runtime: target.runtime,
-              content: body.content,
-              reason: `Bulk apply from ${projectPath} (${runtime})`,
-              logContext: 'Dashboard bulk apply propagated skill version',
-            });
-
-            if (!targetResult.ok) {
-              failedTargets++;
-              logger.warn('Dashboard bulk apply failed for target skill', {
-                sourceProjectPath: projectPath,
-                targetProjectPath: target.projectPath,
-                skillId,
-                runtime: target.runtime,
-                error: targetResult.error,
-                detail: targetResult.detail,
-              });
-              continue;
-            }
-
-            if (targetResult.unchanged) {
-              skippedTargets++;
-              continue;
-            }
-
-            updatedTargets++;
-          }
-
-          logger.info('Dashboard bulk apply completed for same-named skills', {
-            sourceProjectPath: projectPath,
-            skillId,
-            runtime,
-            totalTargets: targets.length,
-            updatedTargets,
-            skippedTargets,
-            failedTargets,
-          });
-
-          json(res, {
-            ok: true,
-            skillId,
-            runtime,
-            source: {
-              saved: !sourceResult.unchanged,
-              version: sourceResult.version ?? null,
-            },
-            totalTargets: targets.length,
-            updatedTargets,
-            skippedTargets,
-            failedTargets,
-          });
+        if (await handleProjectSkillRoutes({
+          subPath,
+          method,
+          projectPath,
+          url,
+          json: (data, status = 200) => json(res, data, status),
+          parseBody: () => parseBody(req),
+          notFound: () => notFound(res),
+          logger,
+        })) {
           return;
         }
 
