@@ -35,6 +35,7 @@ import { pickProjectDirectory } from './native-project-picker.js';
 import { ensureMonitoringDaemon, ensureProjectInitialized } from './project-onboarding.js';
 import { handleGlobalConfigRoutes } from './routes/global-config-routes.js';
 import { handleProjectConfigRoutes } from './routes/project-config-routes.js';
+import { handleProjectManagementRoutes } from './routes/project-management-routes.js';
 import { handleProjectReadRoutes } from './routes/project-read-routes.js';
 import { handleProjectSkillRoutes } from './routes/project-skill-routes.js';
 import { handleProjectVersionRoutes } from './routes/project-version-routes.js';
@@ -471,12 +472,6 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
         return;
       }
 
-      // ── API: List projects ──
-      if (path === '/api/projects' && method === 'GET') {
-        json(res, { projects: getProjectsWithStatus() });
-        return;
-      }
-
       if (await handleGlobalConfigRoutes({
         path,
         method,
@@ -489,70 +484,18 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
         return;
       }
 
-      // ── API: Add project ──
-      if (path === '/api/projects/pick' && method === 'POST') {
-        try {
-          logger.info('Opening native project picker');
-          const projectPath = await pickProjectDirectory();
-          if (!projectPath) {
-            logger.info('Native project picker cancelled');
-            json(res, { ok: false, cancelled: true });
-            return;
-          }
-          const onboarding = await onboardProjectForMonitoring(projectPath);
-          logger.info('Native project picker selected project', {
-            projectPath: onboarding.projectPath,
-            lang: currentLang,
-            source: 'api.projects.pick',
-            initialized: onboarding.initialized,
-            daemonStarted: onboarding.daemonStarted,
-          });
-          json(res, {
-            ok: true,
-            path: onboarding.projectPath,
-            initialized: onboarding.initialized,
-            daemonStarted: onboarding.daemonStarted,
-            daemonRunning: onboarding.daemonRunning,
-            projects: getProjectsWithStatus(),
-          });
-        } catch (error) {
-          logger.error('Native project picker failed', { error: String(error) });
-          json(res, { ok: false, error: String(error) }, 500);
-        }
-        return;
-      }
-
-      if (path === '/api/projects' && method === 'POST') {
-        try {
-          const body = (await parseBody(req)) as { path?: string; name?: string };
-          if (!body.path) {
-            json(res, { ok: false, error: 'path is required' }, 400);
-            return;
-          }
-          const onboarding = await onboardProjectForMonitoring(body.path, body.name);
-          logger.debug('Initialized project dashboard language', {
-            projectPath: onboarding.projectPath,
-            lang: currentLang,
-            source: 'api.projects.add',
-          });
-          json(res, {
-            ok: true,
-            path: onboarding.projectPath,
-            initialized: onboarding.initialized,
-            daemonStarted: onboarding.daemonStarted,
-            daemonRunning: onboarding.daemonRunning,
-            projects: getProjectsWithStatus(),
-          });
-        } catch (e) {
-          json(res, { ok: false, error: String(e) }, 400);
-        }
-        return;
-      }
-
-      // ── API: Global logs ──
-      if (path === '/api/logs' && method === 'GET') {
-        const lines = readGlobalLogs(200);
-        json(res, { lines });
+      if (await handleProjectManagementRoutes({
+        path,
+        method,
+        json: (data, status = 200) => json(res, data, status),
+        parseBody: () => parseBody(req),
+        getProjectsWithStatus,
+        onboardProjectForMonitoring,
+        pickProjectDirectory,
+        setProjectMonitoringState,
+        readGlobalLogs,
+        logger,
+      })) {
         return;
       }
 
@@ -575,37 +518,20 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
           return;
         }
 
-        if (subPath === '/monitoring' && method === 'PATCH') {
-          const body = (await parseBody(req)) as { paused?: unknown };
-          if (typeof body.paused !== 'boolean') {
-            json(res, { ok: false, error: 'paused must be a boolean' }, 400);
-            return;
-          }
-
-          const nextState = body.paused ? 'paused' : 'active';
-          const updatedProject = setProjectMonitoringState(projectPath, nextState);
-          if (!updatedProject) {
-            json(res, { ok: false, error: 'project not found' }, 404);
-            return;
-          }
-
-          logger.info('Dashboard project monitoring state updated', {
-            projectPath,
-            monitoringState: nextState,
-          });
-
-          const projects = getProjectsWithStatus();
-          const project = projects.find((entry) => entry.path === projectPath) ?? {
-            ...updatedProject,
-            isPaused: nextState === 'paused',
-            isRunning: false,
-            skillCount: 0,
-          };
-          json(res, {
-            ok: true,
-            project,
-            projects,
-          });
+        if (await handleProjectManagementRoutes({
+          path,
+          method,
+          projectPath,
+          subPath,
+          json: (data, status = 200) => json(res, data, status),
+          parseBody: () => parseBody(req),
+          getProjectsWithStatus,
+          onboardProjectForMonitoring,
+          pickProjectDirectory,
+          setProjectMonitoringState,
+          readGlobalLogs,
+          logger,
+        })) {
           return;
         }
 
