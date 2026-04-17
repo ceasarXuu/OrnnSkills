@@ -67,6 +67,8 @@ export interface I18nStrings {
   configLlmSafetyTokensLabel: string;
   configPromptOverridesLabel: string;
   configPromptOverridesHelp: string;
+  configPromptBuiltInLabel: string;
+  configPromptProjectOverrideLabel: string;
   configPromptSkillCallAnalyzerLabel: string;
   configPromptSkillCallAnalyzerPlaceholder: string;
   configPromptDecisionExplainerLabel: string;
@@ -437,8 +439,7 @@ const en: I18nStrings = {
   configIntro:
     'These settings are written to ~/.ornn/config/settings.toml and apply globally across all registered projects.',
   configLogLevelLabel: 'Log Level',
-  configLogLevelHelp:
-    'Controls Ornn host-side log verbosity written into settings.toml.',
+  configLogLevelHelp: 'Controls Ornn host-side log verbosity written into settings.toml.',
   configDefaultProviderLabel: 'Default Provider',
   configDefaultProviderHelp:
     'Sets llm.default_provider. New analyzer calls use this provider first unless a task overrides it.',
@@ -460,7 +461,9 @@ const en: I18nStrings = {
   configLlmSafetyTokensLabel: 'Max Estimated Tokens / Window',
   configPromptOverridesLabel: 'Prompt Overrides',
   configPromptOverridesHelp:
-    'Append project-specific instructions to Ornn internal system prompts. Leave blank to keep the built-in defaults.',
+    'Built-in system prompts are shown below. The textarea only appends project-specific instructions.',
+  configPromptBuiltInLabel: 'Built-in Default',
+  configPromptProjectOverrideLabel: 'Project Override',
   configPromptSkillCallAnalyzerLabel: 'Skill Call Analyzer',
   configPromptSkillCallAnalyzerPlaceholder:
     'Extra decision policy for window triage, attribution, and apply_optimization thresholds.',
@@ -470,8 +473,7 @@ const en: I18nStrings = {
   configPromptReadinessProbeLabel: 'Readiness Probe',
   configPromptReadinessProbePlaceholder:
     'Extra readiness rules for deciding when to wait, split, or start deep analysis.',
-  configProvidersExample:
-    '',
+  configProvidersExample: '',
   configCheckConnectivity: 'Check Connectivity',
   configConnectivityChecking: 'Checking...',
   configConnectivityTitle: 'Provider Connectivity',
@@ -624,7 +626,8 @@ const en: I18nStrings = {
   activitySummarySkillCalled: 'Skill called',
   activitySummarySkillObserved: 'Observed skill activity',
   activitySummaryAnalysisStarted: 'Analysis started',
-  activitySummaryAnalysisInterrupted: 'Analysis interrupted before a business conclusion was reached',
+  activitySummaryAnalysisInterrupted:
+    'Analysis interrupted before a business conclusion was reached',
   activitySummaryAnalysisWaiting: 'Waiting for more context',
   activitySummaryAnalysisConcluded: 'Analysis concluded',
   activitySummaryOptimizationSkipped: 'Optimization skipped',
@@ -707,9 +710,11 @@ const en: I18nStrings = {
   costSkillEmpty: 'No skill usage rollups yet.',
   costSignalsTitle: 'LiteLLM Signals',
   costSignalsSourceLabel: 'Visualization source:',
-  costSignalsSourceBody: 'Unit pricing, context windows, and capability tags come from the LiteLLM model registry.',
+  costSignalsSourceBody:
+    'Unit pricing, context windows, and capability tags come from the LiteLLM model registry.',
   costSignalsVisibleLabel: 'Currently visible:',
-  costSignalsVisibleBody: 'Calls, input tokens, output tokens, total tokens, average latency, latest call, and rollups by model, scope, and skill.',
+  costSignalsVisibleBody:
+    'Calls, input tokens, output tokens, total tokens, average latency, latest call, and rollups by model, scope, and skill.',
   costSignalsContextReady: 'Context windows connected',
   costSignalsContextPending: 'Context windows pending',
   costSignalsReasoningDetected: 'Reasoning surcharge detected',
@@ -740,7 +745,8 @@ const en: I18nStrings = {
   initProjectsLoadFailed: 'Failed to load projects',
   initRecoveryWaiting: 'Initialization failed. Waiting for backend data to recover...',
   projectRenderFailed: 'Project data loaded, but the dashboard panel failed to render.',
-  projectRenderHint: 'Refresh the page. If it still reproduces, client errors have been queued for reporting.',
+  projectRenderHint:
+    'Refresh the page. If it still reproduces, client errors have been queued for reporting.',
   runtimeBuildMismatchPrefix: 'build mismatch',
   runtimeHostUnavailable: 'host unavailable',
 
@@ -768,10 +774,12 @@ const en: I18nStrings = {
   modalApplyAllTitle: 'Apply to all same-named skills',
   modalApplyAllCancel: 'Cancel',
   modalApplyAllConfirm: 'Apply now',
-  modalApplyAllSavingLine: 'The current editor content will be saved as the latest version first if it has changed.',
+  modalApplyAllSavingLine:
+    'The current editor content will be saved as the latest version first if it has changed.',
   modalApplyAllTargetsLine:
     'Then Ornn will copy this content to the latest version of every same-named skill across all registered projects and deploy it to the corresponding host path immediately.',
-  modalApplyAllOneOffLine: 'This is a one-time manual action. It will not keep syncing future changes.',
+  modalApplyAllOneOffLine:
+    'This is a one-time manual action. It will not keep syncing future changes.',
   modalApplyAllRunning: 'Applying...',
   modalApplyAllFailed: 'Failed to apply to same-named skills',
   modalApplyAllSummaryPrefix: 'Applied to same-named skills:',
@@ -833,18 +841,14 @@ const zh: I18nStrings = {
   configAutoSaved: '已自动保存',
   configSaveFailed: '配置保存失败',
   configLoading: '配置加载中...',
-  configIntro:
-    '这些配置会写入 ~/.ornn/config/settings.toml，并对所有已注册项目全局生效。',
+  configIntro: '这些配置会写入 ~/.ornn/config/settings.toml，并对所有已注册项目全局生效。',
   configLogLevelLabel: '日志级别',
-  configLogLevelHelp:
-    '控制写入 settings.toml 的宿主日志详细程度。',
+  configLogLevelHelp: '控制写入 settings.toml 的宿主日志详细程度。',
   configDefaultProviderLabel: '默认模型服务',
   configDefaultProviderHelp:
     '设置 llm.default_provider。后续分析调用默认优先走这个模型服务，除非任务显式覆盖。',
-  configAutoOptimizeHelp:
-    '开启后，Ornn 会自动分析 trace 并触发技能优化建议或写回流程。',
-  configUserConfirmHelp:
-    '开启后，优化变更在写回前需要人工确认；关闭后按自动流程直接落盘。',
+  configAutoOptimizeHelp: '开启后，Ornn 会自动分析 trace 并触发技能优化建议或写回流程。',
+  configUserConfirmHelp: '开启后，优化变更在写回前需要人工确认；关闭后按自动流程直接落盘。',
   configRuntimeSyncHelp:
     '开启后，会把最新技能内容同步回项目 skills，保证不同宿主使用同一份优化结果。',
   configProvidersLabel: '模型服务列表',
@@ -858,19 +862,17 @@ const zh: I18nStrings = {
   configLlmSafetyConcurrentLabel: '最大并发请求数',
   configLlmSafetyTokensLabel: '窗口内最大预计 Tokens',
   configPromptOverridesLabel: '提示词覆写',
-  configPromptOverridesHelp:
-    '把项目级附加规则追加到 Ornn 的内部 system prompt。留空时继续使用内置默认逻辑。',
+  configPromptOverridesHelp: '下面会先展示内置 system prompt，输入框只追加项目级附加规则。',
+  configPromptBuiltInLabel: '内置默认 Prompt',
+  configPromptProjectOverrideLabel: '项目级覆写',
   configPromptSkillCallAnalyzerLabel: 'Skill 调用分析器',
   configPromptSkillCallAnalyzerPlaceholder:
     '补充窗口分诊、归因判断、apply_optimization 触发阈值等规则。',
   configPromptDecisionExplainerLabel: '决策解释器',
-  configPromptDecisionExplainerPlaceholder:
-    '补充 dashboard 文案风格、长度、语气等解释约束。',
+  configPromptDecisionExplainerPlaceholder: '补充 dashboard 文案风格、长度、语气等解释约束。',
   configPromptReadinessProbeLabel: 'Readiness Probe',
-  configPromptReadinessProbePlaceholder:
-    '补充何时继续等待、拆分窗口或启动深度分析的判断规则。',
-  configProvidersExample:
-    '',
+  configPromptReadinessProbePlaceholder: '补充何时继续等待、拆分窗口或启动深度分析的判断规则。',
+  configProvidersExample: '',
   configCheckConnectivity: '检查连通性',
   configConnectivityChecking: '检查中...',
   configConnectivityTitle: '模型服务连通性',
@@ -1108,7 +1110,8 @@ const zh: I18nStrings = {
   costSignalsSourceLabel: '可视化来源：',
   costSignalsSourceBody: '单价、上下文窗口和能力标签来自 LiteLLM 模型注册表。',
   costSignalsVisibleLabel: '当前可见：',
-  costSignalsVisibleBody: '调用次数、输入 Token、输出 Token、总 Token、平均时延、最近调用，以及按模型、范围、技能的拆账。',
+  costSignalsVisibleBody:
+    '调用次数、输入 Token、输出 Token、总 Token、平均时延、最近调用，以及按模型、范围、技能的拆账。',
   costSignalsContextReady: '上下文窗口已接入',
   costSignalsContextPending: '上下文窗口待接入',
   costSignalsReasoningDetected: '已检测到 reasoning 附加计费',

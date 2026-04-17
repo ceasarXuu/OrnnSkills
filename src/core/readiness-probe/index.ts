@@ -5,11 +5,16 @@ import { buildAgentUsageModelId, recordAgentUsage } from '../agent-usage/index.j
 import { readProjectLanguage } from '../../dashboard/language-state.js';
 import type { Language } from '../../dashboard/i18n.js';
 import { normalizeNarrativeArray, normalizeNarrativeString } from '../llm-localization/index.js';
+import { getReadinessProbeBaseSystemPrompt } from '../prompt-defaults.js';
 import { appendProjectPromptOverride } from '../prompt-overrides.js';
 import { buildTraceTimelineText } from '../trace-summary/index.js';
 import { extractJsonObject } from '../../utils/json-response.js';
 import type { Trace } from '../../types/index.js';
-import type { ReadinessProbeResult, TaskEpisode, TaskEpisodeSkillSegment } from '../task-episode/index.js';
+import type {
+  ReadinessProbeResult,
+  TaskEpisode,
+  TaskEpisodeSkillSegment,
+} from '../task-episode/index.js';
 
 const logger = createChildLogger('readiness-probe');
 
@@ -23,18 +28,22 @@ interface ProbeResponsePayload {
   skill_focus?: unknown;
 }
 
-function buildFallbackProbeResult(episode: TaskEpisode, traces: Trace[], lang: Language): ReadinessProbeResult {
-  const readyReason = lang === 'zh'
-    ? '当前窗口已经积累到足够的 trace 数量，可以进入深度分析。'
-    : 'Fallback threshold reached by trace count.';
-  const waitReason = lang === 'zh'
-    ? '当前 trace 仍然偏少，还需要继续收集上下文。'
-    : 'Need more traces before deep analysis.';
+function buildFallbackProbeResult(
+  episode: TaskEpisode,
+  traces: Trace[],
+  lang: Language
+): ReadinessProbeResult {
+  const readyReason =
+    lang === 'zh'
+      ? '当前窗口已经积累到足够的 trace 数量，可以进入深度分析。'
+      : 'Fallback threshold reached by trace count.';
+  const waitReason =
+    lang === 'zh'
+      ? '当前 trace 仍然偏少，还需要继续收集上下文。'
+      : 'Need more traces before deep analysis.';
   return {
     decision: traces.length >= 60 ? 'ready_for_analysis' : 'continue_collecting',
-    reason: traces.length >= 60
-      ? readyReason
-      : waitReason,
+    reason: traces.length >= 60 ? readyReason : waitReason,
     observedOutcomes: [],
     missingEvidence: [],
     nextProbeHint: {
@@ -58,29 +67,7 @@ function buildPrompt(
   promptOverride: string
 ): { systemPrompt: string; userPrompt: string } {
   const isZh = lang === 'zh';
-  const baseSystemPrompt = isZh
-    ? [
-        '你是 Ornn 的 readiness probe 分析器。',
-        '你的任务是判断当前任务窗口是否已经收集到足够的 trace，可以进入深度 skill 优化分析。',
-        '你必须关注“是否有足够证据支持开始分析”，而不是直接判断 skill 是否有问题。',
-        '不要虚构用户意图、结果或缺失证据。',
-        '只返回 JSON，字段固定为 decision, reason, observed_outcomes, missing_evidence, next_probe_hint, episode_action, skill_focus。',
-        'decision 只能是: continue_collecting, ready_for_analysis, pause_waiting, close_no_action, split_episode。',
-        '如果提供 next_probe_hint.mode，只能是 count_driven 或 event_driven。',
-        'episode_action.close_current 和 episode_action.open_new 必须是布尔值。',
-        '所有自然语言字段必须使用简体中文。',
-        '如果任何自然语言字段出现英文句子，这份输出就是无效的，必须改写成简体中文后再返回。',
-      ].join('\n')
-    : [
-        'You are Ornn\'s readiness probe analyzer.',
-        'Your task is to decide whether the current task window has enough trace evidence to start deep skill optimization analysis.',
-        'Focus on readiness for deeper analysis, not on whether the skill is already broken.',
-        'Do not invent user intent, outcomes, or missing evidence.',
-        'Return only JSON with keys: decision, reason, observed_outcomes, missing_evidence, next_probe_hint, episode_action, skill_focus.',
-        'decision must be one of: continue_collecting, ready_for_analysis, pause_waiting, close_no_action, split_episode.',
-        'next_probe_hint.mode must be count_driven or event_driven when provided.',
-        'episode_action.close_current and episode_action.open_new must be booleans.',
-      ].join('\n');
+  const baseSystemPrompt = getReadinessProbeBaseSystemPrompt(lang);
   const systemPrompt = appendProjectPromptOverride(baseSystemPrompt, promptOverride, lang);
 
   const userPrompt = isZh
@@ -146,8 +133,11 @@ function normalizeProbeDecision(value: unknown): ReadinessProbeResult['decision'
   }
 }
 
-function normalizeNextProbeHint(value: unknown, fallback: ReadinessProbeResult): ReadinessProbeResult['nextProbeHint'] {
-  const source = (value && typeof value === 'object') ? value as Record<string, unknown> : {};
+function normalizeNextProbeHint(
+  value: unknown,
+  fallback: ReadinessProbeResult
+): ReadinessProbeResult['nextProbeHint'] {
+  const source = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
   return {
     suggestedTraceDelta:
       typeof source.suggested_trace_delta === 'number'
@@ -166,7 +156,7 @@ function normalizeNextProbeHint(value: unknown, fallback: ReadinessProbeResult):
 }
 
 function normalizeEpisodeAction(value: unknown): ReadinessProbeResult['episodeAction'] {
-  const source = (value && typeof value === 'object') ? value as Record<string, unknown> : {};
+  const source = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
   return {
     closeCurrent: Boolean(source.close_current),
     openNew: Boolean(source.open_new),
@@ -176,13 +166,21 @@ function normalizeEpisodeAction(value: unknown): ReadinessProbeResult['episodeAc
 function parseProbePayload(
   payload: ProbeResponsePayload,
   fallback: ReadinessProbeResult,
-  lang: Language,
+  lang: Language
 ): ReadinessProbeResult {
   return {
     decision: normalizeProbeDecision(payload.decision),
     reason: normalizeNarrativeString(payload.reason, fallback.reason, lang),
-    observedOutcomes: normalizeNarrativeArray(payload.observed_outcomes, fallback.observedOutcomes, lang),
-    missingEvidence: normalizeNarrativeArray(payload.missing_evidence, fallback.missingEvidence, lang),
+    observedOutcomes: normalizeNarrativeArray(
+      payload.observed_outcomes,
+      fallback.observedOutcomes,
+      lang
+    ),
+    missingEvidence: normalizeNarrativeArray(
+      payload.missing_evidence,
+      fallback.missingEvidence,
+      lang
+    ),
     nextProbeHint: normalizeNextProbeHint(payload.next_probe_hint, fallback),
     episodeAction: normalizeEpisodeAction(payload.episode_action),
     skillFocus: normalizeNarrativeArray(payload.skill_focus, fallback.skillFocus, lang),
@@ -190,7 +188,11 @@ function parseProbePayload(
 }
 
 export class ReadinessProbeAnalyzer {
-  async probeEpisode(projectPath: string, episode: TaskEpisode, traces: Trace[]): Promise<ReadinessProbeResult> {
+  async probeEpisode(
+    projectPath: string,
+    episode: TaskEpisode,
+    traces: Trace[]
+  ): Promise<ReadinessProbeResult> {
     const lang = await readProjectLanguage(projectPath, 'en');
     const fallback = buildFallbackProbeResult(episode, traces, lang);
     const config = await readDashboardConfig(projectPath);

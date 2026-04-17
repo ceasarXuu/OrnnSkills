@@ -890,6 +890,21 @@ export function renderDashboardStylesSource(): string {
   }
   .config-input:focus, .config-select:focus, .config-textarea:focus { border-color: var(--blue); }
   .config-textarea { min-height: 220px; resize: vertical; }
+  .config-prompt-preview {
+    margin-top: 6px;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg0);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 10px;
+    line-height: 1.45;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 240px;
+    overflow: auto;
+  }
   .config-check { display: flex; align-items: center; gap: 8px; font-size: 11px; }
   .config-actions { margin-top: 12px; display: flex; align-items: center; justify-content: flex-start; }
   .providers-editor { display: flex; flex-direction: column; gap: 8px; }

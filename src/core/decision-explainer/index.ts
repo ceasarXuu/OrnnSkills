@@ -5,6 +5,7 @@ import { buildAgentUsageModelId, recordAgentUsage } from '../agent-usage/index.j
 import { readProjectLanguage } from '../../dashboard/language-state.js';
 import type { Language } from '../../dashboard/i18n.js';
 import { normalizeNarrativeArray, normalizeNarrativeString } from '../llm-localization/index.js';
+import { getDecisionExplainerBaseSystemPrompt } from '../prompt-defaults.js';
 import { appendProjectPromptOverride } from '../prompt-overrides.js';
 import { buildTraceTimelineText } from '../trace-summary/index.js';
 import { extractJsonObject } from '../../utils/json-response.js';
@@ -54,24 +55,7 @@ function buildPrompt(
   promptOverride: string
 ): { systemPrompt: string; userPrompt: string } {
   const isZh = lang === 'zh';
-  const baseSystemPrompt = isZh
-    ? [
-        '你是 Ornn 的决策解释器。',
-        '你的任务是把结构化优化决策转换成适合 dashboard 用户阅读的说明。',
-        '必须基于证据，表达准确，不要渲染。',
-        '不要虚构不存在的 trace 细节或用户意图。',
-        '只返回 JSON，字段固定为 summary, evidence_readout, causal_chain, decision_rationale, recommended_action, uncertainties, contradictions。',
-        '所有自然语言字段必须使用简体中文，并尽量简洁。',
-        '如果任何自然语言字段出现英文句子，这份输出就是无效的，必须改写成简体中文后再返回。',
-      ].join('\n')
-    : [
-        'You are Ornn\'s decision explanation synthesizer.',
-        'Your task is to convert a structured optimization decision into a human-readable explanation.',
-        'Be precise, evidence-based, and avoid hype.',
-        'Do not invent trace details or user intent that are not present.',
-        'Output must be JSON with exactly these fields: summary, evidence_readout, causal_chain, decision_rationale, recommended_action, uncertainties, contradictions.',
-        'All narrative fields must be arrays or strings of concise English sentences.',
-      ].join('\n');
+  const baseSystemPrompt = getDecisionExplainerBaseSystemPrompt(lang);
   const systemPrompt = appendProjectPromptOverride(baseSystemPrompt, promptOverride, lang);
 
   const userPrompt = isZh
@@ -114,14 +98,26 @@ function buildPrompt(
 function parseResponse(
   payload: Record<string, unknown>,
   fallback: DecisionExplanationResult,
-  lang: Language,
+  lang: Language
 ): DecisionExplanationResult {
   return {
     summary: normalizeNarrativeString(payload.summary, fallback.summary, lang),
-    evidenceReadout: normalizeNarrativeArray(payload.evidence_readout, fallback.evidenceReadout, lang),
+    evidenceReadout: normalizeNarrativeArray(
+      payload.evidence_readout,
+      fallback.evidenceReadout,
+      lang
+    ),
     causalChain: normalizeNarrativeArray(payload.causal_chain, fallback.causalChain, lang),
-    decisionRationale: normalizeNarrativeString(payload.decision_rationale, fallback.decisionRationale, lang),
-    recommendedAction: normalizeNarrativeString(payload.recommended_action, fallback.recommendedAction, lang),
+    decisionRationale: normalizeNarrativeString(
+      payload.decision_rationale,
+      fallback.decisionRationale,
+      lang
+    ),
+    recommendedAction: normalizeNarrativeString(
+      payload.recommended_action,
+      fallback.recommendedAction,
+      lang
+    ),
     uncertainties: normalizeNarrativeArray(payload.uncertainties, fallback.uncertainties, lang),
     contradictions: normalizeNarrativeArray(payload.contradictions, fallback.contradictions, lang),
   };
@@ -136,7 +132,10 @@ function buildRetrySystemPrompt(basePrompt: string, lang: Language): string {
   ].join('\n');
 }
 
-function buildFallbackExplanation(skillId: string, evaluation: EvaluationResult): DecisionExplanationResult {
+function buildFallbackExplanation(
+  skillId: string,
+  evaluation: EvaluationResult
+): DecisionExplanationResult {
   return {
     summary: evaluation.reason || `Decision recorded for ${skillId}.`,
     evidenceReadout: [],
@@ -161,21 +160,22 @@ export async function generateDecisionExplanation(
   const localizedReason = normalizeNarrativeString(
     evaluation.reason,
     lang === 'zh' ? `已记录 ${skillId} 的决策结果。` : `Decision recorded for ${skillId}.`,
-    lang,
+    lang
   );
-  const fallback = lang === 'zh'
-    ? {
-        summary: localizedReason,
-        evidenceReadout: [],
-        causalChain: [],
-        decisionRationale: localizedReason || '当前没有记录到更具体的决策原因。',
-        recommendedAction: evaluation.should_patch
-          ? `继续执行 ${evaluation.change_type ?? '建议中的修改'}。`
-          : '继续观察，暂不修改技能。',
-        uncertainties: [],
-        contradictions: [],
-      }
-    : buildFallbackExplanation(skillId, evaluation);
+  const fallback =
+    lang === 'zh'
+      ? {
+          summary: localizedReason,
+          evidenceReadout: [],
+          causalChain: [],
+          decisionRationale: localizedReason || '当前没有记录到更具体的决策原因。',
+          recommendedAction: evaluation.should_patch
+            ? `继续执行 ${evaluation.change_type ?? '建议中的修改'}。`
+            : '继续观察，暂不修改技能。',
+          uncertainties: [],
+          contradictions: [],
+        }
+      : buildFallbackExplanation(skillId, evaluation);
   const config = await readDashboardConfig(projectPath);
   const activeProvider = config.providers[0];
   const promptOverride = config.promptOverrides?.decisionExplainer || '';
@@ -206,9 +206,8 @@ export async function generateDecisionExplanation(
     for (let attempt = 1; attempt <= MAX_DECISION_EXPLAINER_ATTEMPTS; attempt += 1) {
       const raw = await client.completion({
         prompt: prompt.userPrompt,
-        systemPrompt: attempt === 1
-          ? prompt.systemPrompt
-          : buildRetrySystemPrompt(prompt.systemPrompt, lang),
+        systemPrompt:
+          attempt === 1 ? prompt.systemPrompt : buildRetrySystemPrompt(prompt.systemPrompt, lang),
         temperature: attempt === 1 ? 0.1 : 0,
         maxTokens: 1200,
         timeout: 30000,
@@ -232,7 +231,12 @@ export async function generateDecisionExplanation(
         return parseResponse(payload, fallback, lang);
       }
 
-      const rawExcerpt = truncate(String(raw || '').replace(/\s+/g, ' ').trim(), 240);
+      const rawExcerpt = truncate(
+        String(raw || '')
+          .replace(/\s+/g, ' ')
+          .trim(),
+        240
+      );
       if (attempt < MAX_DECISION_EXPLAINER_ATTEMPTS) {
         logger.debug('Decision explanation returned non-json response, retrying', {
           projectPath,

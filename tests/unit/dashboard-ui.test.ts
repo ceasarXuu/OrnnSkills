@@ -81,7 +81,15 @@ function loadDashboardTestHarness(
     lang?: 'zh' | 'en';
     fetchMap?: Record<string, unknown>;
     onFetch?: (url: string, init?: Record<string, unknown>) => void;
-    fetchImpl?: (url: string, init?: Record<string, unknown>) => Promise<{ ok: boolean; status?: number; statusText?: string; json: () => Promise<unknown> }>;
+    fetchImpl?: (
+      url: string,
+      init?: Record<string, unknown>
+    ) => Promise<{
+      ok: boolean;
+      status?: number;
+      statusText?: string;
+      json: () => Promise<unknown>;
+    }>;
   } = {}
 ) {
   const lang = options.lang || 'zh';
@@ -205,14 +213,16 @@ function loadDashboardTestHarness(
     }
     if (url === '/api/providers/catalog') {
       return {
-        providers: [{
-          id: 'deepseek',
-          name: 'deepseek',
-          models: ['deepseek/deepseek-reasoner'],
-          modelDetails: [],
-          defaultModel: 'deepseek/deepseek-reasoner',
-          apiKeyEnvVar: 'DEEPSEEK_API_KEY',
-        }],
+        providers: [
+          {
+            id: 'deepseek',
+            name: 'deepseek',
+            models: ['deepseek/deepseek-reasoner'],
+            modelDetails: [],
+            defaultModel: 'deepseek/deepseek-reasoner',
+            apiKeyEnvVar: 'DEEPSEEK_API_KEY',
+          },
+        ],
       };
     }
     return { buildId: 'test-build-id', projects: [], providers: [] };
@@ -252,9 +262,10 @@ function loadDashboardTestHarness(
         return options.fetchImpl(String(url), init);
       }
       const key = String(url);
-      const json = options.fetchMap && Object.prototype.hasOwnProperty.call(options.fetchMap, key)
-        ? options.fetchMap[key]
-        : defaultFetchJson(key);
+      const json =
+        options.fetchMap && Object.prototype.hasOwnProperty.call(options.fetchMap, key)
+          ? options.fetchMap[key]
+          : defaultFetchJson(key);
       return {
         ok: true,
         status: 200,
@@ -292,32 +303,39 @@ function loadDashboardTestHarness(
   vm.runInNewContext(script, runtime);
 
   return {
-    dashboard: (runtime as typeof runtime & {
-      __dashboardTest: {
-        state: Record<string, any>;
-        init: () => Promise<void>;
-        switchLang: (lang: string) => Promise<void>;
-        selectProject: (projectPath: string) => Promise<void>;
-        selectMainTab: (tab: string) => void;
-        renderMainPanel: (projectPath: string) => void;
-        safeRenderMainPanel: (projectPath: string, source?: string) => boolean;
-        renderSidebar: () => void;
-        buildActivityRows: (projectPath: string) => Array<Record<string, any>>;
-        copyActivityDetail: (projectPath: string, rowId: string) => Promise<void>;
-        openActivityDetail: (projectPath: string, rowId: string) => Promise<void>;
-        renderCostPanel: (projectPath: string) => string;
-        viewSkill: (projectPath: string, skillId: string, runtime?: string) => Promise<void>;
-        switchSkillRuntime: (runtime: string) => Promise<void>;
-        loadVersion: (encProject: string, encSkill: string, encRuntime: string, version: number) => Promise<void>;
-        handleUpdate: (data: Record<string, unknown>) => Promise<void> | void;
-        openApplyToAllSkillModal: () => void;
-        closeApplyToAllSkillModal: () => void;
-        confirmApplyCurrentSkillToAll: () => Promise<void>;
-        triggerProjectPicker: () => Promise<void>;
-        toggleProjectMonitoring: (projectPath: string, paused: boolean) => Promise<void>;
-        saveProjectConfig: (options?: Record<string, unknown>) => Promise<void>;
-      };
-    }).__dashboardTest,
+    dashboard: (
+      runtime as typeof runtime & {
+        __dashboardTest: {
+          state: Record<string, any>;
+          init: () => Promise<void>;
+          switchLang: (lang: string) => Promise<void>;
+          selectProject: (projectPath: string) => Promise<void>;
+          selectMainTab: (tab: string) => void;
+          renderMainPanel: (projectPath: string) => void;
+          safeRenderMainPanel: (projectPath: string, source?: string) => boolean;
+          renderSidebar: () => void;
+          buildActivityRows: (projectPath: string) => Array<Record<string, any>>;
+          copyActivityDetail: (projectPath: string, rowId: string) => Promise<void>;
+          openActivityDetail: (projectPath: string, rowId: string) => Promise<void>;
+          renderCostPanel: (projectPath: string) => string;
+          viewSkill: (projectPath: string, skillId: string, runtime?: string) => Promise<void>;
+          switchSkillRuntime: (runtime: string) => Promise<void>;
+          loadVersion: (
+            encProject: string,
+            encSkill: string,
+            encRuntime: string,
+            version: number
+          ) => Promise<void>;
+          handleUpdate: (data: Record<string, unknown>) => Promise<void> | void;
+          openApplyToAllSkillModal: () => void;
+          closeApplyToAllSkillModal: () => void;
+          confirmApplyCurrentSkillToAll: () => Promise<void>;
+          triggerProjectPicker: () => Promise<void>;
+          toggleProjectMonitoring: (projectPath: string, paused: boolean) => Promise<void>;
+          saveProjectConfig: (options?: Record<string, unknown>) => Promise<void>;
+        };
+      }
+    ).__dashboardTest,
     getElement(id: string) {
       return ensureElement(id);
     },
@@ -357,29 +375,49 @@ describe('dashboard ui recovery', () => {
   it('warms the provider catalog during initial overview bootstrap without touching config-only dependencies', async () => {
     const projectPath = '/tmp/ornn-project';
     const encodedPath = encodeURIComponent(projectPath);
-    const { dashboard, getFetchCalls } = loadDashboardTestHarness({}, {
-      fetchMap: {
-        '/api/projects': {
-          projects: [{ path: projectPath, name: 'OrnnSkills', isRunning: true, skillCount: 1 }],
-        },
-        [`/api/projects/${encodedPath}/snapshot`]: {
-          daemon: {
-            isRunning: true,
-            pid: 1,
-            startedAt: '2026-04-10T00:00:00.000Z',
-            processedTraces: 1,
-            lastCheckpointAt: null,
-            retryQueueSize: 0,
-            optimizationStatus: { currentState: 'idle', currentSkillId: null, lastOptimizationAt: null, lastError: null, queueSize: 0 },
+    const { dashboard, getFetchCalls } = loadDashboardTestHarness(
+      {},
+      {
+        fetchMap: {
+          '/api/projects': {
+            projects: [{ path: projectPath, name: 'OrnnSkills', isRunning: true, skillCount: 1 }],
           },
-          skills: [],
-          traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
-          recentTraces: [],
-          decisionEvents: [],
-          agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
+          [`/api/projects/${encodedPath}/snapshot`]: {
+            daemon: {
+              isRunning: true,
+              pid: 1,
+              startedAt: '2026-04-10T00:00:00.000Z',
+              processedTraces: 1,
+              lastCheckpointAt: null,
+              retryQueueSize: 0,
+              optimizationStatus: {
+                currentState: 'idle',
+                currentSkillId: null,
+                lastOptimizationAt: null,
+                lastError: null,
+                queueSize: 0,
+              },
+            },
+            skills: [],
+            traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
+            recentTraces: [],
+            decisionEvents: [],
+            agentUsage: {
+              callCount: 0,
+              promptTokens: 0,
+              completionTokens: 0,
+              totalTokens: 0,
+              durationMsTotal: 0,
+              avgDurationMs: 0,
+              lastCallAt: null,
+              byModel: {},
+              byScope: {},
+              bySkill: {},
+            },
+          },
         },
-      },
-    });
+      }
+    );
 
     await dashboard.init();
 
@@ -394,29 +432,49 @@ describe('dashboard ui recovery', () => {
   it('loads config-only dependencies lazily after switching to the config tab', async () => {
     const projectPath = '/tmp/ornn-project';
     const encodedPath = encodeURIComponent(projectPath);
-    const { dashboard, getFetchCalls, clearFetchCalls } = loadDashboardTestHarness({}, {
-      fetchMap: {
-        '/api/projects': {
-          projects: [{ path: projectPath, name: 'OrnnSkills', isRunning: true, skillCount: 1 }],
-        },
-        [`/api/projects/${encodedPath}/snapshot`]: {
-          daemon: {
-            isRunning: true,
-            pid: 1,
-            startedAt: '2026-04-10T00:00:00.000Z',
-            processedTraces: 1,
-            lastCheckpointAt: null,
-            retryQueueSize: 0,
-            optimizationStatus: { currentState: 'idle', currentSkillId: null, lastOptimizationAt: null, lastError: null, queueSize: 0 },
+    const { dashboard, getFetchCalls, clearFetchCalls } = loadDashboardTestHarness(
+      {},
+      {
+        fetchMap: {
+          '/api/projects': {
+            projects: [{ path: projectPath, name: 'OrnnSkills', isRunning: true, skillCount: 1 }],
           },
-          skills: [],
-          traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
-          recentTraces: [],
-          decisionEvents: [],
-          agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
+          [`/api/projects/${encodedPath}/snapshot`]: {
+            daemon: {
+              isRunning: true,
+              pid: 1,
+              startedAt: '2026-04-10T00:00:00.000Z',
+              processedTraces: 1,
+              lastCheckpointAt: null,
+              retryQueueSize: 0,
+              optimizationStatus: {
+                currentState: 'idle',
+                currentSkillId: null,
+                lastOptimizationAt: null,
+                lastError: null,
+                queueSize: 0,
+              },
+            },
+            skills: [],
+            traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
+            recentTraces: [],
+            decisionEvents: [],
+            agentUsage: {
+              callCount: 0,
+              promptTokens: 0,
+              completionTokens: 0,
+              totalTokens: 0,
+              durationMsTotal: 0,
+              avgDurationMs: 0,
+              lastCallAt: null,
+              byModel: {},
+              byScope: {},
+              bySkill: {},
+            },
+          },
         },
-      },
-    });
+      }
+    );
 
     await dashboard.init();
     clearFetchCalls();
@@ -437,70 +495,79 @@ describe('dashboard ui recovery', () => {
     const encodedProjectPath = encodeURIComponent(projectPath);
     let snapshotFetches = 0;
 
-    const { dashboard, getFetchCalls, clearFetchCalls } = loadDashboardTestHarness({}, {
-      fetchImpl: async (url) => {
-        if (url === '/api/projects') {
-          return {
-            ok: true,
-            status: 200,
-            statusText: 'OK',
-            json: async () => ({
-              projects: [
-                { path: projectPath, name: 'OrnnSkills', isRunning: true, skillCount: 1 },
-                { path: otherProjectPath, name: 'Other', isRunning: false, skillCount: 0 },
-              ],
-            }),
-          };
-        }
-        if (url === `/api/projects/${encodedProjectPath}/snapshot`) {
-          snapshotFetches += 1;
-          return {
-            ok: true,
-            status: 200,
-            statusText: 'OK',
-            json: async () => ({
-              daemon: {
-                isRunning: true,
-                pid: 1,
-                startedAt: '2026-04-10T00:00:00.000Z',
-                processedTraces: snapshotFetches,
-                lastCheckpointAt: null,
-                retryQueueSize: 0,
-                optimizationStatus: {
-                  currentState: 'idle',
-                  currentSkillId: null,
-                  lastOptimizationAt: null,
-                  lastError: null,
-                  queueSize: 0,
+    const { dashboard, getFetchCalls, clearFetchCalls } = loadDashboardTestHarness(
+      {},
+      {
+        fetchImpl: async (url) => {
+          if (url === '/api/projects') {
+            return {
+              ok: true,
+              status: 200,
+              statusText: 'OK',
+              json: async () => ({
+                projects: [
+                  { path: projectPath, name: 'OrnnSkills', isRunning: true, skillCount: 1 },
+                  { path: otherProjectPath, name: 'Other', isRunning: false, skillCount: 0 },
+                ],
+              }),
+            };
+          }
+          if (url === `/api/projects/${encodedProjectPath}/snapshot`) {
+            snapshotFetches += 1;
+            return {
+              ok: true,
+              status: 200,
+              statusText: 'OK',
+              json: async () => ({
+                daemon: {
+                  isRunning: true,
+                  pid: 1,
+                  startedAt: '2026-04-10T00:00:00.000Z',
+                  processedTraces: snapshotFetches,
+                  lastCheckpointAt: null,
+                  retryQueueSize: 0,
+                  optimizationStatus: {
+                    currentState: 'idle',
+                    currentSkillId: null,
+                    lastOptimizationAt: null,
+                    lastError: null,
+                    queueSize: 0,
+                  },
                 },
-              },
-              skills: [],
-              traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
-              recentTraces: [],
-              decisionEvents: [],
-              agentUsage: {
-                callCount: 0,
-                promptTokens: 0,
-                completionTokens: 0,
-                totalTokens: 0,
-                durationMsTotal: 0,
-                avgDurationMs: 0,
-                lastCallAt: null,
-                byModel: {},
-                byScope: {},
-                bySkill: {},
-              },
+                skills: [],
+                traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
+                recentTraces: [],
+                decisionEvents: [],
+                agentUsage: {
+                  callCount: 0,
+                  promptTokens: 0,
+                  completionTokens: 0,
+                  totalTokens: 0,
+                  durationMsTotal: 0,
+                  avgDurationMs: 0,
+                  lastCallAt: null,
+                  byModel: {},
+                  byScope: {},
+                  bySkill: {},
+                },
+              }),
+            };
+          }
+          return {
+            ok: true,
+            status: 200,
+            statusText: 'OK',
+            json: async () => ({
+              lines: [],
+              buildId: 'test-build-id',
+              pid: 1,
+              providers: [],
+              projects: [],
             }),
           };
-        }
-        return {
-          ok: true,
-          status: 200,
-          statusText: 'OK',
-          json: async () => ({ lines: [], buildId: 'test-build-id', pid: 1, providers: [], projects: [] }),
-        };
-      },
-    });
+        },
+      }
+    );
 
     await dashboard.init();
     clearFetchCalls();
@@ -528,7 +595,9 @@ describe('dashboard ui recovery', () => {
       },
     };
 
-    await (dashboard as unknown as { handleUpdate: (data: Record<string, unknown>) => Promise<void> }).handleUpdate({
+    await (
+      dashboard as unknown as { handleUpdate: (data: Record<string, unknown>) => Promise<void> }
+    ).handleUpdate({
       changedProjects: [projectPath],
     });
 
@@ -536,7 +605,9 @@ describe('dashboard ui recovery', () => {
     expect(dashboard.state.projectData[projectPath].daemon.processedTraces).toBe(2);
 
     clearFetchCalls();
-    await (dashboard as unknown as { handleUpdate: (data: Record<string, unknown>) => Promise<void> }).handleUpdate({
+    await (
+      dashboard as unknown as { handleUpdate: (data: Record<string, unknown>) => Promise<void> }
+    ).handleUpdate({
       changedProjects: [otherProjectPath],
     });
     expect(getFetchCalls()).not.toContain(`/api/projects/${encodedProjectPath}/snapshot`);
@@ -545,53 +616,75 @@ describe('dashboard ui recovery', () => {
   it('renders api key inputs as hidden by default in the config tab', async () => {
     const projectPath = '/tmp/ornn-project';
     const encodedPath = encodeURIComponent(projectPath);
-    const { dashboard, getElement } = loadDashboardTestHarness({}, {
-      lang: 'en',
-      fetchMap: {
-        '/api/projects': {
-          projects: [{ path: projectPath, name: 'OrnnSkills', isRunning: true, skillCount: 1 }],
-        },
-        [`/api/projects/${encodedPath}/snapshot`]: {
-          daemon: {
-            isRunning: true,
-            pid: 1,
-            startedAt: '2026-04-10T00:00:00.000Z',
-            processedTraces: 1,
-            lastCheckpointAt: null,
-            retryQueueSize: 0,
-            optimizationStatus: { currentState: 'idle', currentSkillId: null, lastOptimizationAt: null, lastError: null, queueSize: 0 },
+    const { dashboard, getElement } = loadDashboardTestHarness(
+      {},
+      {
+        lang: 'en',
+        fetchMap: {
+          '/api/projects': {
+            projects: [{ path: projectPath, name: 'OrnnSkills', isRunning: true, skillCount: 1 }],
           },
-          skills: [],
-          traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
-          recentTraces: [],
-          decisionEvents: [],
-          agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
-        },
-        [`/api/config?projectPath=${encodedPath}`]: {
-          config: {
-            autoOptimize: true,
-            userConfirm: false,
-            runtimeSync: true,
-            llmSafety: {
-              enabled: true,
-              windowMs: 60000,
-              maxRequestsPerWindow: 12,
-              maxConcurrentRequests: 2,
-              maxEstimatedTokensPerWindow: 48000,
+          [`/api/projects/${encodedPath}/snapshot`]: {
+            daemon: {
+              isRunning: true,
+              pid: 1,
+              startedAt: '2026-04-10T00:00:00.000Z',
+              processedTraces: 1,
+              lastCheckpointAt: null,
+              retryQueueSize: 0,
+              optimizationStatus: {
+                currentState: 'idle',
+                currentSkillId: null,
+                lastOptimizationAt: null,
+                lastError: null,
+                queueSize: 0,
+              },
             },
-            defaultProvider: 'deepseek',
-            logLevel: 'info',
-            providers: [{
-              provider: 'deepseek',
-              modelName: 'deepseek/deepseek-reasoner',
-              apiKey: 'sk-test-secret',
-              apiKeyEnvVar: 'DEEPSEEK_API_KEY',
-              hasApiKey: true,
-            }],
+            skills: [],
+            traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
+            recentTraces: [],
+            decisionEvents: [],
+            agentUsage: {
+              callCount: 0,
+              promptTokens: 0,
+              completionTokens: 0,
+              totalTokens: 0,
+              durationMsTotal: 0,
+              avgDurationMs: 0,
+              lastCallAt: null,
+              byModel: {},
+              byScope: {},
+              bySkill: {},
+            },
+          },
+          [`/api/config?projectPath=${encodedPath}`]: {
+            config: {
+              autoOptimize: true,
+              userConfirm: false,
+              runtimeSync: true,
+              llmSafety: {
+                enabled: true,
+                windowMs: 60000,
+                maxRequestsPerWindow: 12,
+                maxConcurrentRequests: 2,
+                maxEstimatedTokensPerWindow: 48000,
+              },
+              defaultProvider: 'deepseek',
+              logLevel: 'info',
+              providers: [
+                {
+                  provider: 'deepseek',
+                  modelName: 'deepseek/deepseek-reasoner',
+                  apiKey: 'sk-test-secret',
+                  apiKeyEnvVar: 'DEEPSEEK_API_KEY',
+                  hasApiKey: true,
+                },
+              ],
+            },
           },
         },
-      },
-    });
+      }
+    );
 
     await dashboard.init();
     dashboard.selectMainTab('config');
@@ -615,7 +708,9 @@ describe('dashboard ui recovery', () => {
     dashboard.state.projectData = {
       '/Users/xuzhang/OrnnSkills': {
         daemon: { isRunning: true },
-        skills: new Array(105).fill(null).map((_, index) => ({ skillId: 'skill-' + index, runtime: 'codex' })),
+        skills: new Array(105)
+          .fill(null)
+          .map((_, index) => ({ skillId: 'skill-' + index, runtime: 'codex' })),
       },
       '/Users/xuzhang/mili': {
         daemon: { isRunning: false },
@@ -642,7 +737,9 @@ describe('dashboard ui recovery', () => {
     dashboard.state.projectData = {
       '/Users/xuzhang/OrnnSkills': {
         daemon: { isRunning: true },
-        skills: new Array(105).fill(null).map((_, index) => ({ skillId: 'skill-' + index, runtime: 'codex' })),
+        skills: new Array(105)
+          .fill(null)
+          .map((_, index) => ({ skillId: 'skill-' + index, runtime: 'codex' })),
       },
     };
 
@@ -656,31 +753,53 @@ describe('dashboard ui recovery', () => {
   it('opens the native project picker and selects the chosen project directly from the add action', async () => {
     const projectPath = '/tmp/picked-project';
     const encodedPath = encodeURIComponent(projectPath);
-    const { dashboard, getFetchCalls } = loadDashboardTestHarness({}, {
-      fetchMap: {
-        '/api/projects/pick': {
-          ok: true,
-          path: projectPath,
-          projects: [{ path: projectPath, name: 'picked-project', isRunning: false, skillCount: 0 }],
-        },
-        [`/api/projects/${encodedPath}/snapshot`]: {
-          daemon: {
-            isRunning: false,
-            pid: null,
-            startedAt: null,
-            processedTraces: 0,
-            lastCheckpointAt: null,
-            retryQueueSize: 0,
-            optimizationStatus: { currentState: 'idle', currentSkillId: null, lastOptimizationAt: null, lastError: null, queueSize: 0 },
+    const { dashboard, getFetchCalls } = loadDashboardTestHarness(
+      {},
+      {
+        fetchMap: {
+          '/api/projects/pick': {
+            ok: true,
+            path: projectPath,
+            projects: [
+              { path: projectPath, name: 'picked-project', isRunning: false, skillCount: 0 },
+            ],
           },
-          skills: [],
-          traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
-          recentTraces: [],
-          decisionEvents: [],
-          agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
+          [`/api/projects/${encodedPath}/snapshot`]: {
+            daemon: {
+              isRunning: false,
+              pid: null,
+              startedAt: null,
+              processedTraces: 0,
+              lastCheckpointAt: null,
+              retryQueueSize: 0,
+              optimizationStatus: {
+                currentState: 'idle',
+                currentSkillId: null,
+                lastOptimizationAt: null,
+                lastError: null,
+                queueSize: 0,
+              },
+            },
+            skills: [],
+            traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
+            recentTraces: [],
+            decisionEvents: [],
+            agentUsage: {
+              callCount: 0,
+              promptTokens: 0,
+              completionTokens: 0,
+              totalTokens: 0,
+              durationMsTotal: 0,
+              avgDurationMs: 0,
+              lastCallAt: null,
+              byModel: {},
+              byScope: {},
+              bySkill: {},
+            },
+          },
         },
-      },
-    });
+      }
+    );
 
     await dashboard.triggerProjectPicker();
 
@@ -703,93 +822,102 @@ describe('dashboard ui recovery', () => {
       },
     ];
 
-    const { dashboard, getElement, getFetchRequests } = loadDashboardTestHarness({}, {
-      fetchImpl: async (url, init) => {
-        if (url === '/api/projects') {
-          return {
-            ok: true,
-            status: 200,
-            statusText: 'OK',
-            json: async () => ({ projects: projects.map((project) => ({ ...project })) }),
-          };
-        }
-        if (url === `/api/projects/${encodedPath}/snapshot`) {
-          const project = projects[0];
-          return {
-            ok: true,
-            status: 200,
-            statusText: 'OK',
-            json: async () => ({
-              daemon: {
-                isRunning: project.monitoringState !== 'paused',
-                pid: 1,
-                startedAt: '2026-04-17T08:00:00.000Z',
-                processedTraces: 3,
-                lastCheckpointAt: '2026-04-17T08:20:00.000Z',
-                retryQueueSize: 0,
-                monitoringState: project.monitoringState,
-                pausedAt: project.pausedAt,
-                optimizationStatus: {
-                  currentState: 'idle',
-                  currentSkillId: null,
-                  lastOptimizationAt: null,
-                  lastError: null,
-                  queueSize: 0,
-                },
-              },
-              skills: [],
-              traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
-              recentTraces: [],
-              decisionEvents: [],
-              activityScopes: [],
-              agentUsage: {
-                callCount: 0,
-                promptTokens: 0,
-                completionTokens: 0,
-                totalTokens: 0,
-                durationMsTotal: 0,
-                avgDurationMs: 0,
-                lastCallAt: null,
-                byModel: {},
-                byScope: {},
-                bySkill: {},
-              },
-            }),
-          };
-        }
-        if (url === `/api/projects/${encodedPath}/monitoring`) {
-          const body = init?.body ? JSON.parse(String(init.body)) as { paused?: boolean } : {};
-          projects[0] = {
-            ...projects[0],
-            monitoringState: body.paused ? 'paused' : 'active',
-            pausedAt: body.paused ? '2026-04-17T09:00:00.000Z' : null,
-            isRunning: !body.paused,
-          };
-          return {
-            ok: true,
-            status: 200,
-            statusText: 'OK',
-            json: async () => ({
+    const { dashboard, getElement, getFetchRequests } = loadDashboardTestHarness(
+      {},
+      {
+        fetchImpl: async (url, init) => {
+          if (url === '/api/projects') {
+            return {
               ok: true,
-              project: {
-                ...projects[0],
-                isPaused: body.paused === true,
-              },
-              projects: projects.map((project) => ({
-                ...project,
-                isPaused: project.monitoringState === 'paused',
-              })),
+              status: 200,
+              statusText: 'OK',
+              json: async () => ({ projects: projects.map((project) => ({ ...project })) }),
+            };
+          }
+          if (url === `/api/projects/${encodedPath}/snapshot`) {
+            const project = projects[0];
+            return {
+              ok: true,
+              status: 200,
+              statusText: 'OK',
+              json: async () => ({
+                daemon: {
+                  isRunning: project.monitoringState !== 'paused',
+                  pid: 1,
+                  startedAt: '2026-04-17T08:00:00.000Z',
+                  processedTraces: 3,
+                  lastCheckpointAt: '2026-04-17T08:20:00.000Z',
+                  retryQueueSize: 0,
+                  monitoringState: project.monitoringState,
+                  pausedAt: project.pausedAt,
+                  optimizationStatus: {
+                    currentState: 'idle',
+                    currentSkillId: null,
+                    lastOptimizationAt: null,
+                    lastError: null,
+                    queueSize: 0,
+                  },
+                },
+                skills: [],
+                traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
+                recentTraces: [],
+                decisionEvents: [],
+                activityScopes: [],
+                agentUsage: {
+                  callCount: 0,
+                  promptTokens: 0,
+                  completionTokens: 0,
+                  totalTokens: 0,
+                  durationMsTotal: 0,
+                  avgDurationMs: 0,
+                  lastCallAt: null,
+                  byModel: {},
+                  byScope: {},
+                  bySkill: {},
+                },
+              }),
+            };
+          }
+          if (url === `/api/projects/${encodedPath}/monitoring`) {
+            const body = init?.body ? (JSON.parse(String(init.body)) as { paused?: boolean }) : {};
+            projects[0] = {
+              ...projects[0],
+              monitoringState: body.paused ? 'paused' : 'active',
+              pausedAt: body.paused ? '2026-04-17T09:00:00.000Z' : null,
+              isRunning: !body.paused,
+            };
+            return {
+              ok: true,
+              status: 200,
+              statusText: 'OK',
+              json: async () => ({
+                ok: true,
+                project: {
+                  ...projects[0],
+                  isPaused: body.paused === true,
+                },
+                projects: projects.map((project) => ({
+                  ...project,
+                  isPaused: project.monitoringState === 'paused',
+                })),
+              }),
+            };
+          }
+          return {
+            ok: true,
+            status: 200,
+            statusText: 'OK',
+            json: async () => ({
+              lines: [],
+              buildId: 'test-build-id',
+              pid: 1,
+              providers: [],
+              projects: [],
             }),
           };
-        }
-        return {
-          ok: true,
-          status: 200,
-          statusText: 'OK',
-          json: async () => ({ lines: [], buildId: 'test-build-id', pid: 1, providers: [], projects: [] }),
-        };
-      },
-    });
+        },
+      }
+    );
 
     await dashboard.init();
     expect(getElement('projectList').innerHTML).toContain('Pause');
@@ -820,32 +948,85 @@ describe('dashboard ui recovery', () => {
     const projectB = '/tmp/ornn-project-b';
     const encodedA = encodeURIComponent(projectA);
     const encodedB = encodeURIComponent(projectB);
-    const { dashboard, getFetchCalls, clearFetchCalls } = loadDashboardTestHarness({}, {
-      fetchMap: {
-        '/api/projects': {
-          projects: [
-            { path: projectA, name: 'A', isRunning: true, skillCount: 1 },
-            { path: projectB, name: 'B', isRunning: true, skillCount: 1 },
-          ],
+    const { dashboard, getFetchCalls, clearFetchCalls } = loadDashboardTestHarness(
+      {},
+      {
+        fetchMap: {
+          '/api/projects': {
+            projects: [
+              { path: projectA, name: 'A', isRunning: true, skillCount: 1 },
+              { path: projectB, name: 'B', isRunning: true, skillCount: 1 },
+            ],
+          },
+          [`/api/projects/${encodedA}/snapshot`]: {
+            daemon: {
+              isRunning: true,
+              pid: 1,
+              startedAt: '2026-04-10T00:00:00.000Z',
+              processedTraces: 1,
+              lastCheckpointAt: null,
+              retryQueueSize: 0,
+              optimizationStatus: {
+                currentState: 'idle',
+                currentSkillId: null,
+                lastOptimizationAt: null,
+                lastError: null,
+                queueSize: 0,
+              },
+            },
+            skills: [],
+            traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
+            recentTraces: [],
+            decisionEvents: [],
+            agentUsage: {
+              callCount: 0,
+              promptTokens: 0,
+              completionTokens: 0,
+              totalTokens: 0,
+              durationMsTotal: 0,
+              avgDurationMs: 0,
+              lastCallAt: null,
+              byModel: {},
+              byScope: {},
+              bySkill: {},
+            },
+          },
+          [`/api/projects/${encodedB}/snapshot`]: {
+            daemon: {
+              isRunning: true,
+              pid: 2,
+              startedAt: '2026-04-10T00:00:00.000Z',
+              processedTraces: 2,
+              lastCheckpointAt: null,
+              retryQueueSize: 0,
+              optimizationStatus: {
+                currentState: 'idle',
+                currentSkillId: null,
+                lastOptimizationAt: null,
+                lastError: null,
+                queueSize: 0,
+              },
+            },
+            skills: [],
+            traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
+            recentTraces: [],
+            decisionEvents: [],
+            agentUsage: {
+              callCount: 0,
+              promptTokens: 0,
+              completionTokens: 0,
+              totalTokens: 0,
+              durationMsTotal: 0,
+              avgDurationMs: 0,
+              lastCallAt: null,
+              byModel: {},
+              byScope: {},
+              bySkill: {},
+            },
+          },
         },
-        [`/api/projects/${encodedA}/snapshot`]: {
-          daemon: { isRunning: true, pid: 1, startedAt: '2026-04-10T00:00:00.000Z', processedTraces: 1, lastCheckpointAt: null, retryQueueSize: 0, optimizationStatus: { currentState: 'idle', currentSkillId: null, lastOptimizationAt: null, lastError: null, queueSize: 0 } },
-          skills: [],
-          traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
-          recentTraces: [],
-          decisionEvents: [],
-          agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
-        },
-        [`/api/projects/${encodedB}/snapshot`]: {
-          daemon: { isRunning: true, pid: 2, startedAt: '2026-04-10T00:00:00.000Z', processedTraces: 2, lastCheckpointAt: null, retryQueueSize: 0, optimizationStatus: { currentState: 'idle', currentSkillId: null, lastOptimizationAt: null, lastError: null, queueSize: 0 } },
-          skills: [],
-          traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
-          recentTraces: [],
-          decisionEvents: [],
-          agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
-        },
-      },
-    });
+      }
+    );
 
     await dashboard.init();
     dashboard.selectMainTab('config');
@@ -865,50 +1046,57 @@ describe('dashboard ui recovery', () => {
   it('rerenders the cost tab as soon as the provider catalog arrives', async () => {
     const projectPath = '/tmp/ornn-project';
     const catalogResponse = {
-      providers: [{
-        id: 'deepseek',
-        name: 'deepseek',
-        models: ['deepseek/deepseek-reasoner'],
-        modelDetails: [{
-          id: 'deepseek/deepseek-reasoner',
-          mode: 'chat',
-          maxInputTokens: 64000,
-          maxOutputTokens: 8000,
-          inputCostPerToken: 0.00000055,
-          outputCostPerToken: 0.00000219,
-          supportsReasoning: true,
-          supportsFunctionCalling: true,
-          supportsPromptCaching: false,
-          supportsStructuredOutput: true,
-          supportsVision: false,
-          supportsWebSearch: false,
-        }],
-        defaultModel: 'deepseek/deepseek-reasoner',
-        apiKeyEnvVar: 'DEEPSEEK_API_KEY',
-      }],
+      providers: [
+        {
+          id: 'deepseek',
+          name: 'deepseek',
+          models: ['deepseek/deepseek-reasoner'],
+          modelDetails: [
+            {
+              id: 'deepseek/deepseek-reasoner',
+              mode: 'chat',
+              maxInputTokens: 64000,
+              maxOutputTokens: 8000,
+              inputCostPerToken: 0.00000055,
+              outputCostPerToken: 0.00000219,
+              supportsReasoning: true,
+              supportsFunctionCalling: true,
+              supportsPromptCaching: false,
+              supportsStructuredOutput: true,
+              supportsVision: false,
+              supportsWebSearch: false,
+            },
+          ],
+          defaultModel: 'deepseek/deepseek-reasoner',
+          apiKeyEnvVar: 'DEEPSEEK_API_KEY',
+        },
+      ],
     };
     let resolveCatalog: ((value: unknown) => void) | null = null;
-    const { dashboard, getElement } = loadDashboardTestHarness({}, {
-      fetchImpl: async (url) => {
-        if (url === '/api/providers/catalog') {
-          const json = await new Promise((resolve) => {
-            resolveCatalog = resolve;
-          });
+    const { dashboard, getElement } = loadDashboardTestHarness(
+      {},
+      {
+        fetchImpl: async (url) => {
+          if (url === '/api/providers/catalog') {
+            const json = await new Promise((resolve) => {
+              resolveCatalog = resolve;
+            });
+            return {
+              ok: true,
+              status: 200,
+              statusText: 'OK',
+              json: async () => json,
+            };
+          }
           return {
             ok: true,
             status: 200,
             statusText: 'OK',
-            json: async () => json,
+            json: async () => ({ projects: [] }),
           };
-        }
-        return {
-          ok: true,
-          status: 200,
-          statusText: 'OK',
-          json: async () => ({ projects: [] }),
-        };
-      },
-    });
+        },
+      }
+    );
 
     getElement('mainPanel');
     dashboard.state.selectedMainTab = 'cost';
@@ -961,25 +1149,28 @@ describe('dashboard ui recovery', () => {
   it('syncs the selected project language to the backend when the dashboard language changes', async () => {
     const requests: Array<{ url: string; init?: Record<string, unknown> }> = [];
     const projectPath = '/tmp/ornn-project';
-    const { dashboard } = loadDashboardTestHarness({}, {
-      fetchImpl: async (url, init) => {
-        requests.push({ url, init });
-        if (url === '/api/lang') {
+    const { dashboard } = loadDashboardTestHarness(
+      {},
+      {
+        fetchImpl: async (url, init) => {
+          requests.push({ url, init });
+          if (url === '/api/lang') {
+            return {
+              ok: true,
+              status: 200,
+              statusText: 'OK',
+              json: async () => ({ ok: true, lang: 'en' }),
+            };
+          }
           return {
             ok: true,
             status: 200,
             statusText: 'OK',
-            json: async () => ({ ok: true, lang: 'en' }),
+            json: async () => ({ projects: [] }),
           };
-        }
-        return {
-          ok: true,
-          status: 200,
-          statusText: 'OK',
-          json: async () => ({ projects: [] }),
-        };
-      },
-    });
+        },
+      }
+    );
 
     dashboard.state.selectedProjectId = projectPath;
     await dashboard.switchLang('en');
@@ -1012,7 +1203,13 @@ describe('dashboard ui recovery', () => {
           processedTraces: 42,
           lastCheckpointAt: null,
           retryQueueSize: 0,
-          optimizationStatus: { currentState: 'idle', currentSkillId: null, lastOptimizationAt: null, lastError: null, queueSize: 0 },
+          optimizationStatus: {
+            currentState: 'idle',
+            currentSkillId: null,
+            lastOptimizationAt: null,
+            lastError: null,
+            queueSize: 0,
+          },
         },
         skills: [],
         traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
@@ -1114,7 +1311,13 @@ describe('dashboard ui recovery', () => {
           processedTraces: 10,
           lastCheckpointAt: null,
           retryQueueSize: 0,
-          optimizationStatus: { currentState: 'idle', currentSkillId: null, lastOptimizationAt: null, lastError: null, queueSize: 0 },
+          optimizationStatus: {
+            currentState: 'idle',
+            currentSkillId: null,
+            lastOptimizationAt: null,
+            lastError: null,
+            queueSize: 0,
+          },
         },
         skills: [],
         traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
@@ -1193,27 +1396,31 @@ describe('dashboard ui recovery', () => {
     getElement('mainPanel');
     dashboard.state.selectedMainTab = 'cost';
     dashboard.state.selectedProjectId = projectPath;
-    dashboard.state.providerCatalog = [{
-      id: 'deepseek',
-      name: 'deepseek',
-      models: ['deepseek/deepseek-reasoner'],
-      modelDetails: [{
-        id: 'deepseek/deepseek-reasoner',
-        mode: 'chat',
-        maxInputTokens: 64000,
-        maxOutputTokens: 8000,
-        inputCostPerToken: 0.00000055,
-        outputCostPerToken: 0.00000219,
-        supportsReasoning: true,
-        supportsFunctionCalling: true,
-        supportsPromptCaching: false,
-        supportsStructuredOutput: true,
-        supportsVision: false,
-        supportsWebSearch: false,
-      }],
-      defaultModel: 'deepseek/deepseek-reasoner',
-      apiKeyEnvVar: 'DEEPSEEK_API_KEY',
-    }];
+    dashboard.state.providerCatalog = [
+      {
+        id: 'deepseek',
+        name: 'deepseek',
+        models: ['deepseek/deepseek-reasoner'],
+        modelDetails: [
+          {
+            id: 'deepseek/deepseek-reasoner',
+            mode: 'chat',
+            maxInputTokens: 64000,
+            maxOutputTokens: 8000,
+            inputCostPerToken: 0.00000055,
+            outputCostPerToken: 0.00000219,
+            supportsReasoning: true,
+            supportsFunctionCalling: true,
+            supportsPromptCaching: false,
+            supportsStructuredOutput: true,
+            supportsVision: false,
+            supportsWebSearch: false,
+          },
+        ],
+        defaultModel: 'deepseek/deepseek-reasoner',
+        apiKeyEnvVar: 'DEEPSEEK_API_KEY',
+      },
+    ];
     dashboard.state.projectData = {
       [projectPath]: {
         daemon: {},
@@ -1311,27 +1518,31 @@ describe('dashboard ui recovery', () => {
     getElement('mainPanel');
     dashboard.state.selectedMainTab = 'cost';
     dashboard.state.selectedProjectId = projectPath;
-    dashboard.state.providerCatalog = [{
-      id: 'deepseek',
-      name: 'deepseek',
-      models: ['deepseek/deepseek-reasoner'],
-      modelDetails: [{
-        id: 'deepseek/deepseek-reasoner',
-        mode: 'chat',
-        maxInputTokens: 64000,
-        maxOutputTokens: 8000,
-        inputCostPerToken: 0.00000055,
-        outputCostPerToken: 0.00000219,
-        supportsReasoning: true,
-        supportsFunctionCalling: true,
-        supportsPromptCaching: false,
-        supportsStructuredOutput: true,
-        supportsVision: false,
-        supportsWebSearch: false,
-      }],
-      defaultModel: 'deepseek/deepseek-reasoner',
-      apiKeyEnvVar: 'DEEPSEEK_API_KEY',
-    }];
+    dashboard.state.providerCatalog = [
+      {
+        id: 'deepseek',
+        name: 'deepseek',
+        models: ['deepseek/deepseek-reasoner'],
+        modelDetails: [
+          {
+            id: 'deepseek/deepseek-reasoner',
+            mode: 'chat',
+            maxInputTokens: 64000,
+            maxOutputTokens: 8000,
+            inputCostPerToken: 0.00000055,
+            outputCostPerToken: 0.00000219,
+            supportsReasoning: true,
+            supportsFunctionCalling: true,
+            supportsPromptCaching: false,
+            supportsStructuredOutput: true,
+            supportsVision: false,
+            supportsWebSearch: false,
+          },
+        ],
+        defaultModel: 'deepseek/deepseek-reasoner',
+        apiKeyEnvVar: 'DEEPSEEK_API_KEY',
+      },
+    ];
     dashboard.state.projectData = {
       [projectPath]: {
         daemon: {},
@@ -1378,27 +1589,31 @@ describe('dashboard ui recovery', () => {
     getElement('mainPanel');
     dashboard.state.selectedMainTab = 'cost';
     dashboard.state.selectedProjectId = projectPath;
-    dashboard.state.providerCatalog = [{
-      id: 'deepseek',
-      name: 'deepseek',
-      models: ['deepseek/deepseek-reasoner'],
-      modelDetails: [{
-        id: 'deepseek/deepseek-reasoner',
-        mode: 'chat',
-        maxInputTokens: 64000,
-        maxOutputTokens: 8000,
-        inputCostPerToken: 0.00000055,
-        outputCostPerToken: 0.00000219,
-        supportsReasoning: true,
-        supportsFunctionCalling: true,
-        supportsPromptCaching: false,
-        supportsStructuredOutput: true,
-        supportsVision: false,
-        supportsWebSearch: false,
-      }],
-      defaultModel: 'deepseek/deepseek-reasoner',
-      apiKeyEnvVar: 'DEEPSEEK_API_KEY',
-    }];
+    dashboard.state.providerCatalog = [
+      {
+        id: 'deepseek',
+        name: 'deepseek',
+        models: ['deepseek/deepseek-reasoner'],
+        modelDetails: [
+          {
+            id: 'deepseek/deepseek-reasoner',
+            mode: 'chat',
+            maxInputTokens: 64000,
+            maxOutputTokens: 8000,
+            inputCostPerToken: 0.00000055,
+            outputCostPerToken: 0.00000219,
+            supportsReasoning: true,
+            supportsFunctionCalling: true,
+            supportsPromptCaching: false,
+            supportsStructuredOutput: true,
+            supportsVision: false,
+            supportsWebSearch: false,
+          },
+        ],
+        defaultModel: 'deepseek/deepseek-reasoner',
+        apiKeyEnvVar: 'DEEPSEEK_API_KEY',
+      },
+    ];
     dashboard.state.projectData = {
       [projectPath]: {
         daemon: {},
@@ -1472,53 +1687,56 @@ describe('dashboard ui recovery', () => {
   it('renders scope activity detail and copies readable scope timeline text', async () => {
     const projectPath = '/tmp/ornn-project';
     const encodedPath = encodeURIComponent(projectPath);
-    const { dashboard, getElement, getCopiedText } = loadDashboardTestHarness({}, {
-      fetchMap: {
-        [`/api/projects/${encodedPath}/activity-scopes/${encodeURIComponent('scope-123')}`]: {
-          detail: {
-            scopeId: 'scope-123',
-            createdAt: '2026-04-10T05:23:00.000Z',
-            updatedAt: '2026-04-10T05:24:00.000Z',
-            skillId: 'test-driven-development',
-            runtime: 'codex',
-            projectName: 'ornn-project',
-            status: 'no_optimization',
-            sessionId: 'session-zh',
-            timeline: [
-              {
-                id: 'skill-called:1',
-                type: 'skill_called',
-                timestamp: '2026-04-10T05:23:00.000Z',
-                summary: '助手输出: 开始执行测试驱动开发。',
-              },
-              {
-                id: 'analysis-submitted:1',
-                type: 'analysis_submitted',
-                timestamp: '2026-04-10T05:23:08.000Z',
-                summary: '当前窗口已提交分析。',
-                model: 'deepseek/deepseek-reasoner',
-                traceCount: 4,
-                charCount: 128,
-                traceText: '1. [2026-04-10T05:23:00.000Z] 助手输出: 开始执行测试驱动开发。',
-              },
-              {
-                id: 'analysis-result:1',
-                type: 'analysis_result',
-                timestamp: '2026-04-10T05:23:10.000Z',
-                summary: '系统已经完成本轮分析。',
-                outcome: 'no_optimization',
-              },
-              {
-                id: 'no-optimization:1',
-                type: 'no_optimization',
-                timestamp: '2026-04-10T05:23:10.000Z',
-                summary: '无需优化，关闭本轮 scope。',
-              },
-            ],
+    const { dashboard, getElement, getCopiedText } = loadDashboardTestHarness(
+      {},
+      {
+        fetchMap: {
+          [`/api/projects/${encodedPath}/activity-scopes/${encodeURIComponent('scope-123')}`]: {
+            detail: {
+              scopeId: 'scope-123',
+              createdAt: '2026-04-10T05:23:00.000Z',
+              updatedAt: '2026-04-10T05:24:00.000Z',
+              skillId: 'test-driven-development',
+              runtime: 'codex',
+              projectName: 'ornn-project',
+              status: 'no_optimization',
+              sessionId: 'session-zh',
+              timeline: [
+                {
+                  id: 'skill-called:1',
+                  type: 'skill_called',
+                  timestamp: '2026-04-10T05:23:00.000Z',
+                  summary: '助手输出: 开始执行测试驱动开发。',
+                },
+                {
+                  id: 'analysis-submitted:1',
+                  type: 'analysis_submitted',
+                  timestamp: '2026-04-10T05:23:08.000Z',
+                  summary: '当前窗口已提交分析。',
+                  model: 'deepseek/deepseek-reasoner',
+                  traceCount: 4,
+                  charCount: 128,
+                  traceText: '1. [2026-04-10T05:23:00.000Z] 助手输出: 开始执行测试驱动开发。',
+                },
+                {
+                  id: 'analysis-result:1',
+                  type: 'analysis_result',
+                  timestamp: '2026-04-10T05:23:10.000Z',
+                  summary: '系统已经完成本轮分析。',
+                  outcome: 'no_optimization',
+                },
+                {
+                  id: 'no-optimization:1',
+                  type: 'no_optimization',
+                  timestamp: '2026-04-10T05:23:10.000Z',
+                  summary: '无需优化，关闭本轮 scope。',
+                },
+              ],
+            },
           },
         },
-      },
-    });
+      }
+    );
 
     getElement('mainPanel');
     getElement('eventModalTitle');
@@ -1534,17 +1752,30 @@ describe('dashboard ui recovery', () => {
         traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
         recentTraces: [],
         decisionEvents: [],
-        activityScopes: [{
-          scopeId: 'scope-123',
-          createdAt: '2026-04-10T05:23:00.000Z',
-          updatedAt: '2026-04-10T05:24:00.000Z',
-          skillId: 'test-driven-development',
-          runtime: 'codex',
-          projectName: 'ornn-project',
-          status: 'no_optimization',
-          sessionId: 'session-zh',
-        }],
-        agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
+        activityScopes: [
+          {
+            scopeId: 'scope-123',
+            createdAt: '2026-04-10T05:23:00.000Z',
+            updatedAt: '2026-04-10T05:24:00.000Z',
+            skillId: 'test-driven-development',
+            runtime: 'codex',
+            projectName: 'ornn-project',
+            status: 'no_optimization',
+            sessionId: 'session-zh',
+          },
+        ],
+        agentUsage: {
+          callCount: 0,
+          promptTokens: 0,
+          completionTokens: 0,
+          totalTokens: 0,
+          durationMsTotal: 0,
+          avgDurationMs: 0,
+          lastCallAt: null,
+          byModel: {},
+          byScope: {},
+          bySkill: {},
+        },
       },
     };
 
@@ -1596,23 +1827,38 @@ describe('dashboard ui recovery', () => {
         traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
         recentTraces: [],
         decisionEvents: [],
-        activityScopes: [{
-          scopeId: 'scope-click-skill-1',
-          createdAt: '2026-04-10T05:23:00.000Z',
-          updatedAt: '2026-04-10T05:24:00.000Z',
-          skillId: 'test-driven-development',
-          runtime: 'codex',
-          projectName: 'ornn-project',
-          status: 'observing',
-          sessionId: 'session-click',
-        }],
-        agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
+        activityScopes: [
+          {
+            scopeId: 'scope-click-skill-1',
+            createdAt: '2026-04-10T05:23:00.000Z',
+            updatedAt: '2026-04-10T05:24:00.000Z',
+            skillId: 'test-driven-development',
+            runtime: 'codex',
+            projectName: 'ornn-project',
+            status: 'observing',
+            sessionId: 'session-click',
+          },
+        ],
+        agentUsage: {
+          callCount: 0,
+          promptTokens: 0,
+          completionTokens: 0,
+          totalTokens: 0,
+          durationMsTotal: 0,
+          avgDurationMs: 0,
+          lastCallAt: null,
+          byModel: {},
+          byScope: {},
+          bySkill: {},
+        },
       },
     };
 
     dashboard.renderMainPanel(projectPath);
     const html = getElement('mainPanel').innerHTML;
-    expect(html).toContain("onclick=\"viewSkill('/tmp/ornn-project','test-driven-development','codex');event.stopPropagation()\"");
+    expect(html).toContain(
+      "onclick=\"viewSkill('/tmp/ornn-project','test-driven-development','codex');event.stopPropagation()\""
+    );
     expect(html).toContain('activity-skill-link');
   });
 
@@ -1630,17 +1876,30 @@ describe('dashboard ui recovery', () => {
         traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
         recentTraces: [],
         decisionEvents: [],
-        activityScopes: [{
-          scopeId: 'scope-ep-1',
-          createdAt: '2026-04-10T05:23:00.000Z',
-          updatedAt: '2026-04-10T05:24:00.000Z',
-          skillId: 'systematic-debugging',
-          runtime: 'codex',
-          projectName: 'OrnnSkills',
-          status: 'observing',
-          sessionId: 'session-1',
-        }],
-        agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
+        activityScopes: [
+          {
+            scopeId: 'scope-ep-1',
+            createdAt: '2026-04-10T05:23:00.000Z',
+            updatedAt: '2026-04-10T05:24:00.000Z',
+            skillId: 'systematic-debugging',
+            runtime: 'codex',
+            projectName: 'OrnnSkills',
+            status: 'observing',
+            sessionId: 'session-1',
+          },
+        ],
+        agentUsage: {
+          callCount: 0,
+          promptTokens: 0,
+          completionTokens: 0,
+          totalTokens: 0,
+          durationMsTotal: 0,
+          avgDurationMs: 0,
+          lastCallAt: null,
+          byModel: {},
+          byScope: {},
+          bySkill: {},
+        },
       },
     };
     const rows = dashboard.buildActivityRows(projectPath);
@@ -1660,8 +1919,12 @@ describe('dashboard ui recovery', () => {
     expect(html).toContain('状态');
     expect(html).toContain('OrnnSkills');
     expect(html).toContain('观察中');
-    expect(html).toContain("onclick=\"openActivityDetail('/tmp/ornn-project','scope:scope-ep-1')\"");
-    expect(html).toContain("onclick=\"viewSkill('/tmp/ornn-project','systematic-debugging','codex');event.stopPropagation()\"");
+    expect(html).toContain(
+      "onclick=\"openActivityDetail('/tmp/ornn-project','scope:scope-ep-1')\""
+    );
+    expect(html).toContain(
+      "onclick=\"viewSkill('/tmp/ornn-project','systematic-debugging','codex');event.stopPropagation()\""
+    );
     expect(html).not.toContain('查看详情');
     expect(html).not.toContain('复制');
   });
@@ -1679,18 +1942,31 @@ describe('dashboard ui recovery', () => {
         skills: [{ skillId: 'systematic-debugging', runtime: 'codex' }],
         traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
         recentTraces: [],
-        decisionEvents: [{
-          id: 'evt-failed-1',
-          timestamp: '2026-04-10T05:23:18.000Z',
-          tag: 'analysis_failed',
-          runtime: 'codex',
-          skillId: 'systematic-debugging',
-          status: 'failed',
-          windowId: 'scope-failed-1',
-          detail: '当前项目没有可用的模型服务配置，所以这轮分析没有开始。',
-        }],
+        decisionEvents: [
+          {
+            id: 'evt-failed-1',
+            timestamp: '2026-04-10T05:23:18.000Z',
+            tag: 'analysis_failed',
+            runtime: 'codex',
+            skillId: 'systematic-debugging',
+            status: 'failed',
+            windowId: 'scope-failed-1',
+            detail: '当前项目没有可用的模型服务配置，所以这轮分析没有开始。',
+          },
+        ],
         activityScopes: [],
-        agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
+        agentUsage: {
+          callCount: 0,
+          promptTokens: 0,
+          completionTokens: 0,
+          totalTokens: 0,
+          durationMsTotal: 0,
+          avgDurationMs: 0,
+          lastCallAt: null,
+          byModel: {},
+          byScope: {},
+          bySkill: {},
+        },
       },
     };
 
@@ -1708,48 +1984,51 @@ describe('dashboard ui recovery', () => {
   it('renders scope timeline detail from the activity scope endpoint', async () => {
     const projectPath = '/tmp/ornn-project';
     const encodedPath = encodeURIComponent(projectPath);
-    const { dashboard, getElement } = loadDashboardTestHarness({}, {
-      lang: 'zh',
-      fetchMap: {
-        [`/api/projects/${encodedPath}/activity-scopes/${encodeURIComponent('scope-ep-1')}`]: {
-          detail: {
-            scopeId: 'scope-ep-1',
-            createdAt: '2026-04-10T05:23:00.000Z',
-            updatedAt: '2026-04-10T05:24:00.000Z',
-            skillId: 'systematic-debugging',
-            runtime: 'codex',
-            projectName: 'OrnnSkills',
-            status: 'observing',
-            sessionId: 'session-1',
-            timeline: [
-              {
-                id: 'skill-called:trace-1',
-                type: 'skill_called',
-                timestamp: '2026-04-10T05:23:00.000Z',
-                summary: '助手输出: 正在排查问题',
-              },
-              {
-                id: 'analysis-submitted:req-1',
-                type: 'analysis_submitted',
-                timestamp: '2026-04-10T05:23:12.000Z',
-                summary: '当前窗口达到首次分析条件，提交分析。',
-                model: 'deepseek/deepseek-reasoner',
-                traceCount: 3,
-                charCount: 256,
-                traceText: '1. [2026-04-10T05:23:00.000Z] 助手输出: 正在排查问题',
-              },
-              {
-                id: 'analysis-result:evt-1',
-                type: 'analysis_result',
-                timestamp: '2026-04-10T05:23:18.000Z',
-                summary: '当前窗口仍需更多上下文，暂不下结论。',
-                outcome: 'need_more_context',
-              },
-            ],
+    const { dashboard, getElement } = loadDashboardTestHarness(
+      {},
+      {
+        lang: 'zh',
+        fetchMap: {
+          [`/api/projects/${encodedPath}/activity-scopes/${encodeURIComponent('scope-ep-1')}`]: {
+            detail: {
+              scopeId: 'scope-ep-1',
+              createdAt: '2026-04-10T05:23:00.000Z',
+              updatedAt: '2026-04-10T05:24:00.000Z',
+              skillId: 'systematic-debugging',
+              runtime: 'codex',
+              projectName: 'OrnnSkills',
+              status: 'observing',
+              sessionId: 'session-1',
+              timeline: [
+                {
+                  id: 'skill-called:trace-1',
+                  type: 'skill_called',
+                  timestamp: '2026-04-10T05:23:00.000Z',
+                  summary: '助手输出: 正在排查问题',
+                },
+                {
+                  id: 'analysis-submitted:req-1',
+                  type: 'analysis_submitted',
+                  timestamp: '2026-04-10T05:23:12.000Z',
+                  summary: '当前窗口达到首次分析条件，提交分析。',
+                  model: 'deepseek/deepseek-reasoner',
+                  traceCount: 3,
+                  charCount: 256,
+                  traceText: '1. [2026-04-10T05:23:00.000Z] 助手输出: 正在排查问题',
+                },
+                {
+                  id: 'analysis-result:evt-1',
+                  type: 'analysis_result',
+                  timestamp: '2026-04-10T05:23:18.000Z',
+                  summary: '当前窗口仍需更多上下文，暂不下结论。',
+                  outcome: 'need_more_context',
+                },
+              ],
+            },
           },
         },
-      },
-    });
+      }
+    );
 
     getElement('eventModal');
     getElement('eventModalTitle');
@@ -1763,17 +2042,30 @@ describe('dashboard ui recovery', () => {
         traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
         recentTraces: [],
         decisionEvents: [],
-        activityScopes: [{
-          scopeId: 'scope-ep-1',
-          createdAt: '2026-04-10T05:23:00.000Z',
-          updatedAt: '2026-04-10T05:24:00.000Z',
-          skillId: 'systematic-debugging',
-          runtime: 'codex',
-          projectName: 'OrnnSkills',
-          status: 'observing',
-          sessionId: 'session-1',
-        }],
-        agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
+        activityScopes: [
+          {
+            scopeId: 'scope-ep-1',
+            createdAt: '2026-04-10T05:23:00.000Z',
+            updatedAt: '2026-04-10T05:24:00.000Z',
+            skillId: 'systematic-debugging',
+            runtime: 'codex',
+            projectName: 'OrnnSkills',
+            status: 'observing',
+            sessionId: 'session-1',
+          },
+        ],
+        agentUsage: {
+          callCount: 0,
+          promptTokens: 0,
+          completionTokens: 0,
+          totalTokens: 0,
+          durationMsTotal: 0,
+          avgDurationMs: 0,
+          lastCallAt: null,
+          byModel: {},
+          byScope: {},
+          bySkill: {},
+        },
       },
     };
 
@@ -1799,35 +2091,41 @@ describe('dashboard ui recovery', () => {
     const runtimeId = 'codex';
     const encodedProject = encodeURIComponent(projectPath);
     const encodedSkill = encodeURIComponent(skillId);
-    const { dashboard, getElement, getFetchCalls } = loadDashboardTestHarness({}, {
-      fetchMap: {
-        [`/api/projects/${encodedProject}/skills/${encodedSkill}?runtime=${runtimeId}`]: {
-          content: '# test-driven-development',
-          versions: [1, 2, 3],
-        },
-        [`/api/projects/${encodedProject}/skills/${encodedSkill}/versions/1?runtime=${runtimeId}`]: {
-          content: 'v1',
-          metadata: {
-            createdAt: '2026-04-06T00:00:00.000Z',
-            reason: 'Bootstrap source sync (project -> project)',
+    const { dashboard, getElement, getFetchCalls } = loadDashboardTestHarness(
+      {},
+      {
+        fetchMap: {
+          [`/api/projects/${encodedProject}/skills/${encodedSkill}?runtime=${runtimeId}`]: {
+            content: '# test-driven-development',
+            versions: [1, 2, 3],
           },
+          [`/api/projects/${encodedProject}/skills/${encodedSkill}/versions/1?runtime=${runtimeId}`]:
+            {
+              content: 'v1',
+              metadata: {
+                createdAt: '2026-04-06T00:00:00.000Z',
+                reason: 'Bootstrap source sync (project -> project)',
+              },
+            },
+          [`/api/projects/${encodedProject}/skills/${encodedSkill}/versions/2?runtime=${runtimeId}`]:
+            {
+              content: 'v2',
+              metadata: {
+                createdAt: '2026-04-06T00:00:00.000Z',
+                reason: 'Manual edit from dashboard',
+              },
+            },
+          [`/api/projects/${encodedProject}/skills/${encodedSkill}/versions/3?runtime=${runtimeId}`]:
+            {
+              content: 'v3',
+              metadata: {
+                createdAt: '2026-04-06T00:00:00.000Z',
+                reason: 'Manual edit from dashboard',
+              },
+            },
         },
-        [`/api/projects/${encodedProject}/skills/${encodedSkill}/versions/2?runtime=${runtimeId}`]: {
-          content: 'v2',
-          metadata: {
-            createdAt: '2026-04-06T00:00:00.000Z',
-            reason: 'Manual edit from dashboard',
-          },
-        },
-        [`/api/projects/${encodedProject}/skills/${encodedSkill}/versions/3?runtime=${runtimeId}`]: {
-          content: 'v3',
-          metadata: {
-            createdAt: '2026-04-06T00:00:00.000Z',
-            reason: 'Manual edit from dashboard',
-          },
-        },
-      },
-    });
+      }
+    );
 
     getElement('skillModal');
     getElement('modalSkillName');
@@ -1840,9 +2138,15 @@ describe('dashboard ui recovery', () => {
     await dashboard.viewSkill(projectPath, skillId, runtimeId);
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(getFetchCalls()).toContain(`/api/projects/${encodedProject}/skills/${encodedSkill}/versions/1?runtime=${runtimeId}`);
-    expect(getFetchCalls()).toContain(`/api/projects/${encodedProject}/skills/${encodedSkill}/versions/2?runtime=${runtimeId}`);
-    expect(getFetchCalls()).toContain(`/api/projects/${encodedProject}/skills/${encodedSkill}/versions/3?runtime=${runtimeId}`);
+    expect(getFetchCalls()).toContain(
+      `/api/projects/${encodedProject}/skills/${encodedSkill}/versions/1?runtime=${runtimeId}`
+    );
+    expect(getFetchCalls()).toContain(
+      `/api/projects/${encodedProject}/skills/${encodedSkill}/versions/2?runtime=${runtimeId}`
+    );
+    expect(getFetchCalls()).toContain(
+      `/api/projects/${encodedProject}/skills/${encodedSkill}/versions/3?runtime=${runtimeId}`
+    );
     expect(getElement('vmeta_1').innerHTML).toContain('Bootstrap source sync');
     expect(getElement('vmeta_2').innerHTML).toContain('Manual edit from dashboard');
     expect(getElement('vmeta_3').innerHTML).toContain('Manual edit from dashboard');
@@ -1865,7 +2169,13 @@ describe('dashboard ui recovery', () => {
           processedTraces: 2,
           lastCheckpointAt: null,
           retryQueueSize: 0,
-          optimizationStatus: { currentState: 'idle', currentSkillId: null, lastOptimizationAt: null, lastError: null, queueSize: 0 },
+          optimizationStatus: {
+            currentState: 'idle',
+            currentSkillId: null,
+            lastOptimizationAt: null,
+            lastError: null,
+            queueSize: 0,
+          },
         },
         skills: [
           {
@@ -1900,7 +2210,18 @@ describe('dashboard ui recovery', () => {
         recentTraces: [],
         decisionEvents: [],
         activityScopes: [],
-        agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
+        agentUsage: {
+          callCount: 0,
+          promptTokens: 0,
+          completionTokens: 0,
+          totalTokens: 0,
+          durationMsTotal: 0,
+          avgDurationMs: 0,
+          lastCallAt: null,
+          byModel: {},
+          byScope: {},
+          bySkill: {},
+        },
       },
     };
 
@@ -1929,7 +2250,13 @@ describe('dashboard ui recovery', () => {
         processedTraces: 2,
         lastCheckpointAt: null,
         retryQueueSize: 0,
-        optimizationStatus: { currentState: 'idle', currentSkillId: null, lastOptimizationAt: null, lastError: null, queueSize: 0 },
+        optimizationStatus: {
+          currentState: 'idle',
+          currentSkillId: null,
+          lastOptimizationAt: null,
+          lastError: null,
+          queueSize: 0,
+        },
       },
       skills: [
         {
@@ -1955,7 +2282,18 @@ describe('dashboard ui recovery', () => {
       recentTraces: [],
       decisionEvents: [],
       activityScopes: [],
-      agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
+      agentUsage: {
+        callCount: 0,
+        promptTokens: 0,
+        completionTokens: 0,
+        totalTokens: 0,
+        durationMsTotal: 0,
+        avgDurationMs: 0,
+        lastCallAt: null,
+        byModel: {},
+        byScope: {},
+        bySkill: {},
+      },
     };
     const fetchMap = {
       [claudeEndpoint]: {
@@ -1970,9 +2308,12 @@ describe('dashboard ui recovery', () => {
       },
     };
 
-    const firstHarness = loadDashboardTestHarness({
-      'ornn-dashboard-skill-modal-runtime': 'claude',
-    }, { lang: 'zh', fetchMap });
+    const firstHarness = loadDashboardTestHarness(
+      {
+        'ornn-dashboard-skill-modal-runtime': 'claude',
+      },
+      { lang: 'zh', fetchMap }
+    );
     const { dashboard, getElement, getFetchCalls, getStorageItem } = firstHarness;
 
     dashboard.state.selectedProjectId = projectPath;
@@ -2000,9 +2341,14 @@ describe('dashboard ui recovery', () => {
     expect(getStorageItem('ornn-dashboard-skill-modal-runtime')).toBe('codex');
     expect(getElement('modalRuntimeSelect').value).toBe('codex');
 
-    const secondHarness = loadDashboardTestHarness({
-      'ornn-dashboard-skill-modal-runtime': String(getStorageItem('ornn-dashboard-skill-modal-runtime')),
-    }, { lang: 'zh', fetchMap });
+    const secondHarness = loadDashboardTestHarness(
+      {
+        'ornn-dashboard-skill-modal-runtime': String(
+          getStorageItem('ornn-dashboard-skill-modal-runtime')
+        ),
+      },
+      { lang: 'zh', fetchMap }
+    );
     const nextDashboard = secondHarness.dashboard;
     nextDashboard.state.selectedProjectId = projectPath;
     nextDashboard.state.projectData = { [projectPath]: projectSnapshot };
@@ -2028,36 +2374,42 @@ describe('dashboard ui recovery', () => {
     const runtimeId = 'codex';
     const encodedProject = encodeURIComponent(projectPath);
     const encodedSkill = encodeURIComponent(skillId);
-    const { dashboard, getElement } = loadDashboardTestHarness({}, {
-      lang: 'en',
-      fetchMap: {
-        [`/api/projects/${encodedProject}/skills/${encodedSkill}?runtime=${runtimeId}`]: {
-          content: '# test-driven-development',
-          versions: [1, 2, 3],
-        },
-        [`/api/projects/${encodedProject}/skills/${encodedSkill}/versions/1?runtime=${runtimeId}`]: {
-          content: 'v1',
-          metadata: {
-            createdAt: '2026-04-06T00:00:00.000Z',
-            reason: 'Bootstrap source sync (project -> project)',
+    const { dashboard, getElement } = loadDashboardTestHarness(
+      {},
+      {
+        lang: 'en',
+        fetchMap: {
+          [`/api/projects/${encodedProject}/skills/${encodedSkill}?runtime=${runtimeId}`]: {
+            content: '# test-driven-development',
+            versions: [1, 2, 3],
           },
+          [`/api/projects/${encodedProject}/skills/${encodedSkill}/versions/1?runtime=${runtimeId}`]:
+            {
+              content: 'v1',
+              metadata: {
+                createdAt: '2026-04-06T00:00:00.000Z',
+                reason: 'Bootstrap source sync (project -> project)',
+              },
+            },
+          [`/api/projects/${encodedProject}/skills/${encodedSkill}/versions/2?runtime=${runtimeId}`]:
+            {
+              content: 'v2',
+              metadata: {
+                createdAt: '2026-04-06T00:00:00.000Z',
+                reason: 'Manual edit from dashboard',
+              },
+            },
+          [`/api/projects/${encodedProject}/skills/${encodedSkill}/versions/3?runtime=${runtimeId}`]:
+            {
+              content: 'v3',
+              metadata: {
+                createdAt: '2026-04-06T00:00:00.000Z',
+                reason: 'Manual edit from dashboard',
+              },
+            },
         },
-        [`/api/projects/${encodedProject}/skills/${encodedSkill}/versions/2?runtime=${runtimeId}`]: {
-          content: 'v2',
-          metadata: {
-            createdAt: '2026-04-06T00:00:00.000Z',
-            reason: 'Manual edit from dashboard',
-          },
-        },
-        [`/api/projects/${encodedProject}/skills/${encodedSkill}/versions/3?runtime=${runtimeId}`]: {
-          content: 'v3',
-          metadata: {
-            createdAt: '2026-04-06T00:00:00.000Z',
-            reason: 'Manual edit from dashboard',
-          },
-        },
-      },
-    });
+      }
+    );
 
     getElement('skillModal');
     getElement('modalSkillName');
@@ -2071,13 +2423,19 @@ describe('dashboard ui recovery', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(getElement('versionList').innerHTML).toContain(`version-item current `);
-    expect(getElement('versionList').innerHTML).toContain(`onclick="loadVersion('${encodedProject}','${encodedSkill}','${runtimeId}',3)"`);
+    expect(getElement('versionList').innerHTML).toContain(
+      `onclick="loadVersion('${encodedProject}','${encodedSkill}','${runtimeId}',3)"`
+    );
 
     await dashboard.loadVersion(encodedProject, encodedSkill, runtimeId, 2);
 
     expect(getElement('versionList').innerHTML).toContain(`version-item current `);
-    expect(getElement('versionList').innerHTML).toContain(`onclick="loadVersion('${encodedProject}','${encodedSkill}','${runtimeId}',2)"`);
-    expect(getElement('versionList').innerHTML).not.toContain(`version-item current " onclick="loadVersion('${encodedProject}','${encodedSkill}','${runtimeId}',3)"`);
+    expect(getElement('versionList').innerHTML).toContain(
+      `onclick="loadVersion('${encodedProject}','${encodedSkill}','${runtimeId}',2)"`
+    );
+    expect(getElement('versionList').innerHTML).not.toContain(
+      `version-item current " onclick="loadVersion('${encodedProject}','${encodedSkill}','${runtimeId}',3)"`
+    );
   });
 
   it('renders invalidate or restore actions and effective status for each version card', async () => {
@@ -2086,40 +2444,46 @@ describe('dashboard ui recovery', () => {
     const runtimeId = 'codex';
     const encodedProject = encodeURIComponent(projectPath);
     const encodedSkill = encodeURIComponent(skillId);
-    const { dashboard, getElement } = loadDashboardTestHarness({}, {
-      lang: 'en',
-      fetchMap: {
-        [`/api/projects/${encodedProject}/skills/${encodedSkill}?runtime=${runtimeId}`]: {
-          content: 'v2 active content',
-          versions: [1, 2, 3],
-          effectiveVersion: 2,
-        },
-        [`/api/projects/${encodedProject}/skills/${encodedSkill}/versions/1?runtime=${runtimeId}`]: {
-          content: 'v1',
-          metadata: {
-            createdAt: '2026-04-06T00:00:00.000Z',
-            reason: 'Bootstrap source sync (project -> project)',
-            isDisabled: false,
+    const { dashboard, getElement } = loadDashboardTestHarness(
+      {},
+      {
+        lang: 'en',
+        fetchMap: {
+          [`/api/projects/${encodedProject}/skills/${encodedSkill}?runtime=${runtimeId}`]: {
+            content: 'v2 active content',
+            versions: [1, 2, 3],
+            effectiveVersion: 2,
           },
+          [`/api/projects/${encodedProject}/skills/${encodedSkill}/versions/1?runtime=${runtimeId}`]:
+            {
+              content: 'v1',
+              metadata: {
+                createdAt: '2026-04-06T00:00:00.000Z',
+                reason: 'Bootstrap source sync (project -> project)',
+                isDisabled: false,
+              },
+            },
+          [`/api/projects/${encodedProject}/skills/${encodedSkill}/versions/2?runtime=${runtimeId}`]:
+            {
+              content: 'v2',
+              metadata: {
+                createdAt: '2026-04-06T00:00:00.000Z',
+                reason: 'Manual edit from dashboard',
+                isDisabled: false,
+              },
+            },
+          [`/api/projects/${encodedProject}/skills/${encodedSkill}/versions/3?runtime=${runtimeId}`]:
+            {
+              content: 'v3',
+              metadata: {
+                createdAt: '2026-04-06T00:00:00.000Z',
+                reason: 'Manual edit from dashboard',
+                isDisabled: true,
+              },
+            },
         },
-        [`/api/projects/${encodedProject}/skills/${encodedSkill}/versions/2?runtime=${runtimeId}`]: {
-          content: 'v2',
-          metadata: {
-            createdAt: '2026-04-06T00:00:00.000Z',
-            reason: 'Manual edit from dashboard',
-            isDisabled: false,
-          },
-        },
-        [`/api/projects/${encodedProject}/skills/${encodedSkill}/versions/3?runtime=${runtimeId}`]: {
-          content: 'v3',
-          metadata: {
-            createdAt: '2026-04-06T00:00:00.000Z',
-            reason: 'Manual edit from dashboard',
-            isDisabled: true,
-          },
-        },
-      },
-    });
+      }
+    );
 
     getElement('skillModal');
     getElement('modalSkillName');
@@ -2138,7 +2502,9 @@ describe('dashboard ui recovery', () => {
     expect(html).toContain('effective');
     expect(html).toContain('invalid');
     expect(html).toContain(`version-item current `);
-    expect(html).toContain(`onclick="loadVersion('${encodedProject}','${encodedSkill}','${runtimeId}',2)"`);
+    expect(html).toContain(
+      `onclick="loadVersion('${encodedProject}','${encodedSkill}','${runtimeId}',2)"`
+    );
   });
 
   it('renders an apply-to-all button and one-off confirmation copy in the skill modal', () => {
@@ -2160,29 +2526,32 @@ describe('dashboard ui recovery', () => {
     const encodedProject = encodeURIComponent(projectPath);
     const encodedSkill = encodeURIComponent(skillId);
     const applyEndpoint = `/api/projects/${encodedProject}/skills/${encodedSkill}/apply-to-all?runtime=${runtimeId}`;
-    const { dashboard, getElement, getFetchRequests } = loadDashboardTestHarness({}, {
-      lang: 'zh',
-      fetchMap: {
-        [`/api/projects/${encodedProject}/skills/${encodedSkill}?runtime=${runtimeId}`]: {
-          content: '# base content',
-          versions: [],
-          effectiveVersion: null,
-        },
-        [applyEndpoint]: {
-          ok: true,
-          skillId,
-          runtime: runtimeId,
-          source: {
-            saved: true,
-            version: 4,
+    const { dashboard, getElement, getFetchRequests } = loadDashboardTestHarness(
+      {},
+      {
+        lang: 'zh',
+        fetchMap: {
+          [`/api/projects/${encodedProject}/skills/${encodedSkill}?runtime=${runtimeId}`]: {
+            content: '# base content',
+            versions: [],
+            effectiveVersion: null,
           },
-          totalTargets: 3,
-          updatedTargets: 2,
-          skippedTargets: 1,
-          failedTargets: 0,
+          [applyEndpoint]: {
+            ok: true,
+            skillId,
+            runtime: runtimeId,
+            source: {
+              saved: true,
+              version: 4,
+            },
+            totalTargets: 3,
+            updatedTargets: 2,
+            skippedTargets: 1,
+            failedTargets: 0,
+          },
         },
-      },
-    });
+      }
+    );
 
     dashboard.state.selectedProjectId = projectPath;
     getElement('skillModal');
@@ -2226,41 +2595,47 @@ describe('dashboard ui recovery', () => {
     const runtimeId = 'codex';
     const encodedProject = encodeURIComponent(projectPath);
     const encodedSkill = encodeURIComponent(skillId);
-    const { dashboard, getElement } = loadDashboardTestHarness({}, {
-      lang: 'zh',
-      fetchMap: {
-        [`/api/projects/${encodedProject}/skills/${encodedSkill}?runtime=${runtimeId}`]: {
-          content: 'v3 optimized content',
-          versions: [1, 2, 3],
-          effectiveVersion: 3,
-        },
-        [`/api/projects/${encodedProject}/skills/${encodedSkill}/versions/1?runtime=${runtimeId}`]: {
-          content: 'v1',
-          metadata: {
-            createdAt: '2026-04-06T00:00:00.000Z',
-            reason: 'Bootstrap source sync (project -> project)',
-            isDisabled: false,
+    const { dashboard, getElement } = loadDashboardTestHarness(
+      {},
+      {
+        lang: 'zh',
+        fetchMap: {
+          [`/api/projects/${encodedProject}/skills/${encodedSkill}?runtime=${runtimeId}`]: {
+            content: 'v3 optimized content',
+            versions: [1, 2, 3],
+            effectiveVersion: 3,
           },
+          [`/api/projects/${encodedProject}/skills/${encodedSkill}/versions/1?runtime=${runtimeId}`]:
+            {
+              content: 'v1',
+              metadata: {
+                createdAt: '2026-04-06T00:00:00.000Z',
+                reason: 'Bootstrap source sync (project -> project)',
+                isDisabled: false,
+              },
+            },
+          [`/api/projects/${encodedProject}/skills/${encodedSkill}/versions/2?runtime=${runtimeId}`]:
+            {
+              content: 'v2',
+              metadata: {
+                createdAt: '2026-04-08T00:00:00.000Z',
+                reason: '通过 dashboard 手动编辑',
+                isDisabled: false,
+              },
+            },
+          [`/api/projects/${encodedProject}/skills/${encodedSkill}/versions/3?runtime=${runtimeId}`]:
+            {
+              content: 'v3',
+              metadata: {
+                createdAt: '2026-04-10T05:24:00.000Z',
+                reason: '自动优化：收紧触发条件',
+                isDisabled: false,
+                activityScopeId: 'scope-ep-1',
+              },
+            },
         },
-        [`/api/projects/${encodedProject}/skills/${encodedSkill}/versions/2?runtime=${runtimeId}`]: {
-          content: 'v2',
-          metadata: {
-            createdAt: '2026-04-08T00:00:00.000Z',
-            reason: '通过 dashboard 手动编辑',
-            isDisabled: false,
-          },
-        },
-        [`/api/projects/${encodedProject}/skills/${encodedSkill}/versions/3?runtime=${runtimeId}`]: {
-          content: 'v3',
-          metadata: {
-            createdAt: '2026-04-10T05:24:00.000Z',
-            reason: '自动优化：收紧触发条件',
-            isDisabled: false,
-            activityScopeId: 'scope-ep-1',
-          },
-        },
-      },
-    });
+      }
+    );
 
     getElement('skillModal');
     getElement('modalSkillName');
@@ -2276,21 +2651,25 @@ describe('dashboard ui recovery', () => {
     const html = getElement('versionList').innerHTML;
     expect(html).toContain('version-change version-scope-link');
     expect(html).toContain('自动优化：收紧触发条件');
-    expect(html).toContain(`onclick="openVersionScopeDetail('${encodedProject}','scope-ep-1');event.stopPropagation()"`);
+    expect(html).toContain(
+      `onclick="openVersionScopeDetail('${encodedProject}','scope-ep-1');event.stopPropagation()"`
+    );
   });
-
 
   it('degrades to a project-level fallback when main panel rendering throws', () => {
     const { dashboard, getElement } = loadDashboardTestHarness({}, { lang: 'zh' });
     const projectPath = '/tmp/ornn-project';
-    const badScope = new Proxy({}, {
-      ownKeys() {
-        throw new Error('scope breakdown exploded');
-      },
-      getOwnPropertyDescriptor() {
-        return { enumerable: true, configurable: true };
-      },
-    });
+    const badScope = new Proxy(
+      {},
+      {
+        ownKeys() {
+          throw new Error('scope breakdown exploded');
+        },
+        getOwnPropertyDescriptor() {
+          return { enumerable: true, configurable: true };
+        },
+      }
+    );
 
     getElement('mainPanel');
     dashboard.state.selectedProjectId = projectPath;
@@ -2303,7 +2682,13 @@ describe('dashboard ui recovery', () => {
           processedTraces: 42,
           lastCheckpointAt: null,
           retryQueueSize: 0,
-          optimizationStatus: { currentState: 'idle', currentSkillId: null, lastOptimizationAt: null, lastError: null, queueSize: 0 },
+          optimizationStatus: {
+            currentState: 'idle',
+            currentSkillId: null,
+            lastOptimizationAt: null,
+            lastError: null,
+            queueSize: 0,
+          },
         },
         skills: [],
         traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
@@ -2345,20 +2730,38 @@ describe('dashboard ui recovery', () => {
       [projectPath]: {
         daemon: {},
         skills: [{ skillId: 'test-driven-development', runtime: 'codex' }],
-        traceStats: { total: 1, byRuntime: { codex: 1 }, byStatus: { success: 1 }, byEventType: { tool_call: 1 } },
+        traceStats: {
+          total: 1,
+          byRuntime: { codex: 1 },
+          byStatus: { success: 1 },
+          byEventType: { tool_call: 1 },
+        },
         recentTraces: [],
         decisionEvents: [],
-        activityScopes: [{
-          scopeId: 'scope-width-1',
-          createdAt: '2026-04-10T05:23:01.000Z',
-          updatedAt: '2026-04-10T05:24:00.000Z',
-          skillId: 'test-driven-development',
-          runtime: 'codex',
-          projectName: 'ornn-project',
-          status: 'no_optimization',
-          sessionId: 'session-1',
-        }],
-        agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
+        activityScopes: [
+          {
+            scopeId: 'scope-width-1',
+            createdAt: '2026-04-10T05:23:01.000Z',
+            updatedAt: '2026-04-10T05:24:00.000Z',
+            skillId: 'test-driven-development',
+            runtime: 'codex',
+            projectName: 'ornn-project',
+            status: 'no_optimization',
+            sessionId: 'session-1',
+          },
+        ],
+        agentUsage: {
+          callCount: 0,
+          promptTokens: 0,
+          completionTokens: 0,
+          totalTokens: 0,
+          durationMsTotal: 0,
+          avgDurationMs: 0,
+          lastCallAt: null,
+          byModel: {},
+          byScope: {},
+          bySkill: {},
+        },
       },
     };
 
@@ -2406,8 +2809,18 @@ describe('dashboard ui recovery', () => {
         defaultProvider: 'deepseek',
         logLevel: 'debug',
         providers: [
-          { provider: 'openai', modelName: 'openai/gpt-4o-mini', apiKeyEnvVar: 'OPENAI_API_KEY', hasApiKey: true },
-          { provider: 'deepseek', modelName: 'deepseek/deepseek-chat', apiKeyEnvVar: 'DEEPSEEK_API_KEY', hasApiKey: false },
+          {
+            provider: 'openai',
+            modelName: 'openai/gpt-4o-mini',
+            apiKeyEnvVar: 'OPENAI_API_KEY',
+            hasApiKey: true,
+          },
+          {
+            provider: 'deepseek',
+            modelName: 'deepseek/deepseek-chat',
+            apiKeyEnvVar: 'DEEPSEEK_API_KEY',
+            hasApiKey: false,
+          },
         ],
       },
     };
@@ -2468,26 +2881,46 @@ describe('dashboard ui recovery', () => {
     dashboard.state.projectData = {
       [projectPath]: {
         daemon: {},
-        skills: [{
-          skillId: 'test-driven-development',
-          runtime: 'codex',
-          status: 'active',
-          traceCount: 2,
-          current_revision: 3,
-          updatedAt: '2026-04-10T05:23:00.000Z',
-        }],
-        traceStats: { total: 1, byRuntime: { codex: 1 }, byStatus: { success: 1 }, byEventType: { tool_call: 1 } },
-        recentTraces: [{
-          trace_id: 'trace-1',
-          session_id: 'session-1',
-          runtime: 'codex',
-          timestamp: '2026-04-10T05:23:00.000Z',
-          event_type: 'tool_call',
-          skill_refs: ['test-driven-development'],
-          status: 'success',
-        }],
+        skills: [
+          {
+            skillId: 'test-driven-development',
+            runtime: 'codex',
+            status: 'active',
+            traceCount: 2,
+            current_revision: 3,
+            updatedAt: '2026-04-10T05:23:00.000Z',
+          },
+        ],
+        traceStats: {
+          total: 1,
+          byRuntime: { codex: 1 },
+          byStatus: { success: 1 },
+          byEventType: { tool_call: 1 },
+        },
+        recentTraces: [
+          {
+            trace_id: 'trace-1',
+            session_id: 'session-1',
+            runtime: 'codex',
+            timestamp: '2026-04-10T05:23:00.000Z',
+            event_type: 'tool_call',
+            skill_refs: ['test-driven-development'],
+            status: 'success',
+          },
+        ],
         decisionEvents: [],
-        agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
+        agentUsage: {
+          callCount: 0,
+          promptTokens: 0,
+          completionTokens: 0,
+          totalTokens: 0,
+          durationMsTotal: 0,
+          avgDurationMs: 0,
+          lastCallAt: null,
+          byModel: {},
+          byScope: {},
+          bySkill: {},
+        },
       },
     };
 
@@ -2529,31 +2962,51 @@ describe('dashboard ui recovery', () => {
       [projectPath]: {
         daemon: {},
         skills: [{ skillId: 'test-driven-development', runtime: 'codex' }],
-        traceStats: { total: 1, byRuntime: { codex: 1 }, byStatus: { success: 1 }, byEventType: { tool_call: 1 } },
-        recentTraces: [{
-          trace_id: 'trace-raw-1',
-          session_id: 'session-raw-1',
-          runtime: 'codex',
-          timestamp: '2026-04-10T05:23:00.000Z',
-          event_type: 'tool_call',
-          tool_name: 'exec_command',
-          tool_args: { cmd: 'npm run build' },
-          skill_refs: ['test-driven-development'],
-          status: 'success',
-        }],
-        decisionEvents: [{
-          id: 'evt-raw-1',
-          timestamp: '2026-04-10T05:23:01.000Z',
-          tag: 'evaluation_result',
-          traceId: 'trace-raw-1',
-          sessionId: 'session-raw-1',
-          runtime: 'codex',
-          skillId: 'test-driven-development',
-          status: 'no_patch_needed',
-          windowId: 'scope-raw-1',
-          detail: 'same trace scope',
-        }],
-        agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
+        traceStats: {
+          total: 1,
+          byRuntime: { codex: 1 },
+          byStatus: { success: 1 },
+          byEventType: { tool_call: 1 },
+        },
+        recentTraces: [
+          {
+            trace_id: 'trace-raw-1',
+            session_id: 'session-raw-1',
+            runtime: 'codex',
+            timestamp: '2026-04-10T05:23:00.000Z',
+            event_type: 'tool_call',
+            tool_name: 'exec_command',
+            tool_args: { cmd: 'npm run build' },
+            skill_refs: ['test-driven-development'],
+            status: 'success',
+          },
+        ],
+        decisionEvents: [
+          {
+            id: 'evt-raw-1',
+            timestamp: '2026-04-10T05:23:01.000Z',
+            tag: 'evaluation_result',
+            traceId: 'trace-raw-1',
+            sessionId: 'session-raw-1',
+            runtime: 'codex',
+            skillId: 'test-driven-development',
+            status: 'no_patch_needed',
+            windowId: 'scope-raw-1',
+            detail: 'same trace scope',
+          },
+        ],
+        agentUsage: {
+          callCount: 0,
+          promptTokens: 0,
+          completionTokens: 0,
+          totalTokens: 0,
+          durationMsTotal: 0,
+          avgDurationMs: 0,
+          lastCallAt: null,
+          byModel: {},
+          byScope: {},
+          bySkill: {},
+        },
       },
     };
 
@@ -2609,7 +3062,13 @@ describe('dashboard ui recovery', () => {
         defaultProvider: 'openai',
         logLevel: 'info',
         providers: [
-          { provider: 'custom-provider', modelName: 'custom-model', apiKeyEnvVar: 'OPENAI_API_KEY', apiKey: 'plain-visible-key', hasApiKey: true },
+          {
+            provider: 'custom-provider',
+            modelName: 'custom-model',
+            apiKeyEnvVar: 'OPENAI_API_KEY',
+            apiKey: 'plain-visible-key',
+            hasApiKey: true,
+          },
         ],
       },
     };
@@ -2620,7 +3079,18 @@ describe('dashboard ui recovery', () => {
         traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
         recentTraces: [],
         decisionEvents: [],
-        agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
+        agentUsage: {
+          callCount: 0,
+          promptTokens: 0,
+          completionTokens: 0,
+          totalTokens: 0,
+          durationMsTotal: 0,
+          avgDurationMs: 0,
+          lastCallAt: null,
+          byModel: {},
+          byScope: {},
+          bySkill: {},
+        },
       },
     };
 
@@ -2689,7 +3159,18 @@ describe('dashboard ui recovery', () => {
         traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
         recentTraces: [],
         decisionEvents: [],
-        agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
+        agentUsage: {
+          callCount: 0,
+          promptTokens: 0,
+          completionTokens: 0,
+          totalTokens: 0,
+          durationMsTotal: 0,
+          avgDurationMs: 0,
+          lastCallAt: null,
+          byModel: {},
+          byScope: {},
+          bySkill: {},
+        },
       },
     };
 
@@ -2737,7 +3218,18 @@ describe('dashboard ui recovery', () => {
         traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
         recentTraces: [],
         decisionEvents: [],
-        agentUsage: { callCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMsTotal: 0, avgDurationMs: 0, lastCallAt: null, byModel: {}, byScope: {}, bySkill: {} },
+        agentUsage: {
+          callCount: 0,
+          promptTokens: 0,
+          completionTokens: 0,
+          totalTokens: 0,
+          durationMsTotal: 0,
+          avgDurationMs: 0,
+          lastCallAt: null,
+          byModel: {},
+          byScope: {},
+          bySkill: {},
+        },
       },
     };
 
@@ -2752,23 +3244,84 @@ describe('dashboard ui recovery', () => {
     expect(html).toContain('优先等待关键失败信号。');
   });
 
-  it('includes prompt override edits when saving config', async () => {
+  it('renders built-in prompt previews when prompt overrides are blank', () => {
+    const { dashboard, getElement } = loadDashboardTestHarness({}, { lang: 'zh' });
     const projectPath = '/tmp/ornn-project';
-    const { dashboard, getElement, getFetchRequests } = loadDashboardTestHarness({}, {
-      lang: 'en',
-      fetchMap: {
-        '/api/config': { ok: true },
-        [`/api/provider-health?projectPath=${encodeURIComponent(projectPath)}`]: {
-          health: {
-            level: 'ok',
-            code: 'ok',
-            message: 'All providers are healthy',
-            checkedAt: '2026-04-10T00:00:00.000Z',
-            results: [],
-          },
+
+    getElement('mainPanel');
+    dashboard.state.selectedMainTab = 'config';
+    dashboard.state.selectedProjectId = projectPath;
+    dashboard.state.configByProject = {
+      [projectPath]: {
+        autoOptimize: true,
+        userConfirm: false,
+        runtimeSync: true,
+        llmSafety: {
+          enabled: true,
+          windowMs: 60000,
+          maxRequestsPerWindow: 12,
+          maxConcurrentRequests: 2,
+          maxEstimatedTokensPerWindow: 48000,
+        },
+        promptOverrides: {
+          skillCallAnalyzer: '',
+          decisionExplainer: '',
+          readinessProbe: '',
+        },
+        defaultProvider: 'deepseek',
+        logLevel: 'info',
+        providers: [],
+      },
+    };
+    dashboard.state.projectData = {
+      [projectPath]: {
+        daemon: {},
+        skills: [],
+        traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
+        recentTraces: [],
+        decisionEvents: [],
+        agentUsage: {
+          callCount: 0,
+          promptTokens: 0,
+          completionTokens: 0,
+          totalTokens: 0,
+          durationMsTotal: 0,
+          avgDurationMs: 0,
+          lastCallAt: null,
+          byModel: {},
+          byScope: {},
+          bySkill: {},
         },
       },
-    });
+    };
+
+    dashboard.renderMainPanel(projectPath);
+    const html = getElement('mainPanel').innerHTML;
+    expect(html).toContain('你是 Ornn 的技能调用窗口分析器。');
+    expect(html).toContain('你是 Ornn 的决策解释器。');
+    expect(html).toContain('你是 Ornn 的 readiness probe 分析器。');
+  });
+
+  it('includes prompt override edits when saving config', async () => {
+    const projectPath = '/tmp/ornn-project';
+    const { dashboard, getElement, getFetchRequests } = loadDashboardTestHarness(
+      {},
+      {
+        lang: 'en',
+        fetchMap: {
+          '/api/config': { ok: true },
+          [`/api/provider-health?projectPath=${encodeURIComponent(projectPath)}`]: {
+            health: {
+              level: 'ok',
+              code: 'ok',
+              message: 'All providers are healthy',
+              checkedAt: '2026-04-10T00:00:00.000Z',
+              results: [],
+            },
+          },
+        },
+      }
+    );
 
     dashboard.state.selectedProjectId = projectPath;
     dashboard.state.selectedMainTab = 'config';
@@ -2819,4 +3372,70 @@ describe('dashboard ui recovery', () => {
     });
   });
 
+  it('keeps prompt overrides empty when saving untouched built-in prompt previews', async () => {
+    const projectPath = '/tmp/ornn-project';
+    const { dashboard, getElement, getFetchRequests } = loadDashboardTestHarness(
+      {},
+      {
+        lang: 'en',
+        fetchMap: {
+          '/api/config': { ok: true },
+          [`/api/provider-health?projectPath=${encodeURIComponent(projectPath)}`]: {
+            health: {
+              level: 'ok',
+              code: 'ok',
+              message: 'All providers are healthy',
+              checkedAt: '2026-04-10T00:00:00.000Z',
+              results: [],
+            },
+          },
+        },
+      }
+    );
+
+    dashboard.state.selectedProjectId = projectPath;
+    dashboard.state.selectedMainTab = 'config';
+    dashboard.state.configByProject = {
+      [projectPath]: {
+        autoOptimize: true,
+        userConfirm: false,
+        runtimeSync: true,
+        llmSafety: {
+          enabled: true,
+          windowMs: 60000,
+          maxRequestsPerWindow: 12,
+          maxConcurrentRequests: 2,
+          maxEstimatedTokensPerWindow: 48000,
+        },
+        promptOverrides: {
+          skillCallAnalyzer: '',
+          decisionExplainer: '',
+          readinessProbe: '',
+        },
+        defaultProvider: '',
+        logLevel: 'info',
+        providers: [],
+      },
+    };
+
+    getElement('cfg_llm_safety_enabled').checked = true;
+    getElement('cfg_llm_safety_window_ms').value = '60000';
+    getElement('cfg_llm_safety_max_requests').value = '12';
+    getElement('cfg_llm_safety_max_concurrent').value = '2';
+    getElement('cfg_llm_safety_max_tokens').value = '48000';
+
+    await dashboard.saveProjectConfig();
+
+    const configRequest = getFetchRequests().find((entry) => entry.url === '/api/config');
+    expect(configRequest).toBeTruthy();
+    expect(JSON.parse(String(configRequest?.init?.body))).toMatchObject({
+      config: {
+        promptOverrides: {
+          skillCallAnalyzer: '',
+          decisionExplainer: '',
+          readinessProbe: '',
+        },
+      },
+    });
+  });
 });

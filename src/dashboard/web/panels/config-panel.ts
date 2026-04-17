@@ -3,6 +3,15 @@ type DashboardConfigPanelDeps = {
   t: (key: string) => string;
 };
 
+declare const currentLang: string;
+declare const DEFAULT_DASHBOARD_SYSTEM_PROMPTS: Record<string, DashboardSystemPromptDefaults>;
+
+type DashboardSystemPromptDefaults = {
+  skillCallAnalyzer: string;
+  decisionExplainer: string;
+  readinessProbe: string;
+};
+
 type DashboardConfigPanelInput = {
   deps: DashboardConfigPanelDeps;
   connectivityHtml: string;
@@ -26,8 +35,56 @@ type DashboardConfigPanelInput = {
   saveHint: string;
 };
 
+function getRuntimePromptDefaults(): DashboardSystemPromptDefaults {
+  const lang = typeof currentLang !== 'undefined' && currentLang === 'zh' ? 'zh' : 'en';
+  const defaultsByLang =
+    typeof DEFAULT_DASHBOARD_SYSTEM_PROMPTS !== 'undefined' ? DEFAULT_DASHBOARD_SYSTEM_PROMPTS : {};
+
+  return (
+    defaultsByLang[lang] ||
+    defaultsByLang.en || {
+      skillCallAnalyzer: '',
+      decisionExplainer: '',
+      readinessProbe: '',
+    }
+  );
+}
+
+function renderPromptEditor(
+  input: DashboardConfigPanelInput,
+  options: {
+    label: string;
+    fieldId: string;
+    rows: number;
+    placeholder: string;
+    defaultPrompt: string;
+    overrideValue: string;
+  }
+): string {
+  const { deps } = input;
+
+  return `
+    <label>
+      <div class="config-label">${options.label}</div>
+      <div class="config-help" style="margin-top:6px">${deps.t('configPromptBuiltInLabel')}</div>
+      <pre class="config-prompt-preview">${deps.escHtml(options.defaultPrompt)}</pre>
+      <div class="config-help" style="margin-top:8px">${deps.t('configPromptProjectOverrideLabel')}</div>
+      <textarea id="${options.fieldId}" class="config-textarea" rows="${options.rows}" placeholder="${deps.escHtml(options.placeholder)}" oninput="scheduleProjectConfigSave(500)">${deps.escHtml(options.overrideValue)}</textarea>
+    </label>
+  `;
+}
+
 export function renderDashboardConfigPanel(input: DashboardConfigPanelInput): string {
   const { deps } = input;
+  const promptDefaults = getRuntimePromptDefaults();
+  const runtimeLang = typeof currentLang !== 'undefined' ? currentLang || 'en' : 'en';
+
+  console.debug('[dashboard] config prompt defaults ready', {
+    lang: runtimeLang,
+    skillCallAnalyzerChars: promptDefaults.skillCallAnalyzer.length,
+    decisionExplainerChars: promptDefaults.decisionExplainer.length,
+    readinessProbeChars: promptDefaults.readinessProbe.length,
+  });
 
   return `
     ${input.providerCatalogLoading ? `<div class="config-help" style="margin-bottom:8px">${deps.t('configCatalogLoading')}</div>` : ''}
@@ -76,18 +133,30 @@ export function renderDashboardConfigPanel(input: DashboardConfigPanelInput): st
       <label class="config-label">${deps.t('configPromptOverridesLabel')}</label>
       <div class="config-help">${deps.t('configPromptOverridesHelp')}</div>
       <div style="display:grid;gap:10px;margin-top:8px">
-        <label>
-          <div class="config-label">${deps.t('configPromptSkillCallAnalyzerLabel')}</div>
-          <textarea id="cfg_prompt_skill_call_analyzer" class="config-textarea" rows="5" placeholder="${deps.escHtml(deps.t('configPromptSkillCallAnalyzerPlaceholder'))}" oninput="scheduleProjectConfigSave(500)">${deps.escHtml(input.promptOverrides.skillCallAnalyzer)}</textarea>
-        </label>
-        <label>
-          <div class="config-label">${deps.t('configPromptDecisionExplainerLabel')}</div>
-          <textarea id="cfg_prompt_decision_explainer" class="config-textarea" rows="4" placeholder="${deps.escHtml(deps.t('configPromptDecisionExplainerPlaceholder'))}" oninput="scheduleProjectConfigSave(500)">${deps.escHtml(input.promptOverrides.decisionExplainer)}</textarea>
-        </label>
-        <label>
-          <div class="config-label">${deps.t('configPromptReadinessProbeLabel')}</div>
-          <textarea id="cfg_prompt_readiness_probe" class="config-textarea" rows="4" placeholder="${deps.escHtml(deps.t('configPromptReadinessProbePlaceholder'))}" oninput="scheduleProjectConfigSave(500)">${deps.escHtml(input.promptOverrides.readinessProbe)}</textarea>
-        </label>
+        ${renderPromptEditor(input, {
+          label: deps.t('configPromptSkillCallAnalyzerLabel'),
+          fieldId: 'cfg_prompt_skill_call_analyzer',
+          rows: 5,
+          placeholder: deps.t('configPromptSkillCallAnalyzerPlaceholder'),
+          defaultPrompt: promptDefaults.skillCallAnalyzer,
+          overrideValue: input.promptOverrides.skillCallAnalyzer,
+        })}
+        ${renderPromptEditor(input, {
+          label: deps.t('configPromptDecisionExplainerLabel'),
+          fieldId: 'cfg_prompt_decision_explainer',
+          rows: 4,
+          placeholder: deps.t('configPromptDecisionExplainerPlaceholder'),
+          defaultPrompt: promptDefaults.decisionExplainer,
+          overrideValue: input.promptOverrides.decisionExplainer,
+        })}
+        ${renderPromptEditor(input, {
+          label: deps.t('configPromptReadinessProbeLabel'),
+          fieldId: 'cfg_prompt_readiness_probe',
+          rows: 4,
+          placeholder: deps.t('configPromptReadinessProbePlaceholder'),
+          defaultPrompt: promptDefaults.readinessProbe,
+          overrideValue: input.promptOverrides.readinessProbe,
+        })}
       </div>
     </div>
     <div class="config-actions">
@@ -97,5 +166,9 @@ export function renderDashboardConfigPanel(input: DashboardConfigPanelInput): st
 }
 
 export function renderDashboardConfigPanelSource(): string {
-  return renderDashboardConfigPanel.toString();
+  return [
+    getRuntimePromptDefaults.toString(),
+    renderPromptEditor.toString(),
+    renderDashboardConfigPanel.toString(),
+  ].join('\n\n');
 }

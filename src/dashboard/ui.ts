@@ -31,10 +31,15 @@ import { renderDashboardSkillCardSource } from './web/render/skill-card.js';
 import { renderDashboardStateBadgeSource } from './web/render/state-badge.js';
 import { renderDashboardTraceBarsSource } from './web/render/trace-bars.js';
 import { renderDashboardStateSource } from './web/state.js';
+import { getDashboardSystemPromptDefaults } from '../core/prompt-defaults.js';
 
 export function getDashboardHtml(_port: number, lang: Language = 'en', buildId = 'dev'): string {
   const t = getI18n(lang);
   const shortBuildId = buildId.slice(-8);
+  const dashboardPromptDefaults = {
+    en: getDashboardSystemPromptDefaults('en'),
+    zh: getDashboardSystemPromptDefaults('zh'),
+  };
   const dashboardActivityBusinessSource = renderDashboardActivityBusinessSource();
   const dashboardRuntimeSource = renderDashboardRuntimeSource();
   const dashboardSidebarSource = renderDashboardSidebarSource();
@@ -66,6 +71,7 @@ const I18N = ${JSON.stringify({ en: getI18n('en'), zh: getI18n('zh') })};
 let currentLang = '${lang}';
 const DASHBOARD_BUILD_ID = '${buildId}';
 const DASHBOARD_BUILD_SHORT = DASHBOARD_BUILD_ID.slice(-8);
+const DEFAULT_DASHBOARD_SYSTEM_PROMPTS = ${JSON.stringify(dashboardPromptDefaults)};
 ${dashboardStateSource}
 ${dashboardActivityPanelSource}
 ${dashboardConfigPanelSource}
