@@ -29,7 +29,7 @@
   4. `[ ]` 抽出 `web/render/*`
 - [ ] P1 `src/config/manager.ts`
   当前顺序：
-  1. `[ ]` 抽出 `dashboard-config`
+  1. `[x]` 抽出 `dashboard-config`
   2. `[x]` 抽出 `env-file`
   3. `[ ]` 抽出 `provider-connectivity`
   4. `[x]` 抽出 `prompt-overrides`
@@ -66,7 +66,7 @@
   5. `[ ]` 保留 `ShadowManager` 作为 facade
 
 当前进行中：
-- [ ] `src/config/manager.ts` 拆分中（下一项：`dashboard-config`）
+- [ ] `src/config/manager.ts` 拆分中（下一项：`provider-connectivity`）
 
 ## 优先级总览
 
