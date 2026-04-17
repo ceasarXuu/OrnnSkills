@@ -22,7 +22,6 @@ import {
   readGlobalLogs,
   readLogsSince,
   createGlobalLogCursor,
-  type LogCursor,
 } from './data-reader.js';
 import { getDashboardHtml } from './ui.js';
 import type { Language } from './i18n.js';
@@ -39,20 +38,16 @@ import { handleProjectManagementRoutes } from './routes/project-management-route
 import { handleProjectReadRoutes } from './routes/project-read-routes.js';
 import { handleProjectSkillRoutes } from './routes/project-skill-routes.js';
 import { handleProjectVersionRoutes } from './routes/project-version-routes.js';
+import { createDashboardSseHub } from './sse/hub.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface ProjectWithStatus extends RegisteredProject {
+interface ProjectWithStatus extends Omit<RegisteredProject, 'monitoringState' | 'pausedAt'> {
+  monitoringState: 'active' | 'paused';
+  pausedAt: string | null;
   isRunning: boolean;
   isPaused: boolean;
   skillCount: number;
-}
-
-interface SseClient {
-  res: ServerResponse;
-  id: string;
-  projectSnapshotVersions: Map<string, string>;
-  projectsSignature: string;
 }
 
 interface DashboardClientErrorEvent {
@@ -81,12 +76,17 @@ const logger = createChildLogger('dashboard');
 
 export function createDashboardServer(port: number, defaultLang: Language = 'en') {
   let currentLang: Language = defaultLang;
-  const clients: Set<SseClient> = new Set();
   let sseInterval: ReturnType<typeof setInterval> | null = null;
-  let logCursor: LogCursor = { path: null, offset: 0 };
   const buildId = `${Date.now()}`;
   const startedAt = new Date().toISOString();
   const clientErrors: DashboardClientErrorEvent[] = [];
+  const sseHub = createDashboardSseHub({
+    createGlobalLogCursor,
+    readGlobalLogs,
+    readLogsSince,
+    readProjectSnapshotVersion,
+    logger,
+  });
 
   // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -185,35 +185,6 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
     });
   }
 
-  function buildProjectsSignature(projects: ProjectWithStatus[]): string {
-    return JSON.stringify(
-      projects.map((project) => ({
-        path: project.path,
-        name: project.name,
-        isRunning: project.isRunning,
-        monitoringState: project.monitoringState,
-        pausedAt: project.pausedAt ?? null,
-        skillCount: project.skillCount,
-      }))
-    );
-  }
-
-  function seedClientSnapshotVersions(client: SseClient, projects: ProjectWithStatus[]): void {
-    const livePaths = new Set(projects.map((project) => project.path));
-    for (const existingPath of Array.from(client.projectSnapshotVersions.keys())) {
-      if (!livePaths.has(existingPath)) {
-        client.projectSnapshotVersions.delete(existingPath);
-      }
-    }
-    for (const project of projects) {
-      try {
-        client.projectSnapshotVersions.set(project.path, readProjectSnapshotVersion(project.path));
-      } catch {
-        client.projectSnapshotVersions.delete(project.path);
-      }
-    }
-  }
-
   async function getProviderHealthSummary(projectPath?: string): Promise<ProviderHealthSummary> {
     const checkedAt = new Date().toISOString();
     const config = await readDashboardConfig(projectPath);
@@ -275,71 +246,6 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
       daemonStarted: monitoring.daemonStarted,
       daemonRunning: monitoring.daemonRunning,
     };
-  }
-
-  // ── SSE Push Loop ────────────────────────────────────────────────────────
-
-  function sendSseEvent(client: SseClient, event: string, data: unknown) {
-    try {
-      client.res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-    } catch {
-      clients.delete(client);
-    }
-  }
-
-  function broadcastUpdate() {
-    if (clients.size === 0) return;
-
-    const projects = getProjectsWithStatus();
-    const projectPaths = new Set(projects.map((project) => project.path));
-    const projectsSignature = buildProjectsSignature(projects);
-
-    const { lines: newLogs, cursor } = readLogsSince(logCursor);
-    logCursor = cursor;
-
-    for (const client of clients) {
-      for (const existingPath of Array.from(client.projectSnapshotVersions.keys())) {
-        if (!projectPaths.has(existingPath)) {
-          client.projectSnapshotVersions.delete(existingPath);
-        }
-      }
-
-      const changedProjects: string[] = [];
-      for (const project of projects) {
-        try {
-          const version = readProjectSnapshotVersion(project.path);
-          if (client.projectSnapshotVersions.get(project.path) === version) {
-            continue;
-          }
-          client.projectSnapshotVersions.set(project.path, version);
-          changedProjects.push(project.path);
-        } catch {
-          client.projectSnapshotVersions.delete(project.path);
-        }
-      }
-
-      const projectsChanged = client.projectsSignature !== projectsSignature;
-      if (!projectsChanged && changedProjects.length === 0 && newLogs.length === 0) {
-        continue;
-      }
-      client.projectsSignature = projectsSignature;
-
-      const payload = {
-        ...(projectsChanged ? { projects } : {}),
-        ...(changedProjects.length > 0 ? { changedProjects } : {}),
-        ...(newLogs.length > 0 ? { logs: newLogs } : {}),
-      };
-      const payloadBytes = Buffer.byteLength(JSON.stringify(payload), 'utf-8');
-      if (payloadBytes > 128 * 1024) {
-        logger.warn('Dashboard SSE payload is large', {
-          bytes: payloadBytes,
-          clients: clients.size,
-          projectCount: projects.length,
-          clientId: client.id,
-        });
-      }
-      sendSseEvent(client, 'update', payload);
-    }
   }
 
   // ── Request Router ────────────────────────────────────────────────────────
@@ -447,28 +353,8 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
 
       // ── SSE Stream ──
       if (path === '/events' && method === 'GET') {
-        res.writeHead(200, {
-          'Content-Type': 'text/event-stream',
-          'Cache-Control': 'no-cache',
-          Connection: 'keep-alive',
-          'Access-Control-Allow-Origin': '*',
-        });
-        res.write('retry: 3000\n\n');
-
-        const projects = getProjectsWithStatus();
-        const client: SseClient = {
-          res,
-          id: Math.random().toString(36).slice(2),
-          projectSnapshotVersions: new Map<string, string>(),
-          projectsSignature: buildProjectsSignature(projects),
-        };
-        seedClientSnapshotVersions(client, projects);
-        clients.add(client);
-
-        const initialLogs = readGlobalLogs(100);
-        sendSseEvent(client, 'update', { projects, logs: initialLogs });
-
-        req.on('close', () => clients.delete(client));
+        const clientId = sseHub.connectClient(res, getProjectsWithStatus());
+        req.on('close', () => sseHub.disconnectClient(clientId));
         return;
       }
 
@@ -596,8 +482,7 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
       return Promise.resolve(); // Already running
     }
 
-    // Initialize the log cursor at the latest active rotated file.
-    logCursor = createGlobalLogCursor();
+    sseHub.initializeCursor();
 
     return new Promise((resolve, reject) => {
       const onError = (err: Error) => {
@@ -607,7 +492,7 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
       server.once('error', onError);
       server.listen(port, '127.0.0.1', () => {
         server.removeListener('error', onError);
-        sseInterval = setInterval(broadcastUpdate, 3000);
+        sseInterval = setInterval(() => sseHub.broadcast(getProjectsWithStatus()), 3000);
         resolve();
       });
     });
@@ -618,14 +503,7 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
       clearInterval(sseInterval);
       sseInterval = null;
     }
-    for (const client of clients) {
-      try {
-        client.res.end();
-      } catch {
-        // ignore
-      }
-    }
-    clients.clear();
+    sseHub.closeAllClients();
     return new Promise((resolve) => server.close(() => resolve()));
   }
 

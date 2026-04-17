@@ -18,7 +18,7 @@
   4. `[x]` 抽出 `routes/project-skill-routes`
   5. `[x]` 抽出 `routes/project-version-routes`
   6. `[x]` 收口 `server.ts` 剩余路由装配
-  2. `[ ]` 抽出 `sse/hub`
+  2. `[x]` 抽出 `sse/hub`
   3. `[ ]` 抽出 `services/project-onboarding`
   4. `[ ]` 抽出 `services/skill-version`
 - [ ] P1 `src/dashboard/ui.ts`
@@ -66,7 +66,7 @@
   5. `[ ]` 保留 `ShadowManager` 作为 facade
 
 当前进行中：
-- [ ] `src/dashboard/server.ts` 第 2 步：抽出 `sse/hub`
+- [ ] `src/dashboard/server.ts` 第 3 步：抽出 `services/project-onboarding`
 
 ## 优先级总览
 
