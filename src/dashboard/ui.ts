@@ -8,19 +8,23 @@
 
 import { getI18n, type Language } from './i18n.js';
 import { renderDashboardAppShell } from './web/app-shell.js';
+import { renderDashboardActivityPanelSource } from './web/panels/activity-panel.js';
 import { renderDashboardConfigPanelSource } from './web/panels/config-panel.js';
 import { renderDashboardCostPanelSource } from './web/panels/cost-panel.js';
 import { renderDashboardLogsPanelSource } from './web/panels/logs-panel.js';
 import { renderDashboardOverviewPanelSource } from './web/panels/overview-panel.js';
+import { renderDashboardSkillsPanelSource } from './web/panels/skills-panel.js';
 import { renderDashboardStateSource } from './web/state.js';
 
 export function getDashboardHtml(_port: number, lang: Language = 'en', buildId = 'dev'): string {
   const t = getI18n(lang);
   const shortBuildId = buildId.slice(-8);
+  const dashboardActivityPanelSource = renderDashboardActivityPanelSource();
   const dashboardConfigPanelSource = renderDashboardConfigPanelSource();
   const dashboardCostPanelSource = renderDashboardCostPanelSource();
   const dashboardLogsPanelSource = renderDashboardLogsPanelSource();
   const dashboardOverviewPanelSource = renderDashboardOverviewPanelSource();
+  const dashboardSkillsPanelSource = renderDashboardSkillsPanelSource();
   const dashboardStateSource = renderDashboardStateSource();
 
   const styleCss = /* css */ `
@@ -947,10 +951,12 @@ let currentLang = '${lang}';
 const DASHBOARD_BUILD_ID = '${buildId}';
 const DASHBOARD_BUILD_SHORT = DASHBOARD_BUILD_ID.slice(-8);
 ${dashboardStateSource}
+${dashboardActivityPanelSource}
 ${dashboardConfigPanelSource}
 ${dashboardCostPanelSource}
 ${dashboardLogsPanelSource}
 ${dashboardOverviewPanelSource}
+${dashboardSkillsPanelSource}
 
 function t(key) {
   return (I18N[currentLang] && I18N[currentLang][key]) || (I18N.en && I18N.en[key]) || key;
@@ -3100,6 +3106,7 @@ function renderMainPanel(projectPath) {
   const recentTraces = pd.recentTraces || [];
   const decisionEvents = pd.decisionEvents || [];
   const decisionSummary = summarizeDecisionEvents(decisionEvents);
+  const filteredSkills = getFilteredAndSortedSkills(skills);
   const agentUsage = pd.agentUsage || {
     callCount: 0,
     promptTokens: 0,
@@ -3146,70 +3153,36 @@ function renderMainPanel(projectPath) {
       })
       : ''}
 
-    \${state.selectedMainTab === 'skills' ? \`
-    <div class="card">
-      <div class="card-header">
-        <span>\${t('skillsTitle')}</span>
-        <div style="display:flex;align-items:center;gap:12px;">
-          <div class="runtime-tabs">
-            <button class="runtime-tab \${state.selectedRuntimeTab === 'all' ? 'active' : ''}" onclick="selectRuntimeTab('all')">\${t('skillsRuntimeAll')}</button>
-            <button class="runtime-tab tab-codex \${state.selectedRuntimeTab === 'codex' ? 'active' : ''}" onclick="selectRuntimeTab('codex')">Codex</button>
-            <button class="runtime-tab tab-claude \${state.selectedRuntimeTab === 'claude' ? 'active' : ''}" onclick="selectRuntimeTab('claude')">Claude</button>
-            <button class="runtime-tab tab-opencode \${state.selectedRuntimeTab === 'opencode' ? 'active' : ''}" onclick="selectRuntimeTab('opencode')">OpenCode</button>
-          </div>
-          <span style="color:var(--muted)" id="skillsCount">\${getFilteredAndSortedSkills(skills).length} \${t('skillsCount')}</span>
-        </div>
-      </div>
-      <div class="card-body">
-        <!-- Search and Sort Controls -->
-        <div class="skills-controls">
-          <div class="search-box">
-            <span class="search-icon">🔍</span>
-            <input type="text" class="search-input" id="skillSearchInput" placeholder="\${t('skillsSearchPlaceholder')}" value="\${state.searchQuery}" oninput="handleSearch(this.value)" />
-          </div>
-          <div class="sort-controls">
-            <span class="sort-label">\${t('skillsSortLabel')}</span>
-            <button class="sort-btn \${state.sortBy === 'name' ? 'active' : ''}" onclick="toggleSort('name')">
-              \${t('skillsSortName')} <span class="arrow">\${state.sortBy === 'name' ? (state.sortOrder === 'asc' ? '↑' : '↓') : ''}</span>
-            </button>
-            <button class="sort-btn \${state.sortBy === 'updated' ? 'active' : ''}" onclick="toggleSort('updated')">
-              \${t('skillsSortUpdated')} <span class="arrow">\${state.sortBy === 'updated' ? (state.sortOrder === 'asc' ? '↑' : '↓') : ''}</span>
-            </button>
-          </div>
-        </div>
-        
-        <div id="skillsListContainer">
-          \${getFilteredAndSortedSkills(skills).length === 0
-            ? renderSkillsEmptyState()
-            : '<div class="skills-list">' + getFilteredAndSortedSkills(skills).map(s => renderSkillCard(s, projectPath)).join('') + '</div>'
-          }
-        </div>
-      </div>
-    </div>
-    \` : ''}
+    \${state.selectedMainTab === 'skills'
+      ? renderDashboardSkillsPanel({
+        deps: {
+          renderSkillCard,
+          renderSkillsEmptyState,
+          t,
+        },
+        filteredSkills,
+        projectPath,
+        searchQuery: state.searchQuery,
+        selectedRuntimeTab: state.selectedRuntimeTab,
+        sortBy: state.sortBy,
+        sortOrder: state.sortOrder,
+      })
+      : ''}
 
-    \${state.selectedMainTab === 'activity' ? \`
-    <div class="card">
-      <div class="card-header"><span>\${t('traceTitle')}</span><span style="color:var(--muted)">\${traceStats.total} \${t('traceTotal')}</span></div>
-      <div class="card-body">
-        <div class="activity-controls">
-          <div class="activity-left">
-            <button class="activity-tab \${state.activityLayer === 'business' ? 'active' : ''}" onclick="setActivityLayer('business')">\${t('activityLayerBusiness')}</button>
-            <button class="activity-tab \${state.activityLayer === 'raw' ? 'active' : ''}" onclick="setActivityLayer('raw')">\${t('activityLayerRaw')}</button>
-          </div>
-        </div>
-        \${state.activityLayer === 'business' ? \`
-          \${renderBusinessEvents(projectPath)}
-        \` : traceStats.total > 0 ? \`
-          \${renderTraceBars(t('traceRuntime'), traceStats.byRuntime, ['codex','claude','opencode'])}
-          \${renderTraceBars(t('traceStatus'), traceStats.byStatus, ['success','failure','retry','interrupted'])}
-          <div style="margin-top:10px" class="trace-table-wrap">
-            \${renderRecentTraces(recentTraces.slice(0,50))}
-          </div>
-        \` : \`<div class="empty-state">\${t('activityEmpty')}</div>\`}
-      </div>
-    </div>
-    \` : ''}
+    \${state.selectedMainTab === 'activity'
+      ? renderDashboardActivityPanel({
+        activityLayer: state.activityLayer,
+        deps: {
+          renderBusinessEvents,
+          renderRecentTraces,
+          renderTraceBars,
+          t,
+        },
+        projectPath,
+        recentTraces,
+        traceStats,
+      })
+      : ''}
 
     \${state.selectedMainTab === 'cost' ? \`
     <div class="card">
