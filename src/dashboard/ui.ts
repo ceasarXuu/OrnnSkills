@@ -14,6 +14,7 @@ import { renderDashboardCostPanelSource } from './web/panels/cost-panel.js';
 import { renderDashboardLogsPanelSource } from './web/panels/logs-panel.js';
 import { renderDashboardOverviewPanelSource } from './web/panels/overview-panel.js';
 import { renderDashboardSkillsPanelSource } from './web/panels/skills-panel.js';
+import { renderDashboardMetricRowsSource } from './web/render/metric-rows.js';
 import { renderDashboardSkillCardSource } from './web/render/skill-card.js';
 import { renderDashboardStateBadgeSource } from './web/render/state-badge.js';
 import { renderDashboardTraceBarsSource } from './web/render/trace-bars.js';
@@ -27,6 +28,7 @@ export function getDashboardHtml(_port: number, lang: Language = 'en', buildId =
   const dashboardCostPanelSource = renderDashboardCostPanelSource();
   const dashboardLogsPanelSource = renderDashboardLogsPanelSource();
   const dashboardOverviewPanelSource = renderDashboardOverviewPanelSource();
+  const dashboardMetricRowsSource = renderDashboardMetricRowsSource();
   const dashboardSkillCardSource = renderDashboardSkillCardSource();
   const dashboardStateBadgeSource = renderDashboardStateBadgeSource();
   const dashboardSkillsPanelSource = renderDashboardSkillsPanelSource();
@@ -962,6 +964,7 @@ ${dashboardConfigPanelSource}
 ${dashboardCostPanelSource}
 ${dashboardLogsPanelSource}
 ${dashboardOverviewPanelSource}
+${dashboardMetricRowsSource}
 ${dashboardSkillCardSource}
 ${dashboardStateBadgeSource}
 ${dashboardSkillsPanelSource}
@@ -3054,26 +3057,15 @@ function summarizeDecisionEvents(events) {
 }
 
 function renderMetricRows(title, rows, emptyText) {
-  const entries = Object.entries(rows || {})
-    .sort((a, b) => Number(b[1] || 0) - Number(a[1] || 0));
-
-  const body = entries.length > 0
-    ? entries.map(([label, count]) =>
-      '<div class="scope-item">' +
-        '<div class="scope-item-top">' +
-          '<div class="scope-item-name">' + escHtml(label) + '</div>' +
-          '<div class="scope-item-value">' + formatCompactNumber(count) + '</div>' +
-        '</div>' +
-      '</div>'
-    ).join('')
-    : '<div class="config-help">' + escHtml(emptyText) + '</div>';
-
-  return '<div class="card">' +
-    '<div class="card-header"><span>' + escHtml(title) + '</span><span style="color:var(--muted)">' + entries.length + '</span></div>' +
-    '<div class="card-body">' +
-      '<div class="scope-list">' + body + '</div>' +
-    '</div>' +
-  '</div>';
+  return renderDashboardMetricRows({
+    title,
+    rows,
+    emptyText,
+    deps: {
+      escHtml,
+      formatCompactNumber,
+    },
+  });
 }
 
 function renderCostPanel(projectPath) {
