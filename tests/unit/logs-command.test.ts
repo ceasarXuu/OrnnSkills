@@ -53,4 +53,45 @@ describe('logs command', () => {
     expect(rendered).toContain('new rotated log line');
     expect(rendered).not.toContain('combined1.log');
   });
+
+  it('keeps scanning older log lines until it finds enough filtered matches', async () => {
+    const fakeHome = join(testRoot, 'sparse-filter-home');
+    const logDir = join(fakeHome, '.ornn', 'logs');
+    mkdirSync(logDir, { recursive: true });
+
+    const lines: string[] = [];
+    for (let index = 0; index < 50; index += 1) {
+      lines.push(
+        `[2026-04-17 00:00:${String(index).padStart(2, '0')}] ERROR [daemon] err-${index}`
+      );
+    }
+    for (let index = 0; index < 3000; index += 1) {
+      lines.push(
+        `[2026-04-17 00:01:${String(index % 60).padStart(2, '0')}] INFO  [daemon] noise-${index}`
+      );
+    }
+    writeFileSync(join(logDir, 'combined.log'), lines.join('\n') + '\n', 'utf-8');
+
+    const originalHome = process.env.HOME;
+    process.env.HOME = fakeHome;
+
+    const output: string[] = [];
+    vi.spyOn(console, 'log').mockImplementation((message?: unknown) => {
+      output.push(String(message ?? ''));
+    });
+
+    try {
+      const command = createLogsCommand();
+      await command.parseAsync(['node', 'logs', '--tail', '50', '--level', 'error', '--raw'], {
+        from: 'user',
+      });
+    } finally {
+      process.env.HOME = originalHome;
+    }
+
+    const rendered = output.join('\n');
+    expect(rendered).toContain('err-0');
+    expect(rendered).toContain('err-49');
+    expect(rendered).not.toContain('No matching log entries.');
+  });
 });

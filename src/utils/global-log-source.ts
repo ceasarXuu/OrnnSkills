@@ -56,15 +56,42 @@ function tailTextFile(filePath: string, maxLines = 200): string[] {
   }
 }
 
+function readTextFileFromOffset(filePath: string, offset: number): string {
+  const fileSize = statSync(filePath).size;
+  const readOffset = Math.max(0, Math.min(offset, fileSize));
+  if (fileSize <= readOffset) return '';
+
+  const readSize = fileSize - readOffset;
+  const fd = openSync(filePath, 'r');
+  try {
+    const buffer = Buffer.alloc(readSize);
+    readSync(fd, buffer, 0, readSize, readOffset);
+    return buffer.toString('utf-8');
+  } finally {
+    closeSync(fd);
+  }
+}
+
 export function parseGlobalLogLine(raw: string): GlobalLogEntry {
-  const match = raw.match(/^\[([^\]]+)\]\s+(\w+)\s+(?:\[([^\]]+)\]\s+)?(.*)$/);
-  if (match) {
+  const newFormatMatch = raw.match(/^\[([^\]]+)\]\s+(\w+)\s+(?:\[([^\]]+)\]\s+)?(.*)$/);
+  if (newFormatMatch) {
     return {
       raw,
-      timestamp: match[1],
-      level: match[2].toUpperCase(),
-      context: match[3] ?? '',
-      message: match[4] ?? raw,
+      timestamp: newFormatMatch[1],
+      level: newFormatMatch[2].toUpperCase(),
+      context: newFormatMatch[3] ?? '',
+      message: newFormatMatch[4] ?? raw,
+    };
+  }
+
+  const oldFormatMatch = raw.match(/^\[([^\]]+)\]\s+(\w+)[:\s]+\s*(.*)$/);
+  if (oldFormatMatch) {
+    return {
+      raw,
+      timestamp: oldFormatMatch[1],
+      level: oldFormatMatch[2].toUpperCase(),
+      context: '',
+      message: oldFormatMatch[3] ?? raw,
     };
   }
 
@@ -110,8 +137,12 @@ function compareRotatingLogPaths(left: string, right: string): number {
   return left.localeCompare(right);
 }
 
+function listSortedRotatingLogPaths(baseLogPath: string): string[] {
+  return listRotatingLogPaths(baseLogPath).sort(compareRotatingLogPaths);
+}
+
 export function getLatestRotatingLogPath(baseLogPath: string): string | null {
-  const candidates = listRotatingLogPaths(baseLogPath).sort(compareRotatingLogPaths);
+  const candidates = listSortedRotatingLogPaths(baseLogPath);
   return candidates.at(-1) ?? null;
 }
 
@@ -137,7 +168,7 @@ export function createRotatingLogCursor(baseLogPath: string): RotatingLogCursor 
 export function readRecentRotatingLogEntries(baseLogPath: string, lastN = 200): GlobalLogEntry[] {
   const chunks: string[][] = [];
   let remaining = lastN;
-  const candidates = listRotatingLogPaths(baseLogPath).sort(compareRotatingLogPaths).reverse();
+  const candidates = listSortedRotatingLogPaths(baseLogPath).reverse();
 
   for (const filePath of candidates) {
     if (remaining <= 0) break;
@@ -157,12 +188,21 @@ export function readRotatingLogEntriesSince(
   baseLogPath: string,
   cursor: number | RotatingLogCursor
 ): { lines: GlobalLogEntry[]; newOffset: number; cursor: RotatingLogCursor } {
-  const latestLogPath = getLatestRotatingLogPath(baseLogPath);
+  const candidates = listSortedRotatingLogPaths(baseLogPath);
   const normalizedCursor: RotatingLogCursor =
     typeof cursor === 'number'
       ? { path: baseLogPath, offset: cursor }
       : cursor;
 
+  if (candidates.length === 0) {
+    return {
+      lines: [],
+      newOffset: normalizedCursor.offset,
+      cursor: { path: null, offset: normalizedCursor.offset },
+    };
+  }
+
+  const latestLogPath = candidates.at(-1) ?? null;
   if (!latestLogPath) {
     return {
       lines: [],
@@ -171,39 +211,41 @@ export function readRotatingLogEntriesSince(
     };
   }
 
-  const fileSize = statSync(latestLogPath).size;
-  let readOffset = normalizedCursor.offset;
-  if (normalizedCursor.path !== latestLogPath || readOffset > fileSize) {
-    readOffset = 0;
+  const cursorIndex = normalizedCursor.path ? candidates.indexOf(normalizedCursor.path) : -1;
+  const startIndex = cursorIndex >= 0 ? cursorIndex : 0;
+  const lines: GlobalLogEntry[] = [];
+
+  for (let index = startIndex; index < candidates.length; index += 1) {
+    const filePath = candidates[index];
+    const fileSize = statSync(filePath).size;
+    let readOffset = 0;
+
+    if (index === startIndex && normalizedCursor.path === filePath) {
+      readOffset = normalizedCursor.offset > fileSize ? 0 : normalizedCursor.offset;
+    }
+
+    if (fileSize <= readOffset) {
+      continue;
+    }
+
+    const content = readTextFileFromOffset(filePath, readOffset);
+    if (!content.trim()) {
+      continue;
+    }
+
+    lines.push(
+      ...content
+        .split('\n')
+        .filter((line) => line.trim())
+        .map(parseGlobalLogLine)
+    );
   }
 
-  if (fileSize <= readOffset) {
-    return {
-      lines: [],
-      newOffset: fileSize,
-      cursor: { path: latestLogPath, offset: fileSize },
-    };
-  }
-
-  const readSize = fileSize - readOffset;
-  const fd = openSync(latestLogPath, 'r');
-  let content: string;
-  try {
-    const buffer = Buffer.alloc(readSize);
-    readSync(fd, buffer, 0, readSize, readOffset);
-    content = buffer.toString('utf-8');
-  } finally {
-    closeSync(fd);
-  }
-
-  const lines = content
-    .split('\n')
-    .filter((line) => line.trim())
-    .map(parseGlobalLogLine);
+  const latestFileSize = statSync(latestLogPath).size;
 
   return {
     lines,
-    newOffset: fileSize,
-    cursor: { path: latestLogPath, offset: fileSize },
+    newOffset: latestFileSize,
+    cursor: { path: latestLogPath, offset: latestFileSize },
   };
 }

@@ -135,6 +135,22 @@ function filterEntries(entries: ParsedLogEntry[], options: LogOptions): ParsedLo
   return parsed.slice(-maxLines);
 }
 
+function readEntriesForStream(stream: LogStream, options: LogOptions): ParsedLogEntry[] {
+  const maxLines = parseInt(options.tail, 10) || 100;
+  let scanLimit = Math.max(maxLines * 20, 2000);
+
+  while (true) {
+    const scannedEntries = readRecentRotatingLogEntries(stream.basePath, scanLimit);
+    const filteredEntries = filterEntries(scannedEntries, options);
+
+    if (filteredEntries.length >= maxLines || scannedEntries.length < scanLimit) {
+      return filteredEntries;
+    }
+
+    scanLimit *= 2;
+  }
+}
+
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return bytes + 'B';
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + 'KB';
@@ -255,15 +271,9 @@ export function createLogsCommand(): Command {
           return;
         }
 
-        const maxLines = parseInt(options.tail, 10) || 100;
-        const scanLimit = Math.max(maxLines * 20, 2000);
-
         for (const stream of logStreams) {
           try {
-            const entries = filterEntries(
-              readRecentRotatingLogEntries(stream.basePath, scanLimit),
-              options
-            );
+            const entries = readEntriesForStream(stream, options);
 
             if (entries.length === 0) {
               log(`\n📋 ${stream.displayName}`);

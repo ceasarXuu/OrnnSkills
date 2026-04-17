@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   createRotatingLogCursor,
+  parseGlobalLogLine,
   readRecentRotatingLogEntries,
   readRotatingLogEntriesSince,
 } from '../../src/utils/global-log-source.js';
@@ -39,6 +40,14 @@ describe('global log source', () => {
     expect(lines.at(-1)?.message).toContain('new rotated log line');
   });
 
+  it('parses old-format log lines without losing their original level', () => {
+    const parsed = parseGlobalLogLine('[2026-04-17 05:00:00] ERROR: old-format failure');
+
+    expect(parsed.level).toBe('ERROR');
+    expect(parsed.timestamp).toBe('2026-04-17 05:00:00');
+    expect(parsed.message).toBe('old-format failure');
+  });
+
   it('continues reading from the newest rotated file after the base file has rolled over', async () => {
     const logDir = join(testRoot, '.ornn', 'logs');
     mkdirSync(logDir, { recursive: true });
@@ -66,5 +75,40 @@ describe('global log source', () => {
     expect(result.lines[0]?.message).toContain('new rotated log line');
     expect(result.cursor.path).toContain('combined1.log');
     expect(result.newOffset).toBeGreaterThan(0);
+  });
+
+  it('reads every rotated segment created between polling intervals', async () => {
+    const logDir = join(testRoot, '.ornn', 'logs');
+    mkdirSync(logDir, { recursive: true });
+
+    const basePath = join(logDir, 'combined.log');
+    writeFileSync(
+      basePath,
+      '[2026-04-17 03:00:01] INFO  [daemon] before rotation\n',
+      'utf-8'
+    );
+
+    const initialCursor = createRotatingLogCursor(basePath);
+
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    writeFileSync(
+      join(logDir, 'combined1.log'),
+      '[2026-04-17 05:09:07] INFO  [daemon] first rotated line\n',
+      'utf-8'
+    );
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    writeFileSync(
+      join(logDir, 'combined2.log'),
+      '[2026-04-17 05:09:08] INFO  [daemon] second rotated line\n',
+      'utf-8'
+    );
+
+    const result = readRotatingLogEntriesSince(basePath, initialCursor);
+
+    expect(result.lines.map((line) => line.message)).toEqual([
+      'first rotated line',
+      'second rotated line',
+    ]);
+    expect(result.cursor.path).toContain('combined2.log');
   });
 });
