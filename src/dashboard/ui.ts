@@ -15,6 +15,7 @@ import { renderDashboardLogsPanelSource } from './web/panels/logs-panel.js';
 import { renderDashboardOverviewPanelSource } from './web/panels/overview-panel.js';
 import { renderDashboardSkillsPanelSource } from './web/panels/skills-panel.js';
 import { renderDashboardSkillCardSource } from './web/render/skill-card.js';
+import { renderDashboardTraceBarsSource } from './web/render/trace-bars.js';
 import { renderDashboardStateSource } from './web/state.js';
 
 export function getDashboardHtml(_port: number, lang: Language = 'en', buildId = 'dev'): string {
@@ -28,6 +29,7 @@ export function getDashboardHtml(_port: number, lang: Language = 'en', buildId =
   const dashboardSkillCardSource = renderDashboardSkillCardSource();
   const dashboardSkillsPanelSource = renderDashboardSkillsPanelSource();
   const dashboardStateSource = renderDashboardStateSource();
+  const dashboardTraceBarsSource = renderDashboardTraceBarsSource();
 
   const styleCss = /* css */ `
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -960,6 +962,7 @@ ${dashboardLogsPanelSource}
 ${dashboardOverviewPanelSource}
 ${dashboardSkillCardSource}
 ${dashboardSkillsPanelSource}
+${dashboardTraceBarsSource}
 
 function t(key) {
   return (I18N[currentLang] && I18N[currentLang][key]) || (I18N.en && I18N.en[key]) || key;
@@ -4009,19 +4012,7 @@ function renderSkillCard(skill, projectPath) {
 }
 
 function renderTraceBars(label, data, keys) {
-  const total = Object.values(data).reduce((a, b) => a + b, 0);
-  if (total === 0) return '';
-  return \`<div style="margin-bottom:10px">
-    <div style="font-size:10px;color:var(--muted);margin-bottom:6px">\${label}</div>
-    \${keys.filter(k => data[k]).map(k => {
-      const pct = Math.round((data[k] / total) * 100);
-      return \`<div class="bar-row">
-        <span class="bar-label">\${k}</span>
-        <div class="bar-track"><div class="bar-fill bar-\${k}" style="width:\${pct}%"></div></div>
-        <span class="bar-count">\${data[k]}</span>
-      </div>\`;
-    }).join('')}
-  </div>\`;
+  return renderDashboardTraceBars({ label, data, keys });
 }
 
 function renderRecentTraces(traces) {
