@@ -772,8 +772,22 @@ export class CodexObserver extends BaseObserver {
     if (typeof value === 'string') {
       return this.truncateText(value, 240);
     }
-    if (typeof value === 'number' || typeof value === 'boolean' || value === null) {
+    if (
+      typeof value === 'number' ||
+      typeof value === 'boolean' ||
+      typeof value === 'bigint' ||
+      value === null
+    ) {
       return value;
+    }
+    if (typeof value === 'undefined') {
+      return 'undefined';
+    }
+    if (typeof value === 'symbol') {
+      return value.toString();
+    }
+    if (typeof value === 'function') {
+      return `[function:${value.name || 'anonymous'}]`;
     }
     if (Array.isArray(value)) {
       return `[array:${value.length}]`;
@@ -783,7 +797,7 @@ export class CodexObserver extends BaseObserver {
         .slice(0, 5)
         .join(',')}]`;
     }
-    return String(value);
+    return '[unknown]';
   }
 
   private peekRawEventType(line: string): string | null {

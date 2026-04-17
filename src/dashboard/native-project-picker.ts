@@ -6,7 +6,7 @@ function runCommand(file: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
     execFile(file, args, { encoding: 'utf8' }, (error, stdout) => {
       if (error) {
-        reject(error);
+        reject(error instanceof Error ? error : new Error('Native project picker command failed'));
         return;
       }
       resolve(String(stdout || '').trim());

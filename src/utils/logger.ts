@@ -52,6 +52,36 @@ function formatMetaValue(v: unknown): string {
   return String(v);
 }
 
+function stripAnsiColorCodes(text: string): string {
+  let result = '';
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    if (char === '\u001B' && text[index + 1] === '[') {
+      index += 2;
+      while (index < text.length) {
+        const next = text[index];
+        if ((next >= '0' && next <= '9') || next === ';') {
+          index += 1;
+          continue;
+        }
+        break;
+      }
+      if (text[index] === 'm') {
+        continue;
+      }
+      result += '\u001B[';
+      if (index < text.length) {
+        result += text[index];
+      }
+      continue;
+    }
+    result += char;
+  }
+
+  return result;
+}
+
 /**
  * 构建单条日志行.
  *
@@ -61,7 +91,7 @@ function formatMetaValue(v: unknown): string {
 function buildLogLine(info: winston.Logform.TransformableInfo): string {
   const timestamp = (info['timestamp'] as string) ?? '';
   // Strip ANSI colour codes so padEnd gives correct visual width
-  const rawLevel = String(info.level).replace(/\u001b\[\d+m/g, '');
+  const rawLevel = stripAnsiColorCodes(String(info.level));
   const levelStr = rawLevel.toUpperCase().padEnd(5);
   const message = String(info.message);
   const stack = info['stack'] as string | undefined;

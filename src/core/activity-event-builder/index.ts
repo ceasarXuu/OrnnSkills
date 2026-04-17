@@ -69,7 +69,7 @@ export function buildActivityEventContext(input: {
 }): ActivityEventContext {
   const { shadowId, trace, traces, episodeId = null } = input;
   const skillId = skillIdFromShadowId(shadowId) ?? trace.metadata?.skill_id?.toString() ?? shadowId.split('@')[0];
-  const runtime = (runtimeFromShadowId(shadowId) ?? trace.runtime ?? 'codex') as RuntimeType;
+  const runtime = runtimeFromShadowId(shadowId) ?? trace.runtime ?? 'codex';
   const sessionIds = [...new Set(traces.map((item) => item.session_id).filter(Boolean))];
   const sessionId = trace.session_id || sessionIds[0] || 'unknown-session';
 

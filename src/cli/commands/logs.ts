@@ -139,7 +139,7 @@ function readEntriesForStream(stream: LogStream, options: LogOptions): ParsedLog
   const maxLines = parseInt(options.tail, 10) || 100;
   let scanLimit = Math.max(maxLines * 20, 2000);
 
-  while (true) {
+  for (;;) {
     const scannedEntries = readRecentRotatingLogEntries(stream.basePath, scanLimit);
     const filteredEntries = filterEntries(scannedEntries, options);
 

@@ -275,7 +275,7 @@ export function buildActivityScopeDetailFromData(
 
   const analysisRequestedEvents = events.filter((event) => event.tag === 'analysis_requested');
   for (let index = 0; index < analysisRequestedEvents.length; index += 1) {
-    const analysisEvent = analysisRequestedEvents[index]!;
+    const analysisEvent = analysisRequestedEvents[index];
     const nextRequested = analysisRequestedEvents[index + 1];
     const submissionTraces = episodeTraces.filter((trace) =>
       trace.timestamp >= input.episode.startedAt &&

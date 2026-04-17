@@ -15,6 +15,8 @@
 
 ### 2026-04-17
 
+- ✅ 恢复 GitHub Actions CI 全链路：先清掉 `Lint` 阶段的 16 个 hard error，再补齐 `dashboard/ui.ts` 的浏览器状态注入链路，并把 `shadow-manager` 单测里的 `decision-explainer` 收回到 mock 边界；`lint`、`typecheck`、`build`、`vitest --run` 现已全部通过
+- 📝 记录 CI 排障经验：当 GitHub 页面表面上显示“每次提交 test 都失败”时，先看 workflow 的实际失败步骤，而不是直接盯测试日志；像这次就是 `Lint` 先失败把后续 `typecheck/build/test` 全部短路。修完第一层 gate 后，再本地跑完整链路，才能把被前置步骤掩盖的真实问题一起暴露出来
 - ✅ 补齐 rotating global log stream 的兼容和追平：共享日志读取层恢复旧 `[timestamp] ERROR: message` 格式解析；dashboard 增量读取现在会顺序追平轮询间产生的多个轮转分片；`ornn logs` 在 `--level/--skill` 稀疏匹配场景下会自动扩大回看窗口，不再因为尾部噪音过多而误报“没有匹配日志”
 - 📝 记录可观测性经验：把多处日志读侧收口成共享能力时，不能只修“当前最新文件”这一种 happy path；旧格式兼容、连续轮转追平和稀疏过滤回溯都必须一起纳入契约，否则 dashboard 和 CLI 只是表面统一，换一种流量形态仍会悄悄漏数
 - ✅ 把全局日志读取提升为共享“逻辑日志流”能力：dashboard 日志看板与 `ornn logs` 现在统一按 `combined.log*` / `error.log*` 聚合读取，不再因为 Winston 轮转后只盯单个物理文件而出现“宿主仍在运行、日志面板却长时间不更新”的假死

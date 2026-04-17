@@ -165,7 +165,7 @@ export class ShadowManager {
     const skillId = skillIdFromShadowId(shadowId);
     const runtime = runtimeFromShadowId(shadowId);
     if (skillId) {
-      this.shadowRegistry.incrementTraceCount(skillId, (runtime ?? trace.runtime) as RuntimeType);
+      this.shadowRegistry.incrementTraceCount(skillId, runtime ?? trace.runtime);
     }
 
     const baseEventContext = buildActivityEventContext({ shadowId, trace, traces: recentTraces });
@@ -366,7 +366,7 @@ export class ShadowManager {
             context: buildActivityEventContext({
               episodeId: episode.episodeId,
               shadowId,
-              trace: traces[traces.length - 1]!,
+              trace: traces[traces.length - 1],
               traces,
             }),
             episodeId: episode.episodeId,
@@ -377,7 +377,7 @@ export class ShadowManager {
 
     const recentTraces = await this.traceManager.getRecentTraces(MANUAL_OPTIMIZE_RECENT_TRACE_LIMIT);
     for (let index = recentTraces.length - 1; index >= 0; index -= 1) {
-      const trace = recentTraces[index]!;
+      const trace = recentTraces[index];
       const mapping = this.traceSkillMapper.mapTrace(trace);
       if (!this.matchesManualShadowTarget(trace, mapping, skillId, runtime)) {
         continue;
@@ -405,7 +405,7 @@ export class ShadowManager {
         traces,
         context: buildActivityEventContext({
           shadowId,
-          trace: traces[traces.length - 1]!,
+          trace: traces[traces.length - 1],
           traces,
         }),
         episodeId: null,
@@ -443,7 +443,7 @@ export class ShadowManager {
     const scopedContext = buildActivityEventContext({
       episodeId: episode.episodeId,
       shadowId,
-      trace: anchorTrace!,
+      trace: anchorTrace,
       traces: windowTraces.length > 0 ? windowTraces : (anchorTrace ? [anchorTrace] : []),
     });
     this.taskEpisodes.markAnalysisState(context.sessionId, context.skillId, context.runtime, 'running');

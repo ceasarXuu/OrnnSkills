@@ -7,11 +7,12 @@ import { createJournalManager } from '../../src/core/journal/index.js';
 import type { Trace } from '../../src/types/index.js';
 import type { DecisionEventRecord } from '../../src/core/decision-events/index.js';
 
-const { analyzeWindowMock, patchGeneratorMock } = vi.hoisted(() => ({
+const { analyzeWindowMock, patchGeneratorMock, decisionExplanationMock } = vi.hoisted(() => ({
   analyzeWindowMock: vi.fn(),
   patchGeneratorMock: {
     generate: vi.fn(),
   },
+  decisionExplanationMock: vi.fn(),
 }));
 
 vi.mock('../../src/core/skill-call-analyzer/index.js', () => ({
@@ -22,6 +23,10 @@ vi.mock('../../src/core/skill-call-analyzer/index.js', () => ({
 
 vi.mock('../../src/core/patch-generator/index.js', () => ({
   patchGenerator: patchGeneratorMock,
+}));
+
+vi.mock('../../src/core/decision-explainer/index.js', () => ({
+  generateDecisionExplanation: decisionExplanationMock,
 }));
 
 function readDecisionEvents(projectRoot: string): DecisionEventRecord[] {
@@ -80,6 +85,16 @@ describe('ShadowManager decision events', () => {
 
     analyzeWindowMock.mockReset();
     patchGeneratorMock.generate.mockReset();
+    decisionExplanationMock.mockReset();
+    decisionExplanationMock.mockResolvedValue({
+      summary: 'Decision recorded for test-skill.',
+      evidenceReadout: [],
+      causalChain: [],
+      decisionRationale: 'The observed traces support the decision.',
+      recommendedAction: 'Continue with the recorded decision.',
+      uncertainties: [],
+      contradictions: [],
+    });
   });
 
   afterEach(() => {

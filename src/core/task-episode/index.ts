@@ -124,7 +124,7 @@ export class TaskEpisodeStore {
       const parsed = JSON.parse(readFileSync(this.snapshotPath, 'utf-8')) as Partial<TaskEpisodeSnapshot>;
       return {
         updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : new Date().toISOString(),
-        episodes: Array.isArray(parsed.episodes) ? parsed.episodes as TaskEpisode[] : [],
+        episodes: Array.isArray(parsed.episodes) ? parsed.episodes : [],
       };
     } catch {
       return createEmptySnapshot();

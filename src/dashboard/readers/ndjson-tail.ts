@@ -10,7 +10,7 @@ export function tailNdjson(filePath: string, maxLines = 200): string[] {
     if (fileSize === 0) return [];
 
     let position = fileSize;
-    let lines: string[] = [];
+    const lines: string[] = [];
     let remainder = '';
 
     while (position > 0 && lines.length < maxLines) {
