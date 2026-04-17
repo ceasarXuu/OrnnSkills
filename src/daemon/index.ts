@@ -1,84 +1,79 @@
-import { watch, type FSWatcher } from 'chokidar';
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve, sep } from 'node:path';
-import { createChildLogger } from '../utils/logger.js';
-import { createShadowManager } from '../core/shadow-manager/index.js';
+import { resolve } from 'node:path';
 import { createCodexObserver } from '../core/observer/codex-observer.js';
-import {
-  getProjectRegistration,
-  listProjects,
-  touchProject,
-  type ProjectMonitoringState,
-} from '../dashboard/projects-registry.js';
+import { createShadowManager, type ShadowManager } from '../core/shadow-manager/index.js';
+import * as projectsRegistry from '../dashboard/projects-registry.js';
 import type { Trace } from '../types/index.js';
+import { createChildLogger } from '../utils/logger.js';
+import { DaemonCheckpointService } from './checkpoint-service.js';
+import { DaemonLifecycleCoordinator } from './daemon-lifecycle.js';
+import type { DaemonState, OptimizationStatus, ProjectRuntime } from './daemon-types.js';
+import { ProjectRuntimeRegistry } from './project-runtime-registry.js';
+import { RetryQueueStore } from './retry-queue.js';
 
 const logger = createChildLogger('daemon');
 
-interface DaemonState {
-  isRunning: boolean;
-  startedAt: string;
-  processedTraces: number;
-  lastCheckpointAt: string | null;
-  retryQueueSize: number;
-  monitoringState: ProjectMonitoringState;
-  pausedAt: string | null;
-  optimizationStatus: OptimizationStatus;
-}
-
-interface OptimizationStatus {
-  currentState: 'idle' | 'analyzing' | 'optimizing' | 'error';
-  currentSkillId: string | null;
-  lastOptimizationAt: string | null;
-  lastError: string | null;
-  queueSize: number;
-}
-
-interface RetryQueueEntry {
-  traceId: string;
-  projectRoot: string | null;
-  attempts: number;
-  lastErrorMessage?: string;
-  addedAt: number;
-}
-
-interface ProjectRuntime {
-  projectRoot: string;
-  shadowManager: ReturnType<typeof createShadowManager>;
-  watcher: FSWatcher | null;
-  processedTraces: number;
-  lastCheckpointAt: string | null;
-  checkpointFlushTimer: NodeJS.Timeout | null;
-}
-
-const CHECKPOINT_FILE = '.ornn/state/daemon-checkpoint.json';
+const CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
+const CHECKPOINT_INTERVAL_MS = 60 * 1000;
 const REGISTRY_SYNC_INTERVAL_MS = 1000;
 
 export class Daemon {
-  private launchContext: string;
-  private codexObserver;
-  private projectRuntimes: Map<string, ProjectRuntime> = new Map();
+  private readonly launchContext: string;
+  private readonly codexObserver;
+  private readonly projectRuntimeRegistry: ProjectRuntimeRegistry;
+  private readonly retryQueue: RetryQueueStore;
+  private readonly checkpointService: DaemonCheckpointService;
+  private readonly lifecycle: DaemonLifecycleCoordinator;
   private isRunning = false;
-  private cleanupInterval: NodeJS.Timeout | null = null;
-  private retryQueue: Map<string, RetryQueueEntry> = new Map();
-  private retryInterval: NodeJS.Timeout | null = null;
-  private checkpointInterval: NodeJS.Timeout | null = null;
-  private registrySyncInterval: NodeJS.Timeout | null = null;
-  private maxRetries = 3;
-  private retryDelay = 5000;
-  private maxQueueSize = 1000;
+  private readonly maxRetries = 3;
+  private readonly retryDelay = 5000;
+  private readonly maxQueueSize = 1000;
   private startedAt = '';
-  private optimizationStatus: OptimizationStatus = {
+  private readonly optimizationStatus: OptimizationStatus = {
     currentState: 'idle',
     currentSkillId: null,
     lastOptimizationAt: null,
     lastError: null,
     queueSize: 0,
   };
-  private optimizationQueue: string[] = [];
+  private readonly optimizationQueue: string[] = [];
 
   constructor(launchContext: string) {
     this.launchContext = resolve(launchContext);
     this.codexObserver = createCodexObserver();
+    this.retryQueue = new RetryQueueStore({
+      maxRetries: this.maxRetries,
+      maxQueueSize: this.maxQueueSize,
+    });
+    this.checkpointService = new DaemonCheckpointService({
+      getMonitoringState: (projectRoot) => this.projectRuntimeRegistry.getProjectMonitoringState(projectRoot),
+      getRetryQueueSizeForProject: (projectRoot) => this.retryQueue.sizeForProject(projectRoot),
+      getIsRunning: () => this.isRunning,
+      getStartedAt: () => this.startedAt,
+      getOptimizationStatus: () => ({ ...this.optimizationStatus }),
+    });
+    this.projectRuntimeRegistry = new ProjectRuntimeRegistry({
+      createShadowManager,
+      listProjects: projectsRegistry.listProjects,
+      getProjectRegistration: (projectRoot) => this.lookupProjectRegistration(projectRoot),
+      touchProject: projectsRegistry.touchProject,
+      afterCreateRuntime: async (runtime) => {
+        await this.checkpointService.saveForRuntime(runtime);
+      },
+      beforeRemoveRuntime: async (runtime) => {
+        this.retryQueue.clearForProject(runtime.projectRoot);
+        await this.checkpointService.saveForRuntime(runtime);
+      },
+    });
+    this.lifecycle = new DaemonLifecycleCoordinator({
+      retryDelayMs: this.retryDelay,
+      cleanupIntervalMs: CLEANUP_INTERVAL_MS,
+      checkpointIntervalMs: CHECKPOINT_INTERVAL_MS,
+      registrySyncIntervalMs: REGISTRY_SYNC_INTERVAL_MS,
+      onCleanupTick: () => this.cleanupOldTraces(),
+      onRetryTick: () => this.processRetryQueue(),
+      onCheckpointTick: () => this.saveAllCheckpoints(),
+      onRegistrySyncTick: () => this.syncRegisteredProjects(),
+    });
   }
 
   async start(): Promise<void> {
@@ -91,7 +86,6 @@ export class Daemon {
 
     try {
       this.startedAt = new Date().toISOString();
-
       await this.syncRegisteredProjects();
 
       this.codexObserver.onTrace((trace) => {
@@ -100,14 +94,14 @@ export class Daemon {
       this.codexObserver.start();
       logger.debug('Codex observer started');
 
-      this.startMaintenanceTasks();
+      this.lifecycle.startMaintenanceTasks();
       this.isRunning = true;
       await this.saveAllCheckpoints();
       this.registerShutdownHooks();
 
       logger.info('Daemon started in global mode', {
-        projectCount: this.projectRuntimes.size,
-        projects: Array.from(this.projectRuntimes.keys()),
+        projectCount: Array.from(this.projectRuntimeRegistry.keys()).length,
+        projects: Array.from(this.projectRuntimeRegistry.keys()),
       });
     } catch (error) {
       this.isRunning = false;
@@ -117,233 +111,21 @@ export class Daemon {
     }
   }
 
-  private async syncRegisteredProjects(): Promise<void> {
-    const registeredRoots = this.getRegisteredProjectRoots();
-    const nextRoots = new Set(registeredRoots);
-
-    for (const projectRoot of registeredRoots) {
-      await this.ensureProjectRuntime(projectRoot);
-    }
-
-    for (const projectRoot of Array.from(this.projectRuntimes.keys())) {
-      if (!nextRoots.has(projectRoot)) {
-        await this.removeProjectRuntime(projectRoot);
-      }
-    }
-
-    logger.debug('Synchronized daemon project registry', {
-      projectCount: this.projectRuntimes.size,
-      projects: Array.from(this.projectRuntimes.keys()),
-    });
-  }
-
-  private getRegisteredProjectRoots(): string[] {
-    return listProjects()
-      .filter((project) => project.monitoringState !== 'paused')
-      .map((project) => resolve(project.path));
-  }
-
-  private getProjectMonitoringState(
-    projectRoot: string
-  ): { monitoringState: ProjectMonitoringState; pausedAt: string | null } {
-    const registration = getProjectRegistration(projectRoot);
-    return {
-      monitoringState: registration?.monitoringState === 'paused' ? 'paused' : 'active',
-      pausedAt: registration?.monitoringState === 'paused' ? registration.pausedAt ?? null : null,
-    };
-  }
-
-  private async ensureProjectRuntime(projectRoot: string): Promise<ProjectRuntime> {
-    const normalizedProjectRoot = resolve(projectRoot);
-    const existing = this.projectRuntimes.get(normalizedProjectRoot);
-    if (existing) {
-      return existing;
-    }
-
-    const shadowManager = createShadowManager(normalizedProjectRoot);
-    await shadowManager.init();
-
-    const runtime: ProjectRuntime = {
-      projectRoot: normalizedProjectRoot,
-      shadowManager,
-      watcher: this.startFileWatcher(normalizedProjectRoot),
-      processedTraces: 0,
-      lastCheckpointAt: null,
-      checkpointFlushTimer: null,
-    };
-
-    this.projectRuntimes.set(normalizedProjectRoot, runtime);
-    touchProject(normalizedProjectRoot);
-    await this.saveCheckpointForProject(normalizedProjectRoot);
-
-    logger.info('Registered project runtime for daemon monitoring', {
-      projectRoot: normalizedProjectRoot,
-    });
-
-    return runtime;
-  }
-
-  private async removeProjectRuntime(projectRoot: string): Promise<void> {
-    const runtime = this.projectRuntimes.get(projectRoot);
-    if (!runtime) {
+  async stop(): Promise<void> {
+    if (!this.isRunning) {
       return;
     }
 
-    try {
-      this.clearRetryQueueForProject(projectRoot);
-      if (runtime.watcher) {
-        await runtime.watcher.close();
-      }
-      if (runtime.checkpointFlushTimer) {
-        clearTimeout(runtime.checkpointFlushTimer);
-      }
-      await this.saveCheckpointForProject(projectRoot);
-      await runtime.shadowManager.close();
-    } finally {
-      this.projectRuntimes.delete(projectRoot);
-    }
-
-    logger.info('Removed project runtime from daemon monitoring', { projectRoot });
-  }
-
-  private startFileWatcher(projectRoot: string): FSWatcher | null {
-    const seaDir = join(projectRoot, '.sea');
-
-    if (!existsSync(seaDir)) {
-      logger.debug('.sea directory not found, skipping file watcher', { projectRoot });
-      return null;
-    }
-
-    const watcher = watch(seaDir, {
-      persistent: true,
-      ignoreInitial: true,
-      awaitWriteFinish: {
-        stabilityThreshold: 200,
-        pollInterval: 100,
-      },
-    });
-
-    watcher.on('change', (path) => {
-      logger.debug('Project file changed', { projectRoot, path });
-    });
-
-    watcher.on('error', (error) => {
-      logger.error('File watcher error', { projectRoot, error });
-    });
-
-    logger.info('File watcher started', { projectRoot, path: seaDir });
-    return watcher;
-  }
-
-  private startMaintenanceTasks(): void {
-    this.cleanupInterval = setInterval(
-      () => {
-        for (const runtime of this.projectRuntimes.values()) {
-          try {
-            const retentionDays = 30;
-            const cleaned = runtime.shadowManager.cleanupOldTraces(retentionDays);
-            if (cleaned > 0) {
-              logger.info('Cleaned old traces for project', {
-                projectRoot: runtime.projectRoot,
-                cleaned,
-              });
-            }
-          } catch (error) {
-            logger.error('Cleanup task failed', { projectRoot: runtime.projectRoot, error });
-          }
-        }
-      },
-      60 * 60 * 1000
-    );
-
-    this.retryInterval = setInterval(() => {
-      this.processRetryQueue();
-    }, this.retryDelay);
-
-    this.checkpointInterval = setInterval(() => {
-      void this.saveAllCheckpoints();
-    }, 60 * 1000);
-
-    this.registrySyncInterval = setInterval(() => {
-      void this.syncRegisteredProjects();
-    }, REGISTRY_SYNC_INTERVAL_MS);
-
-    logger.debug('Daemon maintenance tasks started');
-  }
-
-  private async saveAllCheckpoints(): Promise<void> {
-    for (const projectRoot of this.projectRuntimes.keys()) {
-      await this.saveCheckpointForProject(projectRoot);
-    }
-  }
-
-  private async saveCheckpointForProject(projectRoot: string): Promise<void> {
-    const runtime = this.projectRuntimes.get(projectRoot);
-    if (!runtime) {
-      return;
-    }
+    logger.info('Stopping daemon');
 
     try {
-      const lastCheckpointAt = new Date().toISOString();
-      const monitoring = this.getProjectMonitoringState(projectRoot);
-      const state: DaemonState = {
-        isRunning: this.isRunning && monitoring.monitoringState !== 'paused',
-        startedAt: this.startedAt,
-        processedTraces: runtime.processedTraces,
-        lastCheckpointAt,
-        retryQueueSize: Array.from(this.retryQueue.values()).filter(
-          (entry) => entry.projectRoot === projectRoot
-        ).length,
-        monitoringState: monitoring.monitoringState,
-        pausedAt: monitoring.pausedAt,
-        optimizationStatus: { ...this.optimizationStatus },
-      };
-
-      const checkpointPath = join(projectRoot, CHECKPOINT_FILE);
-      const checkpointDir = dirname(checkpointPath);
-
-      if (!existsSync(checkpointDir)) {
-        mkdirSync(checkpointDir, { recursive: true });
-      }
-
-      const tempPath = `${checkpointPath}.tmp`;
-      writeFileSync(tempPath, JSON.stringify(state, null, 2), 'utf-8');
-
-      const { renameSync, unlinkSync } = await import('node:fs');
-      try {
-        renameSync(tempPath, checkpointPath);
-      } catch (error) {
-        try {
-          if (existsSync(tempPath)) {
-            unlinkSync(tempPath);
-          }
-        } catch {
-          // ignore cleanup errors
-        }
-        throw error;
-      }
-
-      runtime.lastCheckpointAt = lastCheckpointAt;
-      logger.debug('Daemon checkpoint saved', { projectRoot, path: checkpointPath });
+      this.isRunning = false;
+      await this.cleanup();
+      logger.info('Daemon stopped successfully');
     } catch (error) {
-      logger.error('Failed to save daemon checkpoint', { projectRoot, error });
+      logger.error('Error during daemon shutdown', { error });
+      await this.cleanup();
     }
-  }
-
-  private scheduleCheckpointSave(projectRoot: string, delayMs = 250): void {
-    const runtime = this.projectRuntimes.get(projectRoot);
-    if (!runtime) {
-      return;
-    }
-
-    if (runtime.checkpointFlushTimer) {
-      clearTimeout(runtime.checkpointFlushTimer);
-    }
-
-    runtime.checkpointFlushTimer = setTimeout(() => {
-      runtime.checkpointFlushTimer = null;
-      void this.saveCheckpointForProject(projectRoot);
-    }, delayMs);
   }
 
   updateOptimizationStatus(
@@ -387,10 +169,12 @@ export class Daemon {
 
   getState(projectRoot?: string): DaemonState {
     const runtime =
-      (projectRoot ? this.projectRuntimes.get(resolve(projectRoot)) : null) ??
-      this.projectRuntimes.values().next().value ??
+      (projectRoot ? this.projectRuntimeRegistry.get(projectRoot) : null) ??
+      this.projectRuntimeRegistry.values().next().value ??
       null;
-    const monitoring = this.getProjectMonitoringState(projectRoot ?? runtime?.projectRoot ?? this.launchContext);
+    const monitoring = this.projectRuntimeRegistry.getProjectMonitoringState(
+      projectRoot ?? runtime?.projectRoot ?? this.launchContext
+    );
 
     return {
       isRunning: this.isRunning && monitoring.monitoringState !== 'paused',
@@ -404,14 +188,33 @@ export class Daemon {
     };
   }
 
+  isActive(): boolean {
+    return this.isRunning;
+  }
+
+  getShadowManager(projectRoot?: string): ShadowManager | null {
+    const runtime =
+      (projectRoot ? this.projectRuntimeRegistry.get(projectRoot) : null) ??
+      this.projectRuntimeRegistry.values().next().value ??
+      null;
+    return (runtime?.shadowManager as ShadowManager | undefined) ?? null;
+  }
+
+  getCodexObserver(): import('../core/observer/codex-observer.js').CodexObserver {
+    return this.codexObserver;
+  }
+
+  private async syncRegisteredProjects(): Promise<void> {
+    await this.projectRuntimeRegistry.syncRegisteredProjects();
+  }
+
   private async processTraceWithRetry(trace: unknown): Promise<void> {
     const typedTrace = trace as Trace;
     const projectRoot = await this.ensureRuntimeForTrace(typedTrace);
     if (!projectRoot) {
-      const rawProjectPath = typeof typedTrace.metadata?.projectPath === 'string'
-        ? typedTrace.metadata.projectPath
-        : null;
-      const registration = rawProjectPath ? getProjectRegistration(rawProjectPath) : null;
+      const rawProjectPath =
+        typeof typedTrace.metadata?.projectPath === 'string' ? typedTrace.metadata.projectPath : null;
+      const registration = rawProjectPath ? this.lookupProjectRegistration(rawProjectPath) : null;
       if (registration?.monitoringState === 'paused') {
         logger.info('Skipped trace because project monitoring is paused', {
           traceId: typedTrace.trace_id,
@@ -427,7 +230,7 @@ export class Daemon {
       return;
     }
 
-    const runtime = this.projectRuntimes.get(projectRoot);
+    const runtime = this.projectRuntimeRegistry.get(projectRoot);
     if (!runtime) {
       logger.warn('Resolved trace project without active runtime', {
         traceId: typedTrace.trace_id,
@@ -438,7 +241,7 @@ export class Daemon {
 
     try {
       await runtime.shadowManager.processTrace(typedTrace);
-      runtime.processedTraces++;
+      runtime.processedTraces += 1;
       this.scheduleCheckpointSave(projectRoot);
     } catch (error) {
       logger.warn('Failed to process trace, adding to retry queue', {
@@ -446,307 +249,95 @@ export class Daemon {
         traceId: typedTrace.trace_id,
         error,
       });
-      this.addToRetryQueue(typedTrace, error as Error, projectRoot);
+      this.retryQueue.add(typedTrace, error as Error, projectRoot);
     }
   }
 
-  private async ensureRuntimeForTrace(trace: Trace): Promise<string | null> {
-    const rawProjectPath = trace.metadata?.projectPath;
-    if (typeof rawProjectPath !== 'string' || rawProjectPath.trim().length === 0) {
-      return null;
-    }
-
-    const normalizedTracePath = resolve(rawProjectPath);
-    const registeredProjects = listProjects().map((project) => ({
-      ...project,
-      projectRoot: resolve(project.path),
-    }));
-    const matchedProject = [...registeredProjects]
-      .sort((left, right) => right.projectRoot.length - left.projectRoot.length)
-      .find((project) => {
-        return (
-          normalizedTracePath === project.projectRoot ||
-          normalizedTracePath.startsWith(project.projectRoot + sep)
-        );
-      });
-
-    if (!matchedProject) {
-      return null;
-    }
-
-    if (matchedProject.monitoringState === 'paused') {
-      logger.debug('Ignoring trace for paused project monitoring', {
-        traceId: trace.trace_id,
-        projectRoot: matchedProject.projectRoot,
-        pausedAt: matchedProject.pausedAt ?? null,
-      });
-      return null;
-    }
-
-    const activeMatch = this.findBestProjectMatch(
-      normalizedTracePath,
-      Array.from(this.projectRuntimes.keys())
-    );
-    if (activeMatch) {
-      return activeMatch;
-    }
-
-    await this.ensureProjectRuntime(matchedProject.projectRoot);
-    return matchedProject.projectRoot;
-  }
-
-  private findBestProjectMatch(tracePath: string, projectRoots: string[]): string | null {
-    const sortedRoots = [...projectRoots].sort((left, right) => right.length - left.length);
-    for (const projectRoot of sortedRoots) {
-      if (tracePath === projectRoot || tracePath.startsWith(projectRoot + sep)) {
-        return projectRoot;
-      }
-    }
-    return null;
-  }
-
-  private addToRetryQueue(trace: Trace, error: Error, projectRoot: string | null): void {
-    const traceId = trace.trace_id;
-
-    if (this.retryQueue.has(traceId)) {
-      logger.debug('Trace already in retry queue, skipping', { traceId });
-      return;
-    }
-
-    if (this.retryQueue.size >= this.maxQueueSize) {
-      const firstKey = this.retryQueue.keys().next().value;
-      if (firstKey) {
-        this.retryQueue.delete(firstKey);
-        logger.warn('Retry queue is full, dropping oldest trace', { droppedTraceId: firstKey });
-      }
-    }
-
-    this.retryQueue.set(traceId, {
-      traceId,
-      projectRoot,
-      attempts: 0,
-      lastErrorMessage: error.message,
-      addedAt: Date.now(),
-    });
-
-    logger.debug('Trace added to retry queue', {
-      traceId,
-      projectRoot,
-      queueSize: this.retryQueue.size,
-    });
-  }
-
-  private clearRetryQueueForProject(projectRoot: string): void {
-    let removed = 0;
-    for (const [traceId, entry] of this.retryQueue.entries()) {
-      if (entry.projectRoot !== projectRoot) continue;
-      this.retryQueue.delete(traceId);
-      removed += 1;
-    }
-
-    if (removed > 0) {
-      logger.info('Cleared retry queue entries for project runtime', {
-        projectRoot,
-        removed,
-      });
-    }
+  private ensureRuntimeForTrace(trace: Trace): Promise<string | null> {
+    return this.projectRuntimeRegistry.ensureRuntimeForTrace(trace);
   }
 
   private processRetryQueue(): void {
-    if (this.retryQueue.size === 0) {
-      return;
-    }
+    this.retryQueue.process();
+  }
 
-    const entriesToProcess = Array.from(this.retryQueue.entries());
-
-    for (const [traceId, entry] of entriesToProcess) {
-      if (entry.attempts >= this.maxRetries) {
-        logger.error('Trace exceeded max retries, discarding', {
-          traceId,
-          projectRoot: entry.projectRoot,
-          attempts: entry.attempts,
-          lastErrorMessage: entry.lastErrorMessage,
-        });
-        this.retryQueue.delete(traceId);
-        continue;
-      }
-
-      try {
-        logger.warn('Retry queue processing requires trace store lookup', {
-          traceId,
-          projectRoot: entry.projectRoot,
-        });
-        this.retryQueue.delete(traceId);
-      } catch (error) {
-        entry.attempts++;
-        entry.lastErrorMessage = error instanceof Error ? error.message : String(error);
-
-        if (entry.attempts >= this.maxRetries) {
-          logger.error('Trace failed after max retries', {
-            traceId,
-            projectRoot: entry.projectRoot,
-            attempts: entry.attempts,
-            error: entry.lastErrorMessage,
-          });
-          this.retryQueue.delete(traceId);
-        } else {
-          logger.debug('Trace retry failed, will retry again', {
-            traceId,
-            projectRoot: entry.projectRoot,
-            attempts: entry.attempts,
-          });
-        }
-      }
+  private async saveAllCheckpoints(): Promise<void> {
+    for (const projectRoot of this.projectRuntimeRegistry.keys()) {
+      await this.saveCheckpointForProject(projectRoot);
     }
   }
 
-  async stop(): Promise<void> {
-    if (!this.isRunning) {
+  private async saveCheckpointForProject(projectRoot: string): Promise<void> {
+    const runtime = this.projectRuntimeRegistry.get(projectRoot);
+    if (!runtime) {
       return;
     }
 
-    logger.info('Stopping daemon');
+    await this.checkpointService.saveForRuntime(runtime);
+  }
 
+  private scheduleCheckpointSave(projectRoot: string, delayMs = 250): void {
+    const runtime = this.projectRuntimeRegistry.get(projectRoot);
+    if (!runtime) {
+      return;
+    }
+
+    this.checkpointService.schedule(runtime, delayMs);
+  }
+
+  private lookupProjectRegistration(projectRoot: string) {
     try {
-      this.isRunning = false;
-      await this.cleanup();
-      logger.info('Daemon stopped successfully');
-    } catch (error) {
-      logger.error('Error during daemon shutdown', { error });
-      await this.cleanup();
+      return projectsRegistry.getProjectRegistration(projectRoot);
+    } catch {
+      return null;
+    }
+  }
+
+  private cleanupOldTraces(): void {
+    for (const runtime of this.projectRuntimeRegistry.values()) {
+      try {
+        const cleaned = runtime.shadowManager.cleanupOldTraces(30);
+        if (cleaned > 0) {
+          logger.info('Cleaned old traces for project', {
+            projectRoot: runtime.projectRoot,
+            cleaned,
+          });
+        }
+      } catch (error) {
+        logger.error('Cleanup task failed', { projectRoot: runtime.projectRoot, error });
+      }
     }
   }
 
   private async cleanup(): Promise<void> {
-    const errors: Error[] = [];
+    const runtimes = Array.from(this.projectRuntimeRegistry.values());
+    await this.lifecycle.cleanup({
+      stopObserver: () => this.codexObserver.stop(),
+      runtimes,
+      saveCheckpointForRuntime: (runtime) => this.checkpointService.saveForRuntime(runtime),
+      closeRuntime: (runtime) => this.closeRuntime(runtime),
+    });
+    this.projectRuntimeRegistry.clear();
+  }
 
+  private async closeRuntime(runtime: ProjectRuntime): Promise<void> {
     try {
-      await this.codexObserver.stop();
-      logger.debug('Codex observer stopped');
-    } catch (error) {
-      logger.error('Failed to stop codex observer', { error });
-      errors.push(error as Error);
-    }
-
-    try {
-      if (this.cleanupInterval) {
-        clearInterval(this.cleanupInterval);
-        this.cleanupInterval = null;
+      if (runtime.watcher) {
+        await runtime.watcher.close();
       }
-      if (this.retryInterval) {
-        clearInterval(this.retryInterval);
-        this.retryInterval = null;
+      if (runtime.checkpointFlushTimer) {
+        clearTimeout(runtime.checkpointFlushTimer);
+        runtime.checkpointFlushTimer = null;
       }
-      if (this.checkpointInterval) {
-        clearInterval(this.checkpointInterval);
-        this.checkpointInterval = null;
-      }
-      if (this.registrySyncInterval) {
-        clearInterval(this.registrySyncInterval);
-        this.registrySyncInterval = null;
-      }
-    } catch (error) {
-      logger.error('Failed to stop daemon timers', { error });
-      errors.push(error as Error);
-    }
-
-    for (const runtime of this.projectRuntimes.values()) {
-      try {
-        if (runtime.watcher) {
-          await runtime.watcher.close();
-        }
-        if (runtime.checkpointFlushTimer) {
-          clearTimeout(runtime.checkpointFlushTimer);
-          runtime.checkpointFlushTimer = null;
-        }
-        await this.saveCheckpointForProject(runtime.projectRoot);
-        await runtime.shadowManager.close();
-      } catch (error) {
-        logger.error('Failed to clean up project runtime', {
-          projectRoot: runtime.projectRoot,
-          error,
-        });
-        errors.push(error as Error);
-      }
-    }
-
-    this.projectRuntimes.clear();
-
-    if (errors.length > 0) {
-      logger.warn(`Cleanup completed with ${errors.length} error(s)`);
+      await runtime.shadowManager.close();
+    } finally {
+      this.retryQueue.clearForProject(runtime.projectRoot);
+      this.projectRuntimeRegistry.delete(runtime.projectRoot);
     }
   }
 
   private registerShutdownHooks(): void {
-    let isShuttingDown = false;
-    let shutdownTimeout: NodeJS.Timeout | null = null;
-
-    const shutdownHandler = async (signal: string): Promise<void> => {
-      if (isShuttingDown) {
-        logger.warn('Shutdown already in progress, ignoring signal', { signal });
-        return;
-      }
-
-      isShuttingDown = true;
-      logger.info(`Received ${signal}, shutting down gracefully...`);
-
-      shutdownTimeout = setTimeout(() => {
-        logger.error('Shutdown timeout exceeded, forcing exit');
-        process.exit(1);
-      }, 30000);
-
-      try {
-        await this.stop();
-
-        if (shutdownTimeout) {
-          clearTimeout(shutdownTimeout);
-          shutdownTimeout = null;
-        }
-
-        logger.info('Graceful shutdown completed');
-        process.exit(0);
-      } catch (error) {
-        logger.error('Error during graceful shutdown', { error });
-
-        if (shutdownTimeout) {
-          clearTimeout(shutdownTimeout);
-          shutdownTimeout = null;
-        }
-
-        process.exit(1);
-      }
-    };
-
-    process.on('SIGTERM', () => void shutdownHandler('SIGTERM'));
-    process.on('SIGINT', () => void shutdownHandler('SIGINT'));
-    process.on('uncaughtException', (error) => {
-      logger.error('Uncaught exception', { error });
-      void shutdownHandler('uncaughtException');
-    });
-    process.on('unhandledRejection', (reason) => {
-      logger.error('Unhandled rejection', { reason });
-      void shutdownHandler('unhandledRejection');
-    });
-
-    logger.debug('Shutdown hooks registered');
-  }
-
-  isActive(): boolean {
-    return this.isRunning;
-  }
-
-  getShadowManager(
-    projectRoot?: string
-  ): import('../core/shadow-manager/index.js').ShadowManager | null {
-    const runtime =
-      (projectRoot ? this.projectRuntimes.get(resolve(projectRoot)) : null) ??
-      this.projectRuntimes.values().next().value ??
-      null;
-    return runtime?.shadowManager ?? null;
-  }
-
-  getCodexObserver(): import('../core/observer/codex-observer.js').CodexObserver {
-    return this.codexObserver;
+    this.lifecycle.registerShutdownHooks(() => this.stop());
   }
 }
 

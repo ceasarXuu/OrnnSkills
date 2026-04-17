@@ -2,6 +2,12 @@
 
 ## 📊 总体进度：Phase 1 ✅ 完成
 
+### 2026-04-18
+
+- ✅ 完成 `src/daemon/index.ts` 拆分收口：将 project runtime 注册/同步、retry queue、checkpoint 持久化、daemon 生命周期管理拆到独立模块，`Daemon` 保留 facade 与旧测试入口，`src/daemon/index.ts` 已降到 346 行
+- 📝 记录测试经验：Vitest 的模块 mock 只要缺了某个 export，即使用 namespace import，也可能在读属性时由代理直接抛错；这类兼容层不要依赖“先判断 export 是否存在”，而应在真正读取注册表能力时显式 `try/catch` 并回退到安全默认值
+- 📝 记录重构经验：给旧代码外面再包一层“看起来无害”的 `async` facade，会改变微任务层级并悄悄打破依赖时序的历史测试；重构时如果目标是行为保持，就要优先复用原有 await 边界，而不是机械增加中转 async 方法
+
 ### 2026-04-16
 
 - ✅ 降低 Codex observer 的误报噪音：reconciliation 补偿到小幅 session 文件增长时改记为 debug，仅在缺口较大时保留 warn，避免把 watcher 的正常补偿路径误读为故障

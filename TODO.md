@@ -55,12 +55,12 @@
   2. `[x]` 抽出 `session-reconciler`
   3. `[x]` 抽出 `event-preprocessor`
   4. `[x]` 抽出 `trace-emitter`
-- [ ] P2 `src/daemon/index.ts`
+- [x] P2 `src/daemon/index.ts`
   当前顺序：
-  1. `[ ]` 抽出 `project-runtime-registry`
-  2. `[ ]` 抽出 `retry-queue`
-  3. `[ ]` 抽出 `checkpoint-service`
-  4. `[ ]` 抽出 `daemon-lifecycle`
+  1. `[x]` 抽出 `project-runtime-registry`
+  2. `[x]` 抽出 `retry-queue`
+  3. `[x]` 抽出 `checkpoint-service`
+  4. `[x]` 抽出 `daemon-lifecycle`
 - [ ] P2 `src/core/shadow-manager/index.ts`
   当前顺序：
   1. `[ ]` 抽出 `trace-ingest-service`
@@ -70,7 +70,7 @@
   5. `[ ]` 保留 `ShadowManager` 作为 facade
 
 当前进行中：
-- [ ] `src/daemon/index.ts` 第 1 步：抽出 `project-runtime-registry`
+- [ ] `src/core/shadow-manager/index.ts` 第 1 步：抽出 `trace-ingest-service`
 
 ## 优先级总览
 
