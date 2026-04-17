@@ -1,5 +1,68 @@
 # OrnnSkills TODO
 
+## 超长文件拆分 Checklist
+
+- [ ] P1 `src/dashboard/data-reader.ts`
+  当前顺序：
+  1. `[x]` 抽出 `readers/skills-reader`
+  2. `[ ]` 抽出 `readers/trace-reader`
+  3. `[ ]` 抽出 `readers/decision-events-reader`
+  4. `[ ]` 抽出 `readers/agent-usage-reader`
+  5. `[ ]` 抽出 `readers/daemon-status-reader`
+  6. `[ ]` 保留 `data-reader.ts` 作为 facade
+- [ ] P1 `src/dashboard/server.ts`
+  当前顺序：
+  1. `[ ]` 抽出 `routes/*`
+  2. `[ ]` 抽出 `sse/hub`
+  3. `[ ]` 抽出 `services/project-onboarding`
+  4. `[ ]` 抽出 `services/skill-version`
+- [ ] P1 `src/dashboard/ui.ts`
+  当前顺序：
+  1. `[ ]` 抽出 `web/app-shell`
+  2. `[ ]` 抽出 `web/state`
+  3. `[ ]` 抽出 `web/panels/*`
+  4. `[ ]` 抽出 `web/render/*`
+- [ ] P1 `src/config/manager.ts`
+  当前顺序：
+  1. `[ ]` 抽出 `dashboard-config`
+  2. `[ ]` 抽出 `env-file`
+  3. `[ ]` 抽出 `provider-connectivity`
+  4. `[ ]` 抽出 `prompt-overrides`
+- [ ] P2 `src/storage/sqlite.ts`
+  当前顺序：
+  1. `[ ]` 抽出共享 DB adapter
+  2. `[ ]` 抽出 `shadow-skill-repo`
+  3. `[ ]` 抽出 `session-repo`
+  4. `[ ]` 抽出 `origin-skill-repo`
+  5. `[ ]` 抽出 `trace-skill-mapping-repo`
+- [ ] P2 `src/core/journal/index.ts`
+  当前顺序：
+  1. `[ ]` 抽出 `trace-journal`
+  2. `[ ]` 抽出 `shadow-history`
+  3. `[ ]` 共用 `sqlite` 持久层接口
+- [ ] P2 `src/core/observer/codex-observer.ts`
+  当前顺序：
+  1. `[ ]` 抽出 `session-file-reader`
+  2. `[ ]` 抽出 `session-reconciler`
+  3. `[ ]` 抽出 `event-preprocessor`
+  4. `[ ]` 抽出 `trace-emitter`
+- [ ] P2 `src/daemon/index.ts`
+  当前顺序：
+  1. `[ ]` 抽出 `project-runtime-registry`
+  2. `[ ]` 抽出 `retry-queue`
+  3. `[ ]` 抽出 `checkpoint-service`
+  4. `[ ]` 抽出 `daemon-lifecycle`
+- [ ] P2 `src/core/shadow-manager/index.ts`
+  当前顺序：
+  1. `[ ]` 抽出 `trace-ingest-service`
+  2. `[ ]` 抽出 `episode-probe-service`
+  3. `[ ]` 抽出 `optimization-runner`
+  4. `[ ]` 抽出 `manual-optimize-service`
+  5. `[ ]` 保留 `ShadowManager` 作为 facade
+
+当前进行中：
+- [ ] `src/dashboard/data-reader.ts` 第 2 步：抽出 `readers/trace-reader`
+
 ## 优先级总览
 
 | 优先级 | 类别 | 事项 |
