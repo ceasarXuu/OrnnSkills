@@ -30,7 +30,7 @@
 - [ ] P1 `src/config/manager.ts`
   当前顺序：
   1. `[ ]` 抽出 `dashboard-config`
-  2. `[ ]` 抽出 `env-file`
+  2. `[x]` 抽出 `env-file`
   3. `[ ]` 抽出 `provider-connectivity`
   4. `[x]` 抽出 `prompt-overrides`
 - [ ] P2 `src/storage/sqlite.ts`
@@ -66,7 +66,7 @@
   5. `[ ]` 保留 `ShadowManager` 作为 facade
 
 当前进行中：
-- [ ] `src/config/manager.ts` 拆分中（下一项：`env-file`）
+- [ ] `src/config/manager.ts` 拆分中（下一项：`dashboard-config`）
 
 ## 优先级总览
 

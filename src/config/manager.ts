@@ -18,6 +18,12 @@ import {
   resolveDashboardPromptOverrides,
   type DashboardPromptOverrides,
 } from "./prompt-overrides.js";
+import {
+  GLOBAL_DASHBOARD_ENV_PATH,
+  PROJECT_DASHBOARD_ENV_PATH,
+  readEnvFile,
+  writeEnvVarToPath,
+} from "./env-file.js";
 
 export interface ProviderConfig {
   provider: string;
@@ -63,12 +69,11 @@ export {
   resolveDashboardPromptOverrides,
 } from "./prompt-overrides.js";
 export type { DashboardPromptOverrides } from "./prompt-overrides.js";
+export { generateEnvContent, getProviderEnvVarName, writeEnvFile } from "./env-file.js";
 
 const GLOBAL_DASHBOARD_CONFIG_DIR = () => join(homedir(), ".ornn", "config");
 const GLOBAL_DASHBOARD_CONFIG_PATH = () => join(GLOBAL_DASHBOARD_CONFIG_DIR(), "settings.toml");
-const GLOBAL_DASHBOARD_ENV_PATH = () => join(GLOBAL_DASHBOARD_CONFIG_DIR(), ".env.local");
 const PROJECT_DASHBOARD_CONFIG_PATH = (projectPath: string) => join(projectPath, ".ornn", "config", "settings.toml");
-const PROJECT_DASHBOARD_ENV_PATH = (projectPath: string) => join(projectPath, ".env.local");
 
 /**
  * Read existing config file
@@ -203,71 +208,6 @@ export async function writeConfig(
   );
 
   await writeFile(configPath, content);
-}
-
-/**
- * Generate .env.local content for API keys
- * Appends new provider API key to existing file
- */
-export async function generateEnvContent(
-  projectPath: string,
-  provider: string,
-  apiKey: string
-): Promise<string> {
-  const envPath = join(projectPath, ".env.local");
-  
-  let existingContent = "";
-  try {
-    if (existsSync(envPath)) {
-      existingContent = await readFile(envPath, "utf-8");
-    }
-  } catch {
-    // File doesn't exist or can't be read
-  }
-
-  const envVarName = getProviderEnvVarName(provider);
-  
-  // Check if this provider already exists in the file
-  const providerRegex = new RegExp(`^${envVarName}=.*$`, "m");
-  const newLine = `${envVarName}=${apiKey}`;
-  
-  let newContent: string;
-  if (providerRegex.test(existingContent)) {
-    // Update existing line
-    newContent = existingContent.replace(providerRegex, newLine);
-  } else {
-    // Append new line
-    const header = existingContent.includes("# Ornn Skills Environment Configuration")
-      ? ""
-      : `# Ornn Skills Environment Configuration\n# Generated on ${new Date().toISOString()}\n\n# LLM Provider API Keys\n`;
-    
-    newContent = existingContent + (existingContent.endsWith("\n") || existingContent === "" ? "" : "\n") + 
-      (header ? header : "") + 
-      `${newLine}\n`;
-  }
-
-  return newContent;
-}
-
-/**
- * Write or append API key to .env.local
- */
-export async function writeEnvFile(
-  projectPath: string,
-  provider: string,
-  apiKey: string
-): Promise<void> {
-  const envPath = join(projectPath, ".env.local");
-  const content = await generateEnvContent(projectPath, provider, apiKey);
-  await writeFile(envPath, content);
-}
-
-/**
- * Get environment variable name for a provider
- */
-export function getProviderEnvVarName(provider: string): string {
-  const providerUpper = provider.toUpperCase().replace(/[^A-Z0-9]/g, "_");
-  return `ORNN_${providerUpper}_API_KEY`;
 }
 
 /**
@@ -555,28 +495,6 @@ export async function readDashboardConfig(projectPath?: string): Promise<Dashboa
   return mergedConfig;
 }
 
-async function writeEnvVarToPath(
-  envPath: string,
-  envVarName: string,
-  value: string
-): Promise<void> {
-  const existingContent = existsSync(envPath) ? await readFile(envPath, "utf-8") : "";
-  const providerRegex = new RegExp(`^${envVarName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}=.*$`, "m");
-  const newLine = `${envVarName}=${value}`;
-  let nextContent = existingContent;
-
-  if (providerRegex.test(existingContent)) {
-    nextContent = existingContent.replace(providerRegex, newLine);
-  } else {
-    nextContent =
-      existingContent +
-      (existingContent && !existingContent.endsWith("\n") ? "\n" : "") +
-      `${newLine}\n`;
-  }
-
-  await writeFile(envPath, nextContent, "utf-8");
-}
-
 export async function writeDashboardConfig(
   projectPath: string | undefined,
   payload: DashboardConfig
@@ -618,30 +536,6 @@ export async function writeDashboardConfig(
     if (provider.apiKey && provider.apiKey.trim()) {
       await writeEnvVarToPath(GLOBAL_DASHBOARD_ENV_PATH(), provider.apiKeyEnvVar, provider.apiKey.trim());
     }
-  }
-}
-
-function parseEnvFile(content: string): Record<string, string> {
-  const env: Record<string, string> = {};
-  for (const line of content.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const idx = trimmed.indexOf("=");
-    if (idx <= 0) continue;
-    const key = trimmed.slice(0, idx).trim();
-    const val = trimmed.slice(idx + 1).trim().replace(/^['"]|['"]$/g, "");
-    if (key) env[key] = val;
-  }
-  return env;
-}
-
-async function readEnvFile(envPath: string): Promise<Record<string, string>> {
-  if (!existsSync(envPath)) return {};
-  try {
-    const content = await readFile(envPath, "utf-8");
-    return parseEnvFile(content);
-  } catch {
-    return {};
   }
 }
 
