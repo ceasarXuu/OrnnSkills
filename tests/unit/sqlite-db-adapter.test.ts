@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { existsSync, rmSync } from 'node:fs';
 import { SQLiteDbAdapter } from '../../src/storage/sqlite/sqlite-db-adapter.js';
 
@@ -67,5 +67,21 @@ describe('SQLiteDbAdapter', () => {
     expect(stmt.getAsObject().value).toBe('before');
     stmt.free();
     adapter.close();
+  });
+
+  it('recreates the parent directory when saving during close after the db folder was removed', async () => {
+    const dbPath = makeDbPath('recreate-dir-on-close');
+    const createSchema = (db: { run: (sql: string, params?: unknown[]) => void }) => {
+      db.run('CREATE TABLE IF NOT EXISTS test_items (id TEXT PRIMARY KEY, value TEXT NOT NULL)');
+    };
+
+    const adapter = new SQLiteDbAdapter(dbPath, createSchema);
+    await adapter.init();
+    adapter.database.run('INSERT INTO test_items (id, value) VALUES (?, ?)', ['item-1', 'value-1']);
+
+    rmSync(dirname(dbPath), { recursive: true, force: true });
+
+    expect(() => adapter.close()).not.toThrow();
+    expect(existsSync(dbPath)).toBe(true);
   });
 });

@@ -52,10 +52,14 @@ export class SQLiteDbAdapter {
 
   save(): void {
     const buffer = Buffer.from(this.database.export());
+    const dir = dirname(this.dbPath);
     const uniqueId = randomBytes(8).toString('hex');
     const tempPath = `${this.dbPath}.${process.pid}.${uniqueId}.tmp`;
 
     try {
+      if (!existsSync(dir)) {
+        mkdirSync(dir, { recursive: true });
+      }
       writeFileSync(tempPath, buffer);
       renameSync(tempPath, this.dbPath);
     } catch (error) {
