@@ -10,7 +10,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import {
   listProjects,
-  addProject,
   setProjectMonitoringState,
   type RegisteredProject,
 } from './projects-registry.js';
@@ -31,13 +30,13 @@ import {
   readDashboardConfig,
 } from '../config/manager.js';
 import { pickProjectDirectory } from './native-project-picker.js';
-import { ensureMonitoringDaemon, ensureProjectInitialized } from './project-onboarding.js';
 import { handleGlobalConfigRoutes } from './routes/global-config-routes.js';
 import { handleProjectConfigRoutes } from './routes/project-config-routes.js';
 import { handleProjectManagementRoutes } from './routes/project-management-routes.js';
 import { handleProjectReadRoutes } from './routes/project-read-routes.js';
 import { handleProjectSkillRoutes } from './routes/project-skill-routes.js';
 import { handleProjectVersionRoutes } from './routes/project-version-routes.js';
+import { onboardProjectForMonitoring as onboardProjectForMonitoringService } from './services/project-onboarding-service.js';
 import { createDashboardSseHub } from './sse/hub.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -226,27 +225,8 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
     };
   }
 
-  async function onboardProjectForMonitoring(projectPath: string, name?: string) {
-    const initialization = await ensureProjectInitialized(projectPath);
-    addProject(initialization.projectPath, name);
-    await writeProjectLanguage(initialization.projectPath, currentLang);
-    const monitoring = await ensureMonitoringDaemon(initialization.projectPath);
-
-    logger.info('Project onboarded for dashboard monitoring', {
-      projectPath: initialization.projectPath,
-      initialized: initialization.initialized,
-      daemonStarted: monitoring.daemonStarted,
-      daemonRunning: monitoring.daemonRunning,
-      source: 'dashboard.project_onboarding',
-    });
-
-    return {
-      projectPath: initialization.projectPath,
-      initialized: initialization.initialized,
-      daemonStarted: monitoring.daemonStarted,
-      daemonRunning: monitoring.daemonRunning,
-    };
-  }
+  const onboardProjectForMonitoring = (projectPath: string, name?: string) =>
+    onboardProjectForMonitoringService({ projectPath, name, currentLang, logger });
 
   // ── Request Router ────────────────────────────────────────────────────────
 
