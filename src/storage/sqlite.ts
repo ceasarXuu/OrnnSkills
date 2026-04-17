@@ -1,15 +1,7 @@
-import initSqlJs, { type Database } from 'sql.js';
-import { join, resolve } from 'node:path';
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  writeFileSync,
-  renameSync,
-  unlinkSync,
-} from 'node:fs';
-import { randomBytes } from 'node:crypto';
+import type { Database } from 'sql.js';
+import { resolve } from 'node:path';
 import { createChildLogger } from '../utils/logger.js';
+import { SQLiteDbAdapter } from './sqlite/sqlite-db-adapter.js';
 import type {
   ProjectSkillShadow,
   ShadowStatus,
@@ -20,19 +12,131 @@ import type {
 
 const logger = createChildLogger('sqlite');
 
+function createStorageTables(db: Database): void {
+  db.run(`
+      -- Shadow Skills 表
+      CREATE TABLE IF NOT EXISTS shadow_skills (
+        shadow_id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        skill_id TEXT NOT NULL,
+        runtime TEXT DEFAULT 'codex',
+        origin_skill_id TEXT NOT NULL,
+        origin_version_at_fork TEXT NOT NULL,
+        shadow_path TEXT NOT NULL,
+        current_revision INTEGER DEFAULT 0,
+        status TEXT DEFAULT 'active',
+        created_at TEXT NOT NULL,
+        last_optimized_at TEXT,
+        hit_count INTEGER DEFAULT 0,
+        success_count INTEGER DEFAULT 0,
+        manual_override_count INTEGER DEFAULT 0,
+        health_score REAL DEFAULT 100.0,
+        UNIQUE(project_id, skill_id)
+      );
+    `);
+
+  db.run(`
+      CREATE TABLE IF NOT EXISTS evolution_records_index (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        shadow_id TEXT NOT NULL,
+        revision INTEGER NOT NULL,
+        timestamp TEXT NOT NULL,
+        change_type TEXT NOT NULL,
+        source_sessions TEXT,
+        confidence REAL,
+        FOREIGN KEY (shadow_id) REFERENCES shadow_skills(shadow_id)
+      );
+    `);
+
+  db.run(`
+      CREATE TABLE IF NOT EXISTS snapshots (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        shadow_id TEXT NOT NULL,
+        revision INTEGER NOT NULL,
+        timestamp TEXT NOT NULL,
+        file_path TEXT NOT NULL,
+        content_hash TEXT NOT NULL,
+        FOREIGN KEY (shadow_id) REFERENCES shadow_skills(shadow_id)
+      );
+    `);
+
+  db.run(`
+      CREATE TABLE IF NOT EXISTS sessions (
+        session_id TEXT PRIMARY KEY,
+        runtime TEXT NOT NULL,
+        project_id TEXT,
+        started_at TEXT NOT NULL,
+        ended_at TEXT,
+        trace_count INTEGER DEFAULT 0
+      );
+    `);
+
+  db.run(`
+      CREATE TABLE IF NOT EXISTS traces_index (
+        trace_id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL,
+        runtime TEXT NOT NULL,
+        event_type TEXT NOT NULL,
+        timestamp TEXT NOT NULL,
+        status TEXT,
+        FOREIGN KEY (session_id) REFERENCES sessions(session_id)
+      );
+    `);
+
+  db.run(`
+      -- Trace-Skill 映射表
+      CREATE TABLE IF NOT EXISTS trace_skill_mappings (
+        trace_id TEXT NOT NULL,
+        skill_id TEXT NOT NULL,
+        shadow_id TEXT,
+        confidence REAL NOT NULL,
+        reason TEXT,
+        mapped_at TEXT NOT NULL,
+        PRIMARY KEY (trace_id, skill_id)
+      );
+    `);
+
+  db.run(`
+      -- Origin Skills 表
+      CREATE TABLE IF NOT EXISTS origin_skills (
+        skill_id TEXT PRIMARY KEY,
+        origin_path TEXT NOT NULL,
+        origin_version TEXT NOT NULL,
+        source TEXT NOT NULL,
+        installed_at TEXT NOT NULL,
+        last_seen_at TEXT NOT NULL
+      );
+    `);
+
+  db.run('CREATE INDEX IF NOT EXISTS idx_shadow_project ON shadow_skills(project_id);');
+  try {
+    db.run("ALTER TABLE shadow_skills ADD COLUMN runtime TEXT DEFAULT 'codex';");
+  } catch {
+    // ignore when column already exists
+  }
+  db.run('CREATE INDEX IF NOT EXISTS idx_evolution_shadow ON evolution_records_index(shadow_id);');
+  db.run('CREATE INDEX IF NOT EXISTS idx_traces_session ON traces_index(session_id);');
+  db.run('CREATE INDEX IF NOT EXISTS idx_traces_timestamp ON traces_index(timestamp);');
+  db.run('CREATE INDEX IF NOT EXISTS idx_trace_skill_skill ON trace_skill_mappings(skill_id);');
+  db.run('CREATE INDEX IF NOT EXISTS idx_trace_skill_shadow ON trace_skill_mappings(shadow_id);');
+}
+
 /**
  * SQLite 存储管理器
  */
 export class SQLiteStorage {
-  private db: Database | null = null;
-  private dbPath: string;
+  private readonly adapter: SQLiteDbAdapter;
 
   // 单例管理：防止多个实例指向同一文件
   private static instances: Map<string, SQLiteStorage> = new Map();
   private static locks: Map<string, Promise<SQLiteStorage>> = new Map();
 
   private constructor(dbPath: string) {
-    this.dbPath = dbPath;
+    this.adapter = new SQLiteDbAdapter(dbPath, createStorageTables);
+  }
+
+  private get db(): Database | null {
+    return this.adapter.getDatabase();
   }
 
   /**
@@ -82,267 +186,56 @@ export class SQLiteStorage {
    * 初始化数据库
    */
   async init(): Promise<void> {
-    // 确保目录存在
-    const dir = join(this.dbPath, '..');
-    if (!existsSync(dir)) {
-      mkdirSync(dir, { recursive: true });
-    }
-
-    // 初始化 sql.js
-    const SQL = await initSqlJs();
-
-    // 尝试加载现有数据库
-    if (existsSync(this.dbPath)) {
-      const buffer = readFileSync(this.dbPath);
-      this.db = new SQL.Database(buffer);
-    } else {
-      this.db = new SQL.Database();
-    }
-
-    this.createTables();
-    this.save();
-    logger.debug('Database initialized', { path: this.dbPath });
+    await this.adapter.init();
   }
 
   /**
    * 保存数据库到文件（原子写入）
    */
   private save(): void {
-    if (!this.db) throw new Error('Database not initialized');
-    const data = this.db.export();
-    const buffer = Buffer.from(data);
-
-    // 使用唯一临时文件实现原子写入（防止多进程并发冲突）
-    const uniqueId = randomBytes(8).toString('hex');
-    const tempPath = `${this.dbPath}.${process.pid}.${uniqueId}.tmp`;
-    try {
-      writeFileSync(tempPath, buffer);
-      renameSync(tempPath, this.dbPath); // 原子替换
-    } catch (error) {
-      // 清理临时文件
-      try {
-        if (existsSync(tempPath)) {
-          unlinkSync(tempPath);
-        }
-      } catch {
-        // 忽略清理错误
-      }
-      throw error;
-    }
+    this.adapter.save();
   }
 
   /**
    * 开始事务
    */
   beginTrans(): void {
-    if (!this.db) throw new Error('Database not initialized');
-    this.db.run('BEGIN TRANSACTION');
+    this.adapter.beginTransaction();
   }
 
   /**
    * 提交事务
    */
   commit(): void {
-    if (!this.db) throw new Error('Database not initialized');
-    try {
-      this.db.run('COMMIT');
-      this.save();
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      if (errorMsg.includes('no transaction is active')) {
-        logger.debug('No active transaction to commit');
-      } else {
-        throw error;
-      }
-    }
+    this.adapter.commit();
   }
 
   /**
    * 回滚事务
    */
   rollback(): void {
-    if (!this.db) throw new Error('Database not initialized');
-    try {
-      this.db.run('ROLLBACK');
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      if (errorMsg.includes('no transaction is active')) {
-        logger.debug('No active transaction to rollback');
-      } else {
-        throw error;
-      }
-    }
+    this.adapter.rollback();
   }
 
   /**
    * 创建数据库备份
    */
   createBackup(backupPath?: string): string {
-    if (!this.db) throw new Error('Database not initialized');
-
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const backupFilePath = backupPath ?? `${this.dbPath}.backup.${timestamp}`;
-
-    const data = this.db.export();
-    const buffer = Buffer.from(data);
-    writeFileSync(backupFilePath, buffer);
-
-    logger.info('Database backup created', { path: backupFilePath });
-    return backupFilePath;
+    return this.adapter.createBackup(backupPath);
   }
 
   /**
    * 从备份恢复数据库
    */
   async restoreFromBackup(backupPath: string): Promise<void> {
-    if (!existsSync(backupPath)) {
-      throw new Error(`Backup file not found: ${backupPath}`);
-    }
-
-    const buffer = readFileSync(backupPath);
-    const SQL = await initSqlJs();
-
-    if (this.db) {
-      this.db.close();
-    }
-
-    this.db = new SQL.Database(buffer);
-    this.save();
-
-    logger.info('Database restored from backup', { path: backupPath });
-  }
-
-  /**
-   * 创建表结构
-   */
-  private createTables(): void {
-    if (!this.db) throw new Error('Database not initialized');
-
-    this.db.run(`
-      -- Shadow Skills 表
-      CREATE TABLE IF NOT EXISTS shadow_skills (
-        shadow_id TEXT PRIMARY KEY,
-        project_id TEXT NOT NULL,
-        skill_id TEXT NOT NULL,
-        runtime TEXT DEFAULT 'codex',
-        origin_skill_id TEXT NOT NULL,
-        origin_version_at_fork TEXT NOT NULL,
-        shadow_path TEXT NOT NULL,
-        current_revision INTEGER DEFAULT 0,
-        status TEXT DEFAULT 'active',
-        created_at TEXT NOT NULL,
-        last_optimized_at TEXT,
-        hit_count INTEGER DEFAULT 0,
-        success_count INTEGER DEFAULT 0,
-        manual_override_count INTEGER DEFAULT 0,
-        health_score REAL DEFAULT 100.0,
-        UNIQUE(project_id, skill_id)
-      );
-    `);
-
-    this.db.run(`
-      CREATE TABLE IF NOT EXISTS evolution_records_index (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        shadow_id TEXT NOT NULL,
-        revision INTEGER NOT NULL,
-        timestamp TEXT NOT NULL,
-        change_type TEXT NOT NULL,
-        source_sessions TEXT,
-        confidence REAL,
-        FOREIGN KEY (shadow_id) REFERENCES shadow_skills(shadow_id)
-      );
-    `);
-
-    this.db.run(`
-      CREATE TABLE IF NOT EXISTS snapshots (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        shadow_id TEXT NOT NULL,
-        revision INTEGER NOT NULL,
-        timestamp TEXT NOT NULL,
-        file_path TEXT NOT NULL,
-        content_hash TEXT NOT NULL,
-        FOREIGN KEY (shadow_id) REFERENCES shadow_skills(shadow_id)
-      );
-    `);
-
-    this.db.run(`
-      CREATE TABLE IF NOT EXISTS sessions (
-        session_id TEXT PRIMARY KEY,
-        runtime TEXT NOT NULL,
-        project_id TEXT,
-        started_at TEXT NOT NULL,
-        ended_at TEXT,
-        trace_count INTEGER DEFAULT 0
-      );
-    `);
-
-    this.db.run(`
-      CREATE TABLE IF NOT EXISTS traces_index (
-        trace_id TEXT PRIMARY KEY,
-        session_id TEXT NOT NULL,
-        runtime TEXT NOT NULL,
-        event_type TEXT NOT NULL,
-        timestamp TEXT NOT NULL,
-        status TEXT,
-        FOREIGN KEY (session_id) REFERENCES sessions(session_id)
-      );
-    `);
-
-    this.db.run(`
-      -- Trace-Skill 映射表
-      CREATE TABLE IF NOT EXISTS trace_skill_mappings (
-        trace_id TEXT NOT NULL,
-        skill_id TEXT NOT NULL,
-        shadow_id TEXT,
-        confidence REAL NOT NULL,
-        reason TEXT,
-        mapped_at TEXT NOT NULL,
-        PRIMARY KEY (trace_id, skill_id)
-      );
-    `);
-
-    this.db.run(`
-      -- Origin Skills 表
-      CREATE TABLE IF NOT EXISTS origin_skills (
-        skill_id TEXT PRIMARY KEY,
-        origin_path TEXT NOT NULL,
-        origin_version TEXT NOT NULL,
-        source TEXT NOT NULL,
-        installed_at TEXT NOT NULL,
-        last_seen_at TEXT NOT NULL
-      );
-    `);
-
-    // 创建索引
-    this.db.run('CREATE INDEX IF NOT EXISTS idx_shadow_project ON shadow_skills(project_id);');
-    try {
-      this.db.run("ALTER TABLE shadow_skills ADD COLUMN runtime TEXT DEFAULT 'codex';");
-    } catch {
-      // ignore when column already exists
-    }
-    this.db.run(
-      'CREATE INDEX IF NOT EXISTS idx_evolution_shadow ON evolution_records_index(shadow_id);'
-    );
-    this.db.run('CREATE INDEX IF NOT EXISTS idx_traces_session ON traces_index(session_id);');
-    this.db.run('CREATE INDEX IF NOT EXISTS idx_traces_timestamp ON traces_index(timestamp);');
-    this.db.run(
-      'CREATE INDEX IF NOT EXISTS idx_trace_skill_skill ON trace_skill_mappings(skill_id);'
-    );
-    this.db.run(
-      'CREATE INDEX IF NOT EXISTS idx_trace_skill_shadow ON trace_skill_mappings(shadow_id);'
-    );
+    await this.adapter.restoreFromBackup(backupPath);
   }
 
   /**
    * 关闭数据库连接
    */
   close(): void {
-    if (this.db) {
-      this.save();
-      this.db.close();
-      this.db = null;
-      logger.info('Database closed');
-    }
+    this.adapter.close();
   }
 
   // ==================== Shadow Skills ====================
