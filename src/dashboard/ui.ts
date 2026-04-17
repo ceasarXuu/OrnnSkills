@@ -11,6 +11,7 @@ import { renderDashboardAppShell } from './web/app-shell.js';
 import { renderDashboardConfigPanelSource } from './web/panels/config-panel.js';
 import { renderDashboardCostPanelSource } from './web/panels/cost-panel.js';
 import { renderDashboardLogsPanelSource } from './web/panels/logs-panel.js';
+import { renderDashboardOverviewPanelSource } from './web/panels/overview-panel.js';
 import { renderDashboardStateSource } from './web/state.js';
 
 export function getDashboardHtml(_port: number, lang: Language = 'en', buildId = 'dev'): string {
@@ -19,6 +20,7 @@ export function getDashboardHtml(_port: number, lang: Language = 'en', buildId =
   const dashboardConfigPanelSource = renderDashboardConfigPanelSource();
   const dashboardCostPanelSource = renderDashboardCostPanelSource();
   const dashboardLogsPanelSource = renderDashboardLogsPanelSource();
+  const dashboardOverviewPanelSource = renderDashboardOverviewPanelSource();
   const dashboardStateSource = renderDashboardStateSource();
 
   const styleCss = /* css */ `
@@ -948,6 +950,7 @@ ${dashboardStateSource}
 ${dashboardConfigPanelSource}
 ${dashboardCostPanelSource}
 ${dashboardLogsPanelSource}
+${dashboardOverviewPanelSource}
 
 function t(key) {
   return (I18N[currentLang] && I18N[currentLang][key]) || (I18N.en && I18N.en[key]) || key;
@@ -3110,24 +3113,6 @@ function renderMainPanel(projectPath) {
     bySkill: {},
   };
 
-  const monitoringPaused = daemon.isPaused === true || daemon.monitoringState === 'paused';
-  const daemonRunning = !monitoringPaused && !!daemon.isRunning;
-  const daemonStatusText = monitoringPaused
-    ? t('daemonPaused')
-    : daemonRunning
-      ? t('daemonRunning')
-      : t('daemonStopped');
-  const daemonStatusDot = monitoringPaused
-    ? 'dot dot-yellow'
-    : daemonRunning
-      ? 'dot dot-green'
-      : 'dot dot-gray';
-  const uptime = daemonRunning && daemon.startedAt ? formatUptime(daemon.startedAt) : '—';
-  const optimizationQueueSize = monitoringPaused ? 0 : (daemon.optimizationStatus?.queueSize ?? 0);
-  const renderedDaemonState = renderStateBadge(
-    monitoringPaused ? 'idle' : daemon.optimizationStatus?.currentState
-  );
-
   el.innerHTML = \`<div class="panel-inner">
     <div class="main-tabs">
       <button class="main-tab \${state.selectedMainTab === 'overview' ? 'active' : ''}" onclick="selectMainTab('overview')">\${t('mainTabOverview')}</button>
@@ -3140,123 +3125,26 @@ function renderMainPanel(projectPath) {
 
     \${renderProviderAlert(projectPath)}
 
-    \${state.selectedMainTab === 'overview' ? \`
-    <div class="stats-row">
-      <div class="stat-card">
-        <div class="stat-label">\${t('statShadowSkills')}</div>
-        <div class="stat-value">\${skills.length}</div>
-        <div class="stat-sub">\${t('statShadowSkillsSub')}</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">\${t('statTraces')}</div>
-        <div class="stat-value">\${daemon.processedTraces ?? 0}</div>
-        <div class="stat-sub">\${t('statTracesSub')}</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">\${t('statUptime')}</div>
-        <div class="stat-value" style="font-size:15px">\${uptime}</div>
-        <div class="stat-sub">\${daemonStatusText}</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">\${t('statQueue')}</div>
-        <div class="stat-value">\${optimizationQueueSize}</div>
-        <div class="stat-sub">\${t('statQueueSub')}</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">\${t('costCalls')}</div>
-        <div class="stat-value">\${agentUsage.callCount ?? 0}</div>
-        <div class="stat-sub">\${t('costCallsSub')}</div>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-header">
-        <span>\${t('daemonStatus')}</span>
-        <span><span class="\${daemonStatusDot}"></span> \${daemonStatusText}</span>
-      </div>
-      <div class="card-body">
-        <div class="daemon-grid">
-          <div>
-            <div class="daemon-row"><span class="daemon-key">\${t('daemonState')}</span><span class="daemon-val">\${renderedDaemonState}</span></div>
-            <div class="daemon-row"><span class="daemon-key">\${t('daemonCurrentSkill')}</span><span class="daemon-val">\${monitoringPaused ? '—' : (daemon.optimizationStatus?.currentSkillId ?? '—')}</span></div>
-            <div class="daemon-row"><span class="daemon-key">\${t('daemonRetryQueue')}</span><span class="daemon-val">\${monitoringPaused ? 0 : (daemon.retryQueueSize ?? 0)}</span></div>
-          </div>
-          <div>
-            <div class="daemon-row"><span class="daemon-key">\${t('daemonLastCheckpoint')}</span><span class="daemon-val">\${daemon.lastCheckpointAt ? timeAgo(daemon.lastCheckpointAt) : '—'}</span></div>
-            <div class="daemon-row"><span class="daemon-key">\${t('daemonLastOptimization')}</span><span class="daemon-val">\${daemon.optimizationStatus?.lastOptimizationAt ? timeAgo(daemon.optimizationStatus.lastOptimizationAt) : '—'}</span></div>
-            \${!monitoringPaused && daemon.optimizationStatus?.lastError ? \`<div class="daemon-row"><span class="daemon-key" style="color:var(--red)">\${t('daemonLastError')}</span><span class="daemon-val" style="color:var(--red);font-size:10px">\${escHtml(daemon.optimizationStatus.lastError)}</span></div>\` : ''}
-          </div>
-        </div>
-      </div>
-    </div>
-    \${decisionEvents.length > 0 ? \`
-    <div class="stats-row">
-      <div class="stat-card">
-        <div class="stat-label">\${t('overviewMapped')}</div>
-        <div class="stat-value">\${Object.values(decisionSummary.mappingByStrategy).reduce((sum, count) => sum + count, 0)}</div>
-        <div class="stat-sub">\${t('overviewMappedSub')}</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">\${t('overviewSkipped')}</div>
-        <div class="stat-value">\${Object.values(decisionSummary.skippedByReason).reduce((sum, count) => sum + count, 0)}</div>
-        <div class="stat-sub">\${t('overviewSkippedSub')}</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">\${t('overviewPatchDelta')}</div>
-        <div class="stat-value" style="font-size:15px">+\${decisionSummary.patchVolume.linesAdded}/-\${decisionSummary.patchVolume.linesRemoved}</div>
-        <div class="stat-sub">\${t('overviewPatchDeltaSub')}</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">\${t('overviewHostDrift')}</div>
-        <div class="stat-value">\${decisionSummary.runtimeDriftCount}</div>
-        <div class="stat-sub">\${t('overviewHostDriftSub')}</div>
-      </div>
-    </div>
-
-    <div class="skills-list" style="grid-template-columns:repeat(2,1fr)">
-      \${renderMetricRows(t('overviewMappingStrategy'), decisionSummary.mappingByStrategy, t('overviewNoMappingData'))}
-      \${renderMetricRows(t('overviewEvaluationRules'), decisionSummary.evaluationByRule, t('overviewNoEvaluationData'))}
-      \${renderMetricRows(t('overviewSkipReasons'), decisionSummary.skippedByReason, t('overviewNoSkipData'))}
-      \${renderMetricRows(t('overviewPatchTypes'), decisionSummary.patchByType, t('overviewNoPatchData'))}
-    </div>
-    \` : ''}
-    \${agentUsage.callCount > 0 ? \`
-    <div class="stats-row">
-      <div class="stat-card">
-        <div class="stat-label">\${t('costCalls')}</div>
-        <div class="stat-value">\${formatUsageCompact(agentUsage.callCount)}</div>
-        <div class="stat-sub">\${t('overviewAgentUsageSub')}</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">\${t('costInputTokens')}</div>
-        <div class="stat-value">\${formatUsageCompact(agentUsage.promptTokens)}</div>
-        <div class="stat-sub">\${t('overviewAgentUsageSub')}</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">\${t('costOutputTokens')}</div>
-        <div class="stat-value">\${formatUsageCompact(agentUsage.completionTokens)}</div>
-        <div class="stat-sub">\${t('overviewAgentUsageSub')}</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">\${t('costTotalTokens')}</div>
-        <div class="stat-value">\${formatUsageCompact(agentUsage.totalTokens)}</div>
-        <div class="stat-sub">\${t('overviewAgentUsageSub')}</div>
-      </div>
-    </div>
-
-    <div class="skills-list" style="grid-template-columns:repeat(1,1fr)">
-      \${renderMetricRows(t('overviewAgentScopes'), Object.fromEntries(Object.entries(agentUsage.byScope || {}).map(([scope, item]) => [scope, item.callCount || 0])), t('overviewNoAgentScopes'))}
-    </div>
-    \` : ''}
-    \${traceStats.total > 0 ? \`
-    <div class="card">
-      <div class="card-header"><span>\${t('traceTitle')}</span><span style="color:var(--muted)">\${traceStats.total} \${t('traceTotal')}</span></div>
-      <div class="card-body">
-        \${renderTraceBars(t('traceRuntime'), traceStats.byRuntime, ['codex','claude','opencode'])}
-        \${renderTraceBars(t('traceStatus'), traceStats.byStatus, ['success','failure','retry','interrupted'])}
-      </div>
-    </div>\` : ''}
-    \` : ''}
+    \${state.selectedMainTab === 'overview'
+      ? renderDashboardOverviewPanel({
+        agentUsage,
+        daemon,
+        decisionSummary,
+        deps: {
+          escHtml,
+          formatUptime,
+          formatUsageCompact,
+          renderMetricRows,
+          renderStateBadge,
+          renderTraceBars,
+          t,
+          timeAgo,
+        },
+        hasDecisionEvents: decisionEvents.length > 0,
+        skillsCount: skills.length,
+        traceStats,
+      })
+      : ''}
 
     \${state.selectedMainTab === 'skills' ? \`
     <div class="card">
