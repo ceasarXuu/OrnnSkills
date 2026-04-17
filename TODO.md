@@ -61,16 +61,16 @@
   2. `[x]` 抽出 `retry-queue`
   3. `[x]` 抽出 `checkpoint-service`
   4. `[x]` 抽出 `daemon-lifecycle`
-- [ ] P2 `src/core/shadow-manager/index.ts`
+- [x] P2 `src/core/shadow-manager/index.ts`
   当前顺序：
-  1. `[ ]` 抽出 `trace-ingest-service`
-  2. `[ ]` 抽出 `episode-probe-service`
-  3. `[ ]` 抽出 `optimization-runner`
-  4. `[ ]` 抽出 `manual-optimize-service`
-  5. `[ ]` 保留 `ShadowManager` 作为 facade
+  1. `[x]` 抽出 `trace-ingest-service`
+  2. `[x]` 抽出 `episode-probe-service`
+  3. `[x]` 抽出 `optimization-runner`
+  4. `[x]` 抽出 `manual-optimize-service`
+  5. `[x]` 保留 `ShadowManager` 作为 facade
 
 当前进行中：
-- [ ] `src/core/shadow-manager/index.ts` 第 1 步：抽出 `trace-ingest-service`
+- [x] 全部完成
 
 ## 优先级总览
 

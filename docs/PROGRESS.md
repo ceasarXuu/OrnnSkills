@@ -7,6 +7,9 @@
 - ✅ 完成 `src/daemon/index.ts` 拆分收口：将 project runtime 注册/同步、retry queue、checkpoint 持久化、daemon 生命周期管理拆到独立模块，`Daemon` 保留 facade 与旧测试入口，`src/daemon/index.ts` 已降到 346 行
 - 📝 记录测试经验：Vitest 的模块 mock 只要缺了某个 export，即使用 namespace import，也可能在读属性时由代理直接抛错；这类兼容层不要依赖“先判断 export 是否存在”，而应在真正读取注册表能力时显式 `try/catch` 并回退到安全默认值
 - 📝 记录重构经验：给旧代码外面再包一层“看起来无害”的 `async` facade，会改变微任务层级并悄悄打破依赖时序的历史测试；重构时如果目标是行为保持，就要优先复用原有 await 边界，而不是机械增加中转 async 方法
+- ✅ 完成 `src/core/shadow-manager/index.ts` 拆分收口：将 trace ingest、episode probe、optimization runner、manual optimize 四块职责拆到独立服务，`ShadowManager` 保留 facade，主入口已降到 196 行
+- 📝 记录架构经验：自动窗口分析和手动窗口分析虽然共用同一 analyzer，但事件语义并不相同；自动路径会补 `skill_feedback` 支撑信息，手动路径不能机械复用同一后处理，否则 dashboard 会出现重复或漂移的反馈事件
+- 📝 记录测试经验：凡是生产链路通过 callback 回写副作用（例如 `executeOptimizationPatch` 里的 `onPatchApplied` 用来更新冷却/计数状态），测试桩也必须显式兑现同一个 contract；只 mock 一个 “ok=true” 返回值，会把真实状态迁移路径测丢
 
 ### 2026-04-16
 
