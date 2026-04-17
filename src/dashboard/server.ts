@@ -18,7 +18,6 @@ import { writeProjectLanguage } from './language-state.js';
 import {
   readDaemonStatus,
   readSkills,
-  readSkillVersion,
   readProjectSnapshotVersion,
   readGlobalLogs,
   readLogsSince,
@@ -28,10 +27,6 @@ import {
 import { getDashboardHtml } from './ui.js';
 import type { Language } from './i18n.js';
 import { createChildLogger } from '../utils/logger.js';
-import { createShadowRegistry } from '../core/shadow-registry/index.js';
-import { SkillVersionManager } from '../core/skill-version/index.js';
-import type { RuntimeType } from '../types/index.js';
-import { createSkillDeployer } from '../core/skill-deployer/index.js';
 import {
   checkProvidersConnectivity,
   readDashboardConfig,
@@ -42,6 +37,7 @@ import { handleGlobalConfigRoutes } from './routes/global-config-routes.js';
 import { handleProjectConfigRoutes } from './routes/project-config-routes.js';
 import { handleProjectReadRoutes } from './routes/project-read-routes.js';
 import { handleProjectSkillRoutes } from './routes/project-skill-routes.js';
+import { handleProjectVersionRoutes } from './routes/project-version-routes.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -626,117 +622,16 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
           return;
         }
 
-        // GET /api/projects/:id/skills/:skillId/versions/:v
-        const versionMatch = subPath.match(/^\/skills\/([^/]+)\/versions\/(\d+)$/);
-        if (versionMatch && method === 'PATCH') {
-          const skillId = decodeURIComponent(versionMatch[1]);
-          const version = parseInt(versionMatch[2], 10);
-          const body = (await parseBody(req)) as { disabled?: unknown };
-          if (typeof body.disabled !== 'boolean') {
-            json(res, { ok: false, error: 'disabled must be a boolean' }, 400);
-            return;
-          }
-
-          const runtimeParam = url.searchParams.get('runtime');
-          const runtime: RuntimeType =
-            runtimeParam === 'claude' || runtimeParam === 'opencode' || runtimeParam === 'codex'
-              ? runtimeParam
-              : 'codex';
-
-          try {
-            const versionManager = new SkillVersionManager({
-              projectPath,
-              skillId,
-              runtime,
-            });
-            const updatedVersion = versionManager.setVersionDisabled(version, body.disabled);
-            if (!updatedVersion) {
-              notFound(res);
-              return;
-            }
-
-            const effectiveVersion = versionManager.getEffectiveVersion();
-            if (!effectiveVersion) {
-              json(res, { ok: false, error: 'No effective version available after update' }, 400);
-              return;
-            }
-
-            const shadowRegistry = createShadowRegistry(projectPath);
-            shadowRegistry.init();
-            const updatedShadow = shadowRegistry.updateContent(skillId, effectiveVersion.content, runtime);
-            if (!updatedShadow) {
-              notFound(res);
-              return;
-            }
-
-            const deployer = createSkillDeployer({
-              runtime,
-              projectPath,
-            });
-            const deployResult = deployer.deploy(skillId, effectiveVersion);
-            if (!deployResult.success) {
-              logger.error('Dashboard version state updated but failed to deploy effective version', {
-                projectPath,
-                skillId,
-                runtime,
-                version,
-                effectiveVersion: effectiveVersion.version,
-                error: deployResult.error,
-              });
-              json(
-                res,
-                {
-                  ok: false,
-                  error: `Version state updated but deploy failed`,
-                  detail: deployResult.error,
-                  version,
-                  effectiveVersion: effectiveVersion.version,
-                },
-                500
-              );
-              return;
-            }
-
-            logger.info('Dashboard toggled skill version state', {
-              projectPath,
-              skillId,
-              runtime,
-              version,
-              disabled: body.disabled,
-              effectiveVersion: effectiveVersion.version,
-            });
-
-            json(res, {
-              ok: true,
-              skillId,
-              runtime,
-              version,
-              disabled: !!updatedVersion.metadata.isDisabled,
-              effectiveVersion: effectiveVersion.version,
-              metadata: updatedVersion.metadata,
-            });
-            return;
-          } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            json(res, { ok: false, error: message }, 400);
-            return;
-          }
-        }
-
-        if (versionMatch && method === 'GET') {
-          const skillId = decodeURIComponent(versionMatch[1]);
-          const version = parseInt(versionMatch[2], 10);
-          const runtimeParam = url.searchParams.get('runtime');
-          const runtime: RuntimeType =
-            runtimeParam === 'claude' || runtimeParam === 'opencode' || runtimeParam === 'codex'
-              ? runtimeParam
-              : 'codex';
-          const result = readSkillVersion(projectPath, skillId, version, runtime);
-          if (!result) {
-            notFound(res);
-            return;
-          }
-          json(res, result);
+        if (await handleProjectVersionRoutes({
+          subPath,
+          method,
+          projectPath,
+          url,
+          json: (data, status = 200) => json(res, data, status),
+          parseBody: () => parseBody(req),
+          notFound: () => notFound(res),
+          logger,
+        })) {
           return;
         }
 
