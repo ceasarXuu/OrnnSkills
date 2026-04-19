@@ -34,8 +34,10 @@ import { handleGlobalConfigRoutes } from './routes/global-config-routes.js';
 import { handleProjectConfigRoutes } from './routes/project-config-routes.js';
 import { handleProjectManagementRoutes } from './routes/project-management-routes.js';
 import { handleProjectReadRoutes } from './routes/project-read-routes.js';
+import { handleProjectSkillInstanceRoutes } from './routes/project-skill-instance-routes.js';
 import { handleProjectSkillRoutes } from './routes/project-skill-routes.js';
 import { handleProjectVersionRoutes } from './routes/project-version-routes.js';
+import { handleSkillFamilyRoutes } from './routes/skill-family-routes.js';
 import { onboardProjectForMonitoring as onboardProjectForMonitoringService } from './services/project-onboarding-service.js';
 import { createDashboardSseHub } from './sse/hub.js';
 
@@ -338,6 +340,15 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
         return;
       }
 
+      if (await handleSkillFamilyRoutes({
+        path,
+        method,
+        json: (data, status = 200) => json(res, data, status),
+        notFound: () => notFound(res),
+      })) {
+        return;
+      }
+
       if (await handleGlobalConfigRoutes({
         path,
         method,
@@ -378,6 +389,19 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
           projectPath,
           currentLang,
           json: (data, status = 200) => json(res, data, status),
+          notFound: () => notFound(res),
+          logger,
+        })) {
+          return;
+        }
+
+        if (await handleProjectSkillInstanceRoutes({
+          subPath,
+          method,
+          projectPath,
+          url,
+          json: (data, status = 200) => json(res, data, status),
+          parseBody: () => parseBody(req),
           notFound: () => notFound(res),
           logger,
         })) {

@@ -1,4 +1,5 @@
 import { createSkillDeployer } from '../../core/skill-deployer/index.js';
+import { refreshSkillDomainProjection } from '../../core/skill-domain/projector.js';
 import { createShadowRegistry } from '../../core/shadow-registry/index.js';
 import { SkillVersionManager } from '../../core/skill-version/index.js';
 import { readSkillContent } from '../data-reader.js';
@@ -83,6 +84,8 @@ export function saveSkillVersion(params: {
     deployedPath: deployResult.deployedPath,
   });
 
+  refreshSkillDomainProjection(projectPath);
+
   return {
     ok: true as const,
     unchanged: false as const,
@@ -162,6 +165,8 @@ export function toggleSkillVersionState(params: {
       disabled,
       effectiveVersion: effectiveVersion.version,
     });
+
+    refreshSkillDomainProjection(projectPath);
 
     return {
       ok: true as const,

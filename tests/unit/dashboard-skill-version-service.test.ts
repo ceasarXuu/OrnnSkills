@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   createShadowRegistry: vi.fn(),
   createSkillDeployer: vi.fn(),
   SkillVersionManager: vi.fn(),
+  refreshSkillDomainProjection: vi.fn(),
   versionManager: {
     createVersion: vi.fn(),
     getEffectiveVersion: vi.fn(),
@@ -38,6 +39,10 @@ vi.mock('../../src/core/skill-version/index.js', () => ({
     }
     return mocks.SkillVersionManager(...args);
   },
+}));
+
+vi.mock('../../src/core/skill-domain/projector.js', () => ({
+  refreshSkillDomainProjection: mocks.refreshSkillDomainProjection,
 }));
 
 describe('dashboard skill version service', () => {
@@ -90,6 +95,7 @@ describe('dashboard skill version service', () => {
       'demo-skill',
       expect.objectContaining({ version: 4 })
     );
+    expect(mocks.refreshSkillDomainProjection).toHaveBeenCalledWith('/tmp/demo');
   });
 
   it('toggles a version disabled state and redeploys the effective version', async () => {
@@ -134,5 +140,6 @@ describe('dashboard skill version service', () => {
       'demo-skill',
       expect.objectContaining({ version: 3, content: '# active v3' })
     );
+    expect(mocks.refreshSkillDomainProjection).toHaveBeenCalledWith('/tmp/demo');
   });
 });

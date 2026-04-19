@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, afterEach } from 'vitest';
-import { existsSync, mkdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
@@ -183,6 +183,91 @@ describe('dashboard data reader snapshot version', () => {
     } finally {
       process.env.HOME = oldHome;
     }
+  });
+
+  it('changes snapshot version when skill version directories or latest targets change', async () => {
+    const versionsDir = join(testDir, '.ornn', 'skills', 'codex', 'demo-skill', 'versions');
+    mkdirSync(join(versionsDir, 'v1'), { recursive: true });
+    writeFileSync(
+      join(testDir, '.ornn', 'shadows', 'index.json'),
+      JSON.stringify([
+        {
+          skillId: 'demo-skill',
+          runtime: 'codex',
+          version: '1',
+          status: 'active',
+          createdAt: '2026-04-18T09:00:00.000Z',
+          updatedAt: '2026-04-18T09:00:00.000Z',
+          traceCount: 0,
+        },
+      ]),
+      'utf-8'
+    );
+    symlinkSync('v1', join(versionsDir, 'latest'));
+
+    const before = readProjectSnapshotVersion(testDir);
+
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    mkdirSync(join(versionsDir, 'v2'), { recursive: true });
+    rmSync(join(versionsDir, 'latest'), { force: true });
+    symlinkSync('v2', join(versionsDir, 'latest'));
+
+    const after = readProjectSnapshotVersion(testDir);
+    expect(after).not.toBe(before);
+  });
+
+  it('does not change snapshot version when only skill version file contents change', async () => {
+    const versionsDir = join(testDir, '.ornn', 'skills', 'codex', 'demo-skill', 'versions');
+    mkdirSync(join(versionsDir, 'v1'), { recursive: true });
+    writeFileSync(join(versionsDir, 'v1', 'skill.md'), '# demo v1\n', 'utf-8');
+    writeFileSync(
+      join(versionsDir, 'v1', 'metadata.json'),
+      JSON.stringify({
+        version: 1,
+        createdAt: '2026-04-18T09:00:00.000Z',
+        reason: 'seed',
+        traceIds: [],
+        previousVersion: null,
+        isDisabled: false,
+      }),
+      'utf-8'
+    );
+    symlinkSync('v1', join(versionsDir, 'latest'));
+    writeFileSync(
+      join(testDir, '.ornn', 'shadows', 'index.json'),
+      JSON.stringify([
+        {
+          skillId: 'demo-skill',
+          runtime: 'codex',
+          version: '1',
+          status: 'active',
+          createdAt: '2026-04-18T09:00:00.000Z',
+          updatedAt: '2026-04-18T09:00:00.000Z',
+          traceCount: 0,
+        },
+      ]),
+      'utf-8'
+    );
+
+    const before = readProjectSnapshotVersion(testDir);
+
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    writeFileSync(join(versionsDir, 'v1', 'skill.md'), '# demo v1 updated\n', 'utf-8');
+    writeFileSync(
+      join(versionsDir, 'v1', 'metadata.json'),
+      JSON.stringify({
+        version: 1,
+        createdAt: '2026-04-18T09:00:00.000Z',
+        reason: 'seed-updated',
+        traceIds: [],
+        previousVersion: null,
+        isDisabled: false,
+      }),
+      'utf-8'
+    );
+
+    const after = readProjectSnapshotVersion(testDir);
+    expect(after).toBe(before);
   });
 
   it('marks daemon status as paused when the project registry pauses monitoring', () => {

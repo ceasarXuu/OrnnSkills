@@ -8,12 +8,13 @@
 import {
   existsSync,
   readFileSync,
-  statSync,
 } from 'node:fs';
 import { basename, join } from 'node:path';
 import { homedir } from 'node:os';
 import type { DecisionEventRecord } from '../core/decision-events/index.js';
 import type { TaskEpisodeSnapshot } from '../core/task-episode/index.js';
+import { collectSkillVersionTreeSignature, readFileSignature } from '../core/skill-domain/source-signature.js';
+import type { ProjectSkillGroup, SkillInstance } from '../types/index.js';
 import {
   createRotatingLogCursor,
   readRecentRotatingLogEntries,
@@ -59,6 +60,38 @@ export type { AgentUsageStats, AgentUsageBucket } from './readers/agent-usage-re
 export interface ProjectData {
   daemon: DaemonStatus;
   skills: DashboardSkillInfo[];
+  skillGroups: Array<
+    Pick<
+      ProjectSkillGroup,
+      | 'familyId'
+      | 'familyName'
+      | 'skillKey'
+      | 'instanceCount'
+      | 'runtimeCount'
+      | 'runtimes'
+      | 'status'
+      | 'lastUsedAt'
+      | 'observedCalls'
+      | 'analyzedTouches'
+      | 'optimizedCount'
+    >
+  >;
+  skillInstances: Array<
+    Pick<
+      SkillInstance,
+      | 'instanceId'
+      | 'familyId'
+      | 'familyName'
+      | 'skillKey'
+      | 'projectId'
+      | 'projectPath'
+      | 'skillId'
+      | 'runtime'
+      | 'status'
+      | 'lastUsedAt'
+      | 'effectiveVersion'
+    >
+  >;
   traceStats: TraceStats;
   recentTraces: TraceEntry[];
   decisionEvents: DecisionEventRecord[];
@@ -73,16 +106,6 @@ const SNAPSHOT_SKILL_CONTEXT_SCAN_LINES = 4000;
 
 function getGlobalDaemonPidPath(): string {
   return join(homedir(), '.ornn', 'daemon.pid');
-}
-
-function readFileSignature(filePath: string): string {
-  if (!existsSync(filePath)) return 'missing';
-  try {
-    const stat = statSync(filePath);
-    return `${stat.size}:${Math.floor(stat.mtimeMs)}`;
-  } catch {
-    return 'error';
-  }
 }
 
 // ─── Global Logs ──────────────────────────────────────────────────────────────
@@ -120,6 +143,8 @@ export function readProjectSnapshot(projectRoot: string): ProjectData {
   return {
     daemon: readDaemonStatus(projectRoot),
     skills: readSkills(projectRoot).map(toDashboardSkillInfo),
+    skillGroups: [],
+    skillInstances: [],
     traceStats: computeTraceStats(recentTraces),
     recentTraces: readRecentActivityTraces(
       projectRoot,
@@ -140,6 +165,7 @@ export function readProjectSnapshot(projectRoot: string): ProjectData {
 export function readProjectSnapshotVersion(projectRoot: string): string {
   const stateDir = join(projectRoot, '.ornn', 'state');
   const shadowsDir = join(projectRoot, '.ornn', 'shadows');
+  const skillsDir = join(projectRoot, '.ornn', 'skills');
   const traceSignatures = listTraceNdjsonPaths(projectRoot)
     .map((filePath) => `${filePath}:${readFileSignature(filePath)}`)
     .join(',');
@@ -152,7 +178,9 @@ export function readProjectSnapshotVersion(projectRoot: string): string {
     readFileSignature(join(stateDir, 'decision-events.ndjson')),
     readFileSignature(join(stateDir, 'agent-usage.ndjson')),
     readFileSignature(join(stateDir, 'agent-usage-summary.json')),
+    readFileSignature(join(stateDir, 'skill-domain-projection.json')),
     readFileSignature(join(shadowsDir, 'index.json')),
+    collectSkillVersionTreeSignature(skillsDir),
     readFileSignature(join(homedir(), '.ornn', 'projects.json')),
   ];
   return parts.join('|');

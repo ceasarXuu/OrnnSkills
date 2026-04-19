@@ -286,3 +286,5 @@ export interface ProjectConfig {
     }
   >;
 }
+
+export * from './skill-domain.js';
