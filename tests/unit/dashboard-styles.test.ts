@@ -9,6 +9,8 @@ describe('renderDashboardStylesSource', () => {
     expect(css).toContain('.project-item.active');
     expect(css).toContain('.project-item, .skill-nav-item');
     expect(css).toContain('.project-top, .skill-nav-top');
+    expect(css).toContain('.skill-library-sidebar-shell {');
+    expect(css).toContain('.skill-library-toolbar {');
     expect(css).toContain('.activity-table { width: 100%;');
     expect(css).toContain('.provider-row {');
     expect(css).toContain('.header-center');
