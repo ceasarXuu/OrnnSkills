@@ -1,1003 +1,505 @@
-OrnnSkills 设计文档 v2
-0. 一句话定义
+# OrnnSkills V2.0 PRD
 
-OrnnSkills 是一个后台常驻的元 Agent。它不会替代主 Agent 执行任务，而是持续观察主 Agent 的真实执行，并为每个项目维护一份来自全局 Skill 的影子副本（Shadow Skill），再基于 trace 对这份影子副本做小步、自动、可回滚的持续优化。
+**版本**: 2.0  
+**日期**: 2026-04-19  
+**状态**: Draft / Ready for product and engineering breakdown
 
-1. 设计目标
-1.1 产品目标
+## 1. 背景
 
-让用户几乎无感地获得这样一种效果：
+OrnnSkills 1.0 的核心定义是 `Skill Evolution Agent`：监听宿主 trace，围绕项目级 shadow skill 做自动优化、版本记录和回滚。这套能力验证了一个重要前提:
 
-我本机安装的通用 skill，在不同项目里会自动长成更适合这个项目的版本，而且这个过程是后台持续发生的，不需要我手动管理复杂的 skills 分支体系。
+- 用户确实需要 skill 演进，而不是只会“下载 skill”
+- 项目级隔离、版本历史、回滚、trace 证据链是刚需
+- 仅强调“自动优化”仍然过窄，用户还缺少对 skill 全生命周期的可视化理解和管理能力
 
-1.2 关键设计原则
-A. 用户无感
+1.0 的主要短板不是“不会优化”，而是“不会管理”:
 
-产品应尽量不要求用户理解：
+- 用户不知道自己本机到底有多少 skills
+- 用户不知道 skills 分布在哪些宿主、哪些项目
+- 用户不知道哪些 skills 真正被使用、哪些长期闲置
+- 用户不知道一个 skill 到底带来了多少价值，是否值得继续维护
+- 用户缺少一个围绕 skill 的集中入口来安装、备份、迁移、演进和创建
 
-branch
+因此，V2.0 的产品方向从“只做 skill 演进”升级为:
 
-merge
+**一个开源、本地优先、跨宿主、可视化的 Skill 生命周期与演进管理器。**
 
-draft
+## 2. 一句话定位
 
-active
+OrnnSkills V2.0 是一个把 `skill` 当作一等公民的本地管理工具。它帮助个人用户扫描、理解、管理、评估和演进分散在多个 AI 宿主与项目中的 skills，让 skills 不只是“装上去”，而是“用得省心、用得明白、持续变好”。
 
-deprecated
+## 3. 产品边界
 
-skill tree 管理
+### 3.1 我们是什么
 
-用户只需要知道：
+- 开源、本地优先的个人 SkillOps 工具
+- 面向 Codex、Claude Code、OpenCode 等宿主的跨宿主 skill 管理层
+- 以可视化方式提供 inventory、usage、evaluation、evolution、backup、migration、creation
 
-自己本机有原始 skill
+### 3.2 我们不是什么
 
-每个项目里系统会自动维护更适配本项目的影子 skill
+- 不是另一个通用 AI 聊天平台
+- 不是以团队协作、审批、权限、云端治理为核心的企业产品
+- 不是 prompt、MCP、plugin 的全能资产平台
+- 不是只负责下载与安装 skill 的 marketplace 壳
 
-如果优化出问题，可以回滚
+## 4. 目标用户
 
-B. 单实体演化，不做多分支管理
+### 4.1 核心用户
 
-对于同一个 origin skill A，在某个项目里只维护一个 shadow skill A'，以及它的演化日志。
-不默认创建多个 branch。
+- 高强度使用 AI coding tools 的个人开发者
+- 同时使用两个及以上宿主的用户，例如 Codex + Claude Code
+- 本机维护较多 skills，希望减少失控和重复维护的用户
 
-C. 本地隔离
+### 4.2 次级用户
 
-所有自动优化优先作用于项目级 shadow skill，不污染全局 origin skill。
+- 重度试验新 skill 的独立开发者
+- 维护个人 skill 库、需要迁移与备份的用户
+- 想要量化 skill 真实使用价值的高级用户
 
-D. 小步修改、持续积累
+### 4.3 非目标用户
 
-系统不追求大改，而是通过大量小步 patch 持续提升 shadow skill 的项目适配性。
+- 以团队协作、审批流、权限分级为核心诉求的组织用户
+- 只需要简单下载几个 skill、不关心管理和演进的轻度用户
 
-E. 可回滚
+## 5. 核心用户问题
 
-所有自动修改都必须有演化记录、revision、checkpoint，保证可回退。
+V2.0 必须优先回答用户的 6 个问题:
 
-2. 核心模型
+1. 我本机到底有多少 skills，分别在哪里？
+2. 它们被哪些宿主、哪些项目使用？
+3. 哪些 skills 真正有用，哪些几乎没被触发？
+4. 哪些 skills 值得继续优化，为什么？
+5. 如果我要安装、卸载、迁移、备份一个 skill，最安全的路径是什么？
+6. 我改动一个 skill 之后，它到底变好了还是变差了？
 
-这套设计的核心不是 Skill Tree，而是：
+## 6. 产品目标
 
-Origin Skill + Project Shadow Skill + Evolution Journal
-2.1 Origin Skill
+### 6.1 V2.0 北极星目标
 
-Origin Skill 是用户本机已有的、全局安装的 skill。
-它可能来自：
+让用户第一次可以清晰、持续、低成本地管理自己本机的 skill 生命周期，并对 skill 的真实使用价值与演进效果建立可验证认知。
 
-用户自己写的 skill
+### 6.2 业务目标
 
-官方 / 第三方 skill 市场安装的 skill
+- 把 OrnnSkills 从“后台优化器”升级为“用户愿意每天打开的本地 skill 控制台”
+- 建立 `scan -> understand -> manage -> evolve -> verify` 的完整闭环
+- 用开源和本地优先建立信任，用可视化和证据链建立可用性
 
-从 git / repo 拷贝来的通用 skill
+### 6.3 用户价值目标
 
-它的特点是：
+- 降低 skill 管理成本
+- 降低 skill 冗余与失效风险
+- 提升 skill 使用透明度
+- 提升 skill 演进的质量和可解释性
 
-面向全局
+## 7. 产品原则
 
-默认不被自动修改
+### 7.1 Skills Are First-Class
 
-作为各项目影子 skill 的“源头版本”
+所有核心导航、数据模型、指标、操作入口都围绕 `skill` 展开，skill 不是附属对象。
 
-示意：
+### 7.2 Local-First
 
-~/.skills/
-  A/
-  B/
-  C/
-2.2 Project Shadow Skill
+- 默认本地运行、本地索引、本地存储
+- 默认不依赖云端账号和远程控制面
+- 数据导入导出、备份、恢复都要在本地可完成
 
-当某个项目第一次实际使用到全局 skill A 时，OrnnSkills 会自动在该项目下创建一个影子副本：
+### 7.3 Open Source as Trust Infrastructure
 
-repo-x/.ornn/skills/A/
+开源不是营销标签，而是信任机制。用户应能看见:
 
-这个项目内副本就是 A'。
+- 扫描逻辑
+- 指标计算逻辑
+- 演进依据
+- 数据落盘位置
 
-它的特点是：
+### 7.4 Evidence Over Guessing
 
-只属于当前项目
+所有“这个 skill 有价值”或“这个 skill 该优化”的结论，必须能回溯到具体证据:
 
-是主 Agent 在这个项目中的实际消费版本
+- 调用记录
+- 项目分布
+- 失败/绕开/重试信号
+- 版本前后变化
 
-可被后台自动优化
+### 7.5 Visual First
 
-与 origin A 保持来源关系，但不共享宿主状态
+CLI 仍然保留，但 V2.0 的主价值呈现要以 dashboard / visual console 为主。用户应该能通过界面迅速看懂 skill 状态，而不是通过手工读日志推断。
 
-2.3 Evolution Journal
+### 7.6 Safe Change
 
-每次对 A' 的修改，不创建新 branch，而是直接：
+所有高影响操作都必须可预览、可备份、可回滚，包括:
 
-对当前 A' 做 patch
+- 演进应用
+- 批量迁移
+- 卸载
+- 平移到其他宿主
 
-记录一条 append-only 的演化日志
+## 8. V2.0 范围
 
-周期性生成 checkpoint
+### 8.1 P0 核心价值
 
-所以版本关系不是树，而是一条线：
+`演进管理` 是 V2.0 的头号价值。所有其它能力都服务于这一点: 帮用户知道哪些 skill 值得演进、如何演进、演进后是否变好。
 
-A (origin)
-  └── A' rev1 -> rev2 -> rev3 -> rev4 ...
+### 8.2 V2.0 P0 能力范围
 
-这个模型更像：
+以下能力均属于 V2.0 发布范围内的 P0:
 
-文档修订历史
+- 全局扫描与统一索引
+- 多宿主、多项目 skill inventory
+- 可视化 usage 与最近活跃情况
+- 可解释的 skill 效果评估
+- 基于 trace 的演进建议与演进执行
+- 版本、diff、快照、回滚
+- 安装、卸载、启停、备份、恢复、迁移、平移
+- 本地创建 skill 的辅助流程
 
-本地长期学习副本
+### 8.3 明确不在 V2.0 的范围
 
-单实体演进体
+- 团队权限、审批、协作评论
+- 云端同步账户体系
+- 在线 marketplace 运营体系
+- 通用 prompt/MCP/plugin 的一等治理能力
+- 黑盒式“自动重写一切”优化器
 
-而不是复杂知识图谱。
+## 9. 关键使用场景
 
-3. 用户体验设计
-3.1 默认行为
+### 场景 A: 盘点本机 Skill 资产
 
-用户启动主 Agent 后，OrnnSkills 在后台运行。
-默认情况下用户不需要主动操作。
+用户打开 OrnnSkills 后，第一屏就能看到:
 
-它会自动完成：
+- 本机总 skill 数
+- 活跃 / 非活跃 / 未知状态占比
+- 宿主分布
+- 项目分布
+- 最近 7/30 天最常用 skills
 
-观察主 Agent 的任务执行
+### 场景 B: 发现低价值或失效 Skill
 
-识别项目中被使用到的全局 skill
+用户可以快速识别:
 
-创建对应 shadow skill
+- 安装了但从未调用的 skill
+- 曾活跃但近期消失的 skill
+- 多个近似重复 skill
+- 调用频率高但效果差的 skill
 
-持续收集 trace
+### 场景 C: 针对单个 Skill 做演进决策
 
-判断 shadow skill 是否需要优化
+在单个 skill 详情页中，用户能够看到:
 
-小步 patch
+- 来源和安装位置
+- 被哪些宿主和项目使用
+- 调用频率趋势
+- 典型触发场景
+- 绕开、重试、人工修正等负向信号
+- 版本历史与演进记录
+- 当前建议的优化方向
 
-写入 journal
+### 场景 D: 生命周期管理
 
-必要时生成 checkpoint
+用户可以在一个界面里完成:
 
-3.2 用户感知的最小界面
+- 安装到指定宿主
+- 从某宿主卸载
+- 暂停 / 恢复某 skill
+- 备份到本地包
+- 恢复或导入
+- 从一个宿主平移到另一个宿主
 
-V1 不需要复杂 UI。
-只需要最小的几个交互：
+### 场景 E: 创建新 Skill
 
-查看当前项目有哪些 shadow skills
-ornn skills status
-查看某个 shadow skill 的最近优化记录
-ornn skills log A
-回滚某个 shadow skill 到某个 revision / checkpoint
-ornn skills rollback A --to rev_12
-暂停某个 skill 的自动优化
-ornn skills freeze A
-恢复自动优化
-ornn skills unfreeze A
-4. 系统职责划分
-4.1 主 Agent 负责什么
+用户可以通过 guided flow 创建 skill:
 
-主 Agent 继续负责原本的事情：
+- 选择目标宿主
+- 选择模板或从现有 skill 派生
+- 填写用途、触发方式、步骤、边界
+- 本地预览与保存
 
-接收用户任务
+## 10. 信息架构
 
-调工具
+V2.0 的主界面建议由以下 5 个一级区域组成:
 
-修改代码 / 文件
+1. `Overview`
+   - 总览指标
+   - 重要提醒
+   - 候选演进项
+2. `Skills`
+   - skills 列表
+   - 筛选、排序、搜索
+   - 低价值 / 高价值 / 未使用 / 高风险视图
+3. `Skill Detail`
+   - 基本信息
+   - 使用分析
+   - 价值评估
+   - 版本与演进
+   - 生命周期操作
+4. `Evolution`
+   - 候选队列
+   - 建议预览
+   - 应用、回滚、验证
+5. `Library`
+   - 安装源
+   - 导入导出
+   - 备份与迁移
 
-输出回答
+## 11. 功能需求
 
-完成业务工作
+### 11.1 Skill Discovery & Indexing
 
-4.2 OrnnSkills 负责什么
+系统需要:
 
-OrnnSkills 只负责 skill 本身：
+- 扫描本机已支持宿主中的 skills
+- 识别 skill 来源、路径、宿主、项目归属
+- 对同名 skill、多副本 skill、派生 skill 建立统一索引
+- 支持定时扫描与手动重扫
 
-观察 trace
+功能要求:
 
-检查 skill 命中与实际执行的偏差
+- 首次扫描后生成本地索引
+- 每个 skill 具备稳定 ID，而不是只靠文件名
+- 支持显示 `origin`, `shadow`, `derived`, `imported` 等来源标签
 
-从失败 / retry / manual fix 中提取优化信号
+### 11.2 Usage Observability
 
-修改 shadow skill
+系统需要为每个 skill 提供最基础、最可信的使用观察能力:
 
-记录 revision / journal / checkpoint
+- 调用次数
+- 最近使用时间
+- 被哪些宿主调用
+- 被哪些项目调用
+- 调用趋势
+- 典型触发上下文
 
-在必要时提示用户是否需要同步或回滚
+功能要求:
 
-5. 系统运行循环
+- 区分“安装存在”和“实际使用”
+- 支持 7 天、30 天、全周期时间窗
+- 支持按宿主、项目、来源筛选
 
-新版本不再采用复杂的 branch lifecycle，而采用一个更轻的循环：
+### 11.3 Effect Evaluation
 
-Observe → Evaluate → Patch A' → Journal
-5.1 Observe
+V2.0 不追求一开始给出绝对准确的“收益金额”，而是先建立可信代理指标。
 
-持续观察主 Agent 的外显执行过程，包括：
+系统需要为每个 skill 计算以下信号:
 
-用户输入
+- `Reach`: 覆盖项目数、宿主数、总调用数
+- `Recency`: 最近活跃时间、活跃周期
+- `Stickiness`: 连续复用程度
+- `Effectiveness`: 调用后任务是否推进，是否伴随大量 retry / bypass / manual fix
+- `Cost`: 维护频率、上下文负担、重复度、噪音度
 
-assistant 输出
+功能要求:
 
-tool calls
+- 输出可解释的 `Skill Value Score`
+- Score 必须能下钻到明细证据
+- 所有判定保留“估计值”标签，避免制造虚假精度
 
-tool results
+### 11.4 Evolution Management
 
-file changes
+这是 V2.0 的核心模块。
 
-retry / interruption
+系统需要:
 
-用户人工修正
+- 基于 trace 和负向信号识别演进机会
+- 生成可预览的演进建议
+- 展示变更原因、证据和预期影响
+- 应用到目标 skill 或 project shadow
+- 记录版本、diff、审计日志
+- 跟踪演进后效果变化
 
-当前命中的 skill 文件
+功能要求:
 
-这一步的目标不是理解内部思维，而是建立“这次执行到底怎么走的”的外显轨迹。
+- 演进建议必须包含证据摘要
+- 支持只读预览，不强制自动应用
+- 支持 compare before/after
+- 支持一键回滚到任一稳定版本
 
-5.2 Evaluate
+### 11.5 Lifecycle Operations
 
-基于 trace 判断当前项目中的 shadow skill A' 是否存在优化机会。
-重点判断：
+V2.0 需要把“技能资产管理”的基础动作做完整。
 
-skill 是否频繁被绕开
+系统需要支持:
 
-skill 中某段说明是否总被忽略
+- 安装
+- 卸载
+- 启用 / 禁用
+- 备份
+- 恢复
+- 导入 / 导出
+- 宿主间迁移
+- 项目间平移
 
-某种 fallback 是否被反复手动使用
+功能要求:
 
-某段规则是否已不适合当前项目
+- 每个操作都要先校验目标路径与冲突
+- 卸载前提示影响范围
+- 平移操作需保留来源记录
+- 备份格式需稳定、可重复恢复
 
-某些步骤是否冗余
+### 11.6 Skill Creation
 
-某种项目上下文是否值得写入 skill
+V2.0 将 skill 创建视为辅助能力，而非独立平台功能。
 
-这一步不做“树分叉判断”，而只做：
+系统需要:
 
-当前这个 A' 是否应该再往前修一步
+- 提供模板化新建
+- 支持从现有 skill fork
+- 支持创建后立即安装到指定宿主
+- 支持创建后纳入 OrnnSkills 的观测与演进体系
 
-5.3 Patch A'
+### 11.7 Visualization & UX
 
-如果满足条件，则直接对 A' 做局部修改。
-V1 只支持小步 patch，不做大规模重写。
+可视化不是装饰层，而是重要价值本身。
 
-修改类型建议限制为 5 类：
+V2.0 需要重点保证:
 
-append_context：补充项目特定上下文
+- 首屏 10 秒内看懂自己的 skill 全貌
+- 单个 skill 详情页能回答“有没有用”和“值不值得改”
+- 所有高风险操作都有清晰确认与回退路径
+- 不要求用户理解底层目录结构即可完成主要动作
 
-tighten_trigger：收紧适用条件
+## 12. 宿主与平台策略
 
-add_fallback：补写高频 fallback
+### 12.1 宿主优先级
 
-prune_noise：删除低价值噪音描述
+V2.0 首批优先支持:
 
-rewrite_section：局部重写某一小段
+- Codex
+- Claude Code
+- OpenCode
 
-5.4 Journal
+第二批适配候选:
 
-每次 patch 后，系统必须：
+- Continue
+- Cursor 相关 skill/rules 体系
 
-revision +1
+### 12.2 跨平台原则
 
-记录 patch 原因
+产品方向必须坚持跨平台，本阶段要求:
 
-记录来源 session
+- 路径解析、扫描器、索引格式不能绑定单一平台
+- 备份与导入导出格式必须跨平台可恢复
+- UI 与 CLI 行为不依赖特定平台特性
 
-记录 before/after hash
+工程优先级上，V2.0 应保证 macOS 和 Linux 可用，并为 Windows 路径与宿主差异预留清晰适配层。
 
-写入 journal
+## 13. 数据模型
 
-按策略生成 checkpoint
+### 13.1 Skill 基础实体
 
-这样就形成一条单实体演化链。
+每个 skill 至少需要具备:
 
-6. 核心对象设计
-6.1 OriginSkill
+- Stable Skill ID
+- Display Name
+- Source Type
+- Runtime / Host
+- Install Locations
+- Project References
+- Status
+- Created At / Updated At
 
-表示全局原始 skill。
+### 13.2 Usage 实体
 
-{
-  "skill_id": "A",
-  "origin_path": "~/.skills/A",
-  "origin_version": "hash_or_semver",
-  "source": "local|marketplace|git",
-  "installed_at": "",
-  "last_seen_at": ""
-}
+- Call Count
+- Last Used At
+- Used By Hosts
+- Used By Projects
+- Trend Buckets
+- Evidence Samples
 
-说明：
+### 13.3 Evolution 实体
 
-origin_version 可以先用 hash，不必强依赖 semver
+- Current Version
+- Version Graph or Linear History
+- Evolution Suggestions
+- Applied Patches
+- Rollback Points
+- Before/After Metrics
 
-origin 默认只读，不自动修改
+## 14. 成功指标
 
-6.2 ProjectSkillShadow
+### 14.1 产品使用指标
 
-表示某个项目中的影子 skill。
+- 用户首次扫描成功率
+- 首次扫描后看到结果页的时间
+- 每周打开 dashboard 的活跃用户占比
+- 被实际使用过的 skill 占总 skill 数的比例
 
-{
-  "project_id": "repo-x",
-  "skill_id": "A",
-  "shadow_id": "A@repo-x",
-  "origin_skill_id": "A",
-  "origin_version_at_fork": "hash_001",
-  "shadow_path": "repo-x/.ornn/skills/A/current.md",
-  "current_revision": 12,
-  "status": "active|frozen",
-  "created_at": "",
-  "last_optimized_at": ""
-}
+### 14.2 核心价值指标
 
-说明：
+- 被识别为“长期未使用”的 skill 数量
+- 被识别为“高价值”的 skill 数量
+- 被应用演进建议的 skill 数量
+- 演进后 value score 或效果信号改善的 skill 占比
 
-一个项目里同一个 origin skill 只对应一个 shadow skill
+### 14.3 体验指标
 
-status=frozen 表示暂停自动优化，但仍可被主 Agent 消费
+- 用户完成安装 / 卸载 / 备份 / 恢复 / 迁移的成功率
+- 因误操作导致的回滚次数
+- 单次关键操作的平均完成时间
 
-6.3 EvolutionRecord
+## 15. 风险与对策
 
-表示一次演化记录。
+### 风险 1: “价值评估”过度主观
 
-{
-  "revision": 12,
-  "shadow_id": "A@repo-x",
-  "timestamp": "",
-  "reason": "Repeated manual fallback after root lint failure",
-  "source_sessions": ["s1", "s2", "s3"],
-  "change_type": "append_context|tighten_trigger|add_fallback|prune_noise|rewrite_section",
-  "patch": "...",
-  "before_hash": "",
-  "after_hash": "",
-  "applied_by": "auto|manual"
-}
+对策:
 
-说明：
+- 先采用透明代理指标，不直接承诺绝对收益
+- 每个评分都可展开证据
+- 保留用户校正入口
 
-patch 推荐保存 unified diff 或结构化 patch
+### 风险 2: 宿主差异导致扫描和统计不稳定
 
-这是 append-only 的，不修改历史
+对策:
 
-6.4 ShadowSkillState
+- 建立宿主适配层
+- 所有证据和指标都标注来源宿主
+- 未知或不完整数据明确标成 `partial`
 
-表示当前运行状态。
+### 风险 3: 演进建议不可信
 
-{
-  "shadow_id": "A@repo-x",
-  "current_content_hash": "",
-  "current_revision": 12,
-  "last_hit_at": "",
-  "last_optimized_at": "",
-  "hit_count": 0,
-  "success_count": 0,
-  "manual_override_count": 0,
-  "health_score": 0.0
-}
+对策:
 
-说明：
+- 默认预览优先
+- 强化 diff、证据和回滚能力
+- 演进效果必须在后续使用中继续验证
 
-health_score 不是绝对准确值，只是一个粗健康度指标
+### 风险 4: 功能过宽，失去焦点
 
-先用于内部判断和 CLI 提示
+对策:
 
-7. 项目目录结构
+- 所有功能以 `skill lifecycle + evolution` 为中心判断取舍
+- 不扩展成通用 AI 平台
+- 不优先建设团队协作能力
 
-建议每个项目内维护一个 .ornn/ 目录：
+## 16. 发布策略
 
-repo-x/
-  .ornn/
-    skills/
-      A/
-        current.md
-        meta.json
-        journal.ndjson
-        snapshots/
-          rev_0005.md
-          rev_0010.md
-      B/
-        current.md
-        meta.json
-        journal.ndjson
-        snapshots/
-    state/
-      sessions.db
-      traces.ndjson
-      runtime_state.json
-    config/
-      settings.toml
-7.1 current.md
+### 16.1 V2.0 MVP
 
-当前项目生效中的 shadow skill 内容。
+第一阶段需要交付一个最小但完整的闭环:
 
-7.2 meta.json
+- 扫描并统一展示 skills
+- 展示调用频率和活跃信息
+- 提供单 skill 详情页
+- 提供基础演进建议与版本回滚
+- 支持备份、恢复、迁移
 
-保存 ProjectSkillShadow + ShadowSkillState 的当前状态。
+### 16.2 V2.0 完整版
 
-7.3 journal.ndjson
+在 MVP 基础上补齐:
 
-append-only 演化记录。
+- 更完整的价值评估
+- 更好的差异比较与演进前后验证
+- 引导式新建 skill
+- 更强的宿主兼容与数据修复能力
 
-7.4 snapshots/
+## 17. Open Questions
 
-少量检查点文件。
-建议每隔 N 次 revision 或重大 patch 生成一次。
+- Skill Value Score 的默认权重是否应允许用户调整？
+- “平移”在不同宿主语义差异较大时，是否需要显式转换器而不只是复制？
+- 新建 skill 的模板系统是否需要兼容 Agent Skills 标准格式？
+- 是否需要把 prompt/rules/MCP 作为 skill 的关联资产展示，而不是一等对象？
 
-7.5 state/
+## 18. 结论
 
-本地 trace、session 状态、运行态缓存。
-
-8. 技术架构
-Main Agent Host
-  ├─ Codex
-  ├─ OpenCode
-  └─ Claude Code
-        ↓
-Observer Layer
-        ↓
-Trace Store
-        ↓
-Shadow Skill Manager
-  ├─ Origin Registry
-  ├─ Shadow Registry
-  ├─ Evolution Evaluator
-  ├─ Patch Generator
-  └─ Journal Manager
-        ↓
-Project Shadow Skills (.ornn/skills/*)
-9. 模块设计
-9.1 Origin Registry
-
-职责：
-
-扫描用户本机已安装 skills
-
-维护 OriginSkill 列表
-
-识别 origin 是否更新
-
-来源目录可配置，例如：
-
-~/.skills/
-~/.claude/skills/
-~/.opencode/skills/
-
-V1 先做简单版：
-
-配置型路径扫描
-
-基于文件 hash 识别版本
-
-9.2 Shadow Registry
-
-职责：
-
-管理项目中的 shadow skills
-
-首次命中 origin skill 时自动 fork 为 A'
-
-维护 shadow 与 origin 的映射关系
-
-逻辑：
-
-主 Agent 在项目中命中 A
-
-若项目中不存在 A'
-
-从 origin 复制到 .sea/skills/A/current.md
-
-初始化 meta.json
-
-开始后续演化
-
-9.3 Observer Layer
-
-职责：
-
-从主 Agent CLI 获取足够做演化判断的 trace
-
-不追求 CoT，只追求外显执行证据
-
-输入信号包括：
-
-prompt / response
-
-tool call / result
-
-files changed
-
-retry / failure
-
-session id
-
-命中的 skill 文件（若可获得）
-
-V1 继续支持三个 observer：
-
-CodexObserver
-
-OpenCodeObserver
-
-ClaudeObserver
-
-但在这版架构里，它们只是“感知层”，不是产品核心。
-
-9.4 Evolution Evaluator
-
-职责：
-
-给定某个 shadow skill A' 及近期 trace，判断是否需要优化。
-
-不再输出复杂 branch plan，而输出：
-
-{
-  "should_patch": true,
-  "change_type": "add_fallback",
-  "reason": "...",
-  "source_sessions": ["..."],
-  "confidence": 0.78
-}
-
-V1 先支持以下判断规则：
-
-A. Repeated Manual Fix
-
-同类任务里，主 Agent 输出后用户总补同一个步骤
-→ add_fallback 或 append_context
-
-B. Repeated Drift
-
-skill 被命中，但执行反复绕过某一段
-→ rewrite_section 或 prune_noise
-
-C. Overly Broad Trigger
-
-skill 在这个项目里经常在不合适的场景被触发
-→ tighten_trigger
-
-D. Noisy Redundancy
-
-某些说明长期不影响执行或被新上下文覆盖
-→ prune_noise
-
-9.5 Patch Generator
-
-职责：
-
-把评估结果变成对 A' 的具体 patch。
-
-输出不是“新 branch”，而是对 current.md 的局部 diff。
-
-支持的 patch 类型：
-
-append 段落
-
-修改 frontmatter
-
-替换某一小节
-
-重排步骤顺序
-
-删除冗余说明
-
-建议 first pass 不做 LLM 自由重写全文，而采用：
-
-定位要改的 section
-
-做局部 patch
-
-保留原始结构
-
-这样更稳。
-
-9.6 Journal Manager
-
-职责：
-
-生成 revision
-
-写 journal.ndjson
-
-维护 snapshot
-
-提供 rollback
-
-规则建议：
-
-每次 patch 都写 journal
-
-每 5 次 revision 自动 snapshot 一次
-
-rewrite_section 类型 patch 完成后立即 snapshot
-
-rollback 默认回到：
-
-指定 revision
-
-上一个 snapshot
-
-fork 初始版本
-
-9.7 Shadow Skill Manager
-
-这是本系统的核心编排模块。
-
-职责：
-
-确保 origin 和 shadow 的映射关系
-
-收到 trace 后调用 evaluator
-
-决定是否 patch
-
-调用 patch generator
-
-调用 journal manager
-
-更新 meta.json
-
-它是整个产品里最像“Agent 控制器”的地方。
-
-10. 自动优化策略
-10.1 默认自动修改的范围
-
-为了保证“无感”，但又防止失控，V1 只自动做低风险修改：
-
-自动允许
-
-增加项目上下文说明
-
-增加高频 fallback
-
-收紧 trigger 条件
-
-删除明显重复的说明
-
-重排步骤顺序
-
-增加局部 caution / note
-
-默认不自动做
-
-大段重写整个 skill
-
-删除大量核心步骤
-
-改变 skill 的总体目标
-
-回写到全局 origin
-
-跨项目同步优化结果
-
-10.2 自动 patch 的触发条件
-
-建议至少满足：
-
-同类信号出现 >= N 次
-
-来源 session 不少于 2 或 3 个
-
-置信度高于阈值
-
-最近没有对该 shadow skill 做过同类 patch
-
-当前 shadow skill 未被冻结
-
-这可以防止系统过于躁动。
-
-11. Origin 更新策略
-
-这个问题在 shadow 模型里非常关键。
-
-11.1 三态策略
-情况 A：origin 未更新
-
-继续正常迭代 A'
-
-情况 B：origin 更新，但 A' 与 origin 差异较小
-
-系统尝试自动 rebase：
-
-读取新 origin A
-
-读取当前 shadow A'
-
-将 shadow 的局部 patch 重放到新 origin 上
-
-若成功，则更新：
-
-origin_version_at_fork
-
-current.md
-
-情况 C：origin 更新，但 A' 已偏离较多
-
-系统不自动 rebase，只记录状态：
-
-origin 已更新
-
-当前 shadow 分化较深
-
-用户可手动触发 rebase
-
-11.2 为什么不一开始做复杂 merge
-
-因为你当前目标是“后台无感优化”，不是“分布式版本控制系统”。
-
-先实现：
-
-检测 origin 变化
-
-简单重放 patch
-
-失败则提示人工处理
-
-就够了。
-
-12. 状态机设计
-
-对于每个 shadow skill，只需要一个很轻的状态机：
-
-not_created
-  → active
-  → frozen
-  → active
-  → rebasing
-  → active
-
-可选辅助状态：
-
-needs_attention
-
-rollback_ready
-
-状态说明
-not_created
-
-项目还未命中该 origin skill，尚未 fork
-
-active
-
-shadow skill 正常被消费，并允许自动优化
-
-frozen
-
-停止自动优化，但仍然可以继续被主 Agent 使用
-
-rebasing
-
-正在尝试从新 origin 重新套用本地 patch
-
-needs_attention
-
-自动 rebase 失败，或近期 patch 质量异常，需要用户处理
-
-13. 观察与存储设计
-13.1 最小 Trace Schema
-{
-  "trace_id": "",
-  "runtime": "codex|opencode|claude",
-  "session_id": "",
-  "turn_id": "",
-  "event_type": "user_input|assistant_output|tool_call|tool_result|file_change|retry|status",
-  "timestamp": "",
-  "user_input": "",
-  "assistant_output": "",
-  "tool_name": "",
-  "tool_args": {},
-  "tool_result": {},
-  "files_changed": [],
-  "status": "success|failure|retry|interrupted",
-  "metadata": {}
-}
-
-够用就行。
-这版不追求复杂病例模型。
-
-13.2 本地状态存储
-
-建议 V1 使用：
-
-SQLite：session / shadow meta / small indexes
-
-NDJSON：raw trace 与 journal
-
-Markdown：shadow skill 当前内容
-
-snapshot files：回滚检查点
-
-这样足够轻。
-
-14. 三个 CLI 的接入策略
-
-保持之前调研结论，但产品接口简化。
-
-14.1 Codex
-适合作为第一接入源
-
-原因：
-
-有 codex exec --json
-
-事件流结构明确
-
-本地 transcript / session log 较友好
-
-接法
-
-优先消费 JSONL 事件流
-
-补充读取本地 session 日志
-
-抽取 tool calls / file changes / final outputs
-
-在本架构中的作用
-
-只负责给 Evaluator 提供：
-
-本次任务如何走
-
-是否反复 fallback
-
-用户是否手动补救
-
-14.2 OpenCode
-适合作为第二接入源
-
-原因：
-
-插件与事件系统适合长期后台采集
-
-本地存储清晰
-
-可做更主动的 observability
-
-接法
-
-优先用 plugin 事件写入 trace
-
-辅助用 session/export 或 server API 补数
-
-在本架构中的作用
-
-适合做“后台长期运行”的稳定观察器。
-
-14.3 Claude Code
-适合作为第三接入源
-
-原因：
-
-hooks 强
-
-transcript_path / subagent transcript 明确
-
-但更适合走主动 hooks 采集，而不是纯文件解析
-
-接法
-
-用 hooks 捕捉关键生命周期
-
-transcript 作为补充
-
-合并主会话与 subagent 轨迹
-
-15. CLI 设计
-
-V1 的 CLI 不要太多，保留最必要的命令：
-
-查看当前项目影子 skill 状态
-ornn skills status
-查看某个 skill 的演化日志
-ornn skills log A
-查看当前内容与 origin 的 diff
-ornn skills diff A
-回滚
-ornn skills rollback A --to rev_8
-冻结 / 解冻自动优化
-ornn skills freeze A
-ornn skills unfreeze A
-手动触发一次优化评估
-ornn optimize A
-重新同步 origin
-ornn skills rebase A
-16. MVP 范围
-MVP 必须具备
-1. 能识别 origin skill 并创建项目 shadow
-
-这是产品成立的基础。
-
-2. 能接一个 runtime 的 trace
-
-建议先接 Codex。
-
-3. 能自动做 3 类 patch
-
-append_context
-
-add_fallback
-
-tighten_trigger
-
-4. 能写 journal 与 snapshot
-
-这是安全底线。
-
-5. 能 rollback
-
-没有 rollback，就不适合默认无感自动优化。
-
-MVP 不做
-
-不做多分支 skill tree
-
-不做可视化管理台
-
-不做跨项目经验合并
-
-不做全局 origin 自动回写
-
-不做复杂 router
-
-不做复杂 merge engine
-
-17. 成功指标
-用户体验层
-
-用户无需理解复杂版本概念
-
-自动优化默认可运行
-
-绝大多数优化无需人工介入
-
-技术层
-
-shadow 创建成功率
-
-trace 完整率
-
-auto patch 成功率
-
-rollback 成功率
-
-origin rebase 成功率
-
-效果层
-
-项目内 skill 命中后绕路次数下降
-
-同类任务人工补救次数下降
-
-主 Agent 在该项目中的稳定性提升
-
-18. 风险与应对
-风险 1：自动 patch 把 skill 改坏
-
-应对：
-
-仅允许小步 patch
-
-journal + snapshot
-
-一键 rollback
-
-风险 2：origin 更新后 shadow 漂移严重
-
-应对：
-
-先检测
-
-差异小时自动 rebase
-
-差异大时只告警不自动合并
-
-风险 3：trace 不足导致误判
-
-应对：
-
-先定义最小证据集
-
-patch 需要重复证据
-
-低置信不动
-
-风险 4：后台太频繁修改，引发抖动
-
-应对：
-
-每个 shadow skill 设置冷却窗口
-
-同类 patch 设最短间隔
-
-近期刚回滚过则暂停自动优化
-
-19. 最终产品定义
-
-这版产品最准确的定义应该是：
-
-OrnnSkills 是一个后台常驻的本地元 Agent。它不管理复杂的 skill 分支树，而是为每个项目维护全局 skills 的影子副本，并基于真实 trace 对影子副本做持续的小步自动优化，同时用演化日志和 checkpoint 保证整个过程可追踪、可回滚。
-
+OrnnSkills V2.0 的目标不是再做一个平台型 AI 客户端，而是成为个人用户管理本地 skills 的首选入口。它的核心不是“帮你下载更多 skill”，而是“帮你知道哪些 skill 真有用，如何安全管理它们，并让高价值 skill 持续演进”。
