@@ -35,7 +35,6 @@ import { getDashboardSystemPromptDefaults } from '../core/prompt-defaults.js';
 
 export function getDashboardHtml(_port: number, lang: Language = 'en', buildId = 'dev'): string {
   const t = getI18n(lang);
-  const shortBuildId = buildId.slice(-8);
   const dashboardPromptDefaults = {
     en: getDashboardSystemPromptDefaults('en'),
     zh: getDashboardSystemPromptDefaults('zh'),
@@ -235,11 +234,9 @@ init();
 
   return renderDashboardAppShell({
     lang,
-    shortBuildId,
     styleCss,
     scriptSource,
     labels: {
-      headerVersion: t.headerVersion,
       headerConnecting: t.headerConnecting,
       sidebarProjects: t.sidebarProjects,
       sidebarAddProject: t.sidebarAddProject,

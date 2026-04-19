@@ -6,10 +6,8 @@ describe('dashboard app shell', () => {
 
     const html = renderDashboardAppShell({
       lang: 'zh',
-      shortBuildId: 'abcd1234',
       styleCss: 'body { background: #000; }',
       labels: {
-        headerVersion: '版本',
         headerConnecting: '连接中…',
         sidebarProjects: '项目',
         sidebarAddProject: '添加项目',
@@ -32,9 +30,11 @@ describe('dashboard app shell', () => {
     });
 
     expect(html).toContain('<html lang="zh">');
-    expect(html).toContain('build #abcd1234');
     expect(html).toContain('body { background: #000; }');
     expect(html).toContain('连接中…');
+    expect(html).not.toContain('id="appVersion"');
+    expect(html).not.toContain('id="appBuild"');
+    expect(html).not.toContain('build #abcd1234');
     expect(html).toContain('id="workspaceMain"');
     expect(html).toContain('id="projectSidebar"');
     expect(html).toContain('id="projectList"');

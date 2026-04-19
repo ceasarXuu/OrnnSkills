@@ -1,7 +1,6 @@
 import type { Language } from '../i18n.js';
 
 interface DashboardAppShellLabels {
-  headerVersion: string;
   headerConnecting: string;
   sidebarProjects: string;
   sidebarAddProject: string;
@@ -23,14 +22,13 @@ interface DashboardAppShellLabels {
 
 interface DashboardAppShellParams {
   lang: Language;
-  shortBuildId: string;
   styleCss: string;
   scriptSource: string;
   labels: DashboardAppShellLabels;
 }
 
 export function renderDashboardAppShell(params: DashboardAppShellParams): string {
-  const { lang, shortBuildId, styleCss, scriptSource, labels } = params;
+  const { lang, styleCss, scriptSource, labels } = params;
 
   return /* html */ `<!DOCTYPE html>
 <html lang="${lang}">
@@ -49,8 +47,6 @@ ${styleCss}
   <header class="header">
     <div class="header-left">
       <span class="header-logo">🔧 OrnnSkills</span>
-      <span class="header-version" id="appVersion">${labels.headerVersion}</span>
-      <span class="header-version" id="appBuild">build #${shortBuildId}</span>
     </div>
     <div class="header-center">
       <div class="workspace-tabs" id="workspaceTabs"></div>

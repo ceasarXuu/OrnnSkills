@@ -10,7 +10,6 @@ export type Language = 'en' | 'zh';
 export interface I18nStrings {
   // Header
   headerTitle: string;
-  headerVersion: string;
   headerConnecting: string;
   headerConnected: string;
   headerDisconnected: string;
@@ -408,7 +407,6 @@ export interface I18nStrings {
 const en: I18nStrings = {
   // Header
   headerTitle: 'OrnnSkills',
-  headerVersion: 'Dashboard',
   headerConnecting: 'Connecting...',
   headerConnected: 'Connected',
   headerDisconnected: 'Disconnected',
@@ -822,7 +820,6 @@ const en: I18nStrings = {
 const zh: I18nStrings = {
   // Header
   headerTitle: 'OrnnSkills',
-  headerVersion: '控制面板',
   headerConnecting: '连接中...',
   headerConnected: '已连接',
   headerDisconnected: '已断开',
