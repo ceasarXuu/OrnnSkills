@@ -52,6 +52,7 @@ describe('dashboard config panel', () => {
     expect(html).toContain('<div class="provider-row">provider row</div>');
     expect(html).toContain('<div>connectivity</div>');
     expect(html).toContain('Saved');
+    expect(html).not.toContain('configIntro');
   });
 
   it('renders prompt override editors and llm safety controls', async () => {

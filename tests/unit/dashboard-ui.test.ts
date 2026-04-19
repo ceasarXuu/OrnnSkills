@@ -2943,7 +2943,7 @@ describe('dashboard ui recovery', () => {
     const html = getElement('mainPanel').innerHTML;
     expect(html).toContain('Add Provider');
     expect(html).toContain('Provider Connectivity');
-    expect(html).toContain('~/.ornn/config/settings.toml');
+    expect(html).not.toContain('~/.ornn/config/settings.toml');
     expect(html).not.toContain('.ornn/ornn.toml');
     expect(html).not.toContain('Save Config');
     expect(html).not.toContain('onclick="saveProjectConfig()"');

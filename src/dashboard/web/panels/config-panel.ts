@@ -122,7 +122,6 @@ export function renderDashboardConfigPanel(input: DashboardConfigPanelInput): st
     ${input.providerCatalogError ? `<div class="config-help" style="margin-bottom:8px;color:var(--red)">${deps.t('configCatalogErrorPrefix')} ${deps.escHtml(input.providerCatalogError)} <button class="btn-secondary" type="button" onclick="reloadProviderCatalog()">${deps.t('configRetry')}</button></div>` : ''}
     ${input.loading ? `<div class="config-help" style="margin-bottom:8px">${deps.t('configLoading')}</div>` : ''}
     ${input.loadError ? `<div class="config-help" style="margin-bottom:8px;color:var(--red)">${deps.t('configLoadErrorPrefix')} ${deps.escHtml(input.loadError)}</div>` : ''}
-    <div class="config-intro">${deps.t('configIntro')}</div>
     <div class="config-field" style="margin-top:10px">
       <label class="config-label">${deps.t('configProvidersLabel')}</label>
       <div class="providers-editor" id="cfg_providers_rows">${input.rowsHtml}</div>

@@ -142,17 +142,13 @@ export function renderDashboardStylesSource(): string {
   .main-tab.active::after { background: var(--blue); }
   .page-shell { display: flex; flex-direction: column; gap: 14px; }
   .page-hero {
-    display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
     padding: 14px 16px; border: 1px solid var(--border); border-radius: 8px;
     background:
       radial-gradient(circle at top right, rgba(88,166,255,.14), transparent 34%),
       linear-gradient(180deg, rgba(22,27,34,.96), rgba(13,17,23,.92));
   }
-  .page-kicker {
-    font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--blue);
-  }
-  .page-title { font-size: 22px; font-weight: 700; color: var(--text); margin-top: 6px; }
-  .page-copy { font-size: 11px; color: var(--muted); margin-top: 6px; max-width: 72ch; line-height: 1.5; }
+  .page-title { font-size: 22px; font-weight: 700; color: var(--text); }
   .page-meta {
     display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px;
     border: 1px solid rgba(88,166,255,.25); border-radius: 999px;
@@ -976,8 +972,7 @@ export function renderDashboardStylesSource(): string {
   @media (max-width: 900px) { .config-grid { grid-template-columns: 1fr; } }
   .config-field { display: flex; flex-direction: column; gap: 6px; }
   .config-label { font-size: 11px; color: var(--muted); }
-  .config-intro, .config-help { font-size: 11px; color: var(--muted); line-height: 1.45; }
-  .config-intro { margin-bottom: 12px; }
+  .config-help { font-size: 11px; color: var(--muted); line-height: 1.45; }
   .config-help code { color: var(--text); background: var(--bg3); padding: 1px 5px; border-radius: 4px; }
   .config-example {
     margin-top: 6px; background: var(--bg0); border: 1px dashed var(--border); border-radius: 6px;

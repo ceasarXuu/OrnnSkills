@@ -4,6 +4,8 @@
 
 ### 2026-04-19
 
+- ✅ 收紧 dashboard 一级页面头部：主页、技能工作台、配置页已移除 `OrnnSkills/ORNNSKILLS` kicker、解释性段落和项目路径宣言，只保留标题与必要 badge，避免页头重复表达概念却不提供新信息
+- 📝 记录交互经验：dashboard 页头不应该承担“宣讲产品定位”的任务；当导航层级已经表达清楚上下文时，再叠加品牌词、路径和解释性段落只会制造视觉噪音，真正有价值的信息应该留给标题、状态和可操作内容
 - 📝 记录环境验证经验：dashboard 是由运行中的 daemon 进程内嵌输出完整 HTML/CSS/JS；排查“源码已改但页面还是旧样式”时，不能只看仓库文件和单测，必须直接 `curl http://127.0.0.1:<port>/` 检查实际返回的标记和样式是否仍包含旧 `workspace-bar`、旧 `main-tab` 规则
 - 📝 记录启动经验：全局 `ornn` 实际执行的是 `/opt/homebrew/lib/node_modules/ornn-skills/dist/cli/index.js`；要让当前仓库的 dashboard 改动真正落到正在使用的界面，需要先 `npm run build`、再 `npm install -g .`，最后重启 daemon，否则很容易出现“仓库代码和浏览器界面不是同一个版本”的假象
 

@@ -14,5 +14,7 @@ describe('renderDashboardStylesSource', () => {
     expect(css).toContain('.main-tab {');
     expect(css).toContain('border: none;');
     expect(css).toContain('background: transparent;');
+    expect(css).not.toContain('.page-kicker');
+    expect(css).not.toContain('.page-copy');
   });
 });

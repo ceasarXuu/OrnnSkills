@@ -29,6 +29,10 @@ describe('dashboard ui source modules', () => {
     const source = renderDashboardMainPanelSource();
     expect(source).toContain('function renderMainPanel');
     expect(source).toContain('function safeRenderMainPanel');
+    expect(source).not.toContain('page-kicker');
+    expect(source).not.toContain('page-copy');
+    expect(source).not.toContain("t('homeGlobalCopy')");
+    expect(source).not.toContain("t('configIntro')");
   });
 
   it('returns config helpers', () => {

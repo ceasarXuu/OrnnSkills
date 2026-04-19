@@ -40,7 +40,6 @@ export interface I18nStrings {
   mainTabCost: string;
   mainTabLogs: string;
   mainTabConfig: string;
-  homeGlobalCopy: string;
   homeGlobalProjects: string;
   homeGlobalMonitoring: string;
   homeGlobalSkills: string;
@@ -48,10 +47,8 @@ export interface I18nStrings {
   homeGlobalProjectListTitle: string;
   homeGlobalProjectListEmpty: string;
   projectOverviewTitle: string;
-  projectOverviewCopy: string;
   skillsSubtabProjectOverview: string;
   skillsSubtabLibrary: string;
-  skillsLibraryTitle: string;
   activityEmpty: string;
   logsEmpty: string;
   configTitle: string;
@@ -61,7 +58,6 @@ export interface I18nStrings {
   configAutoSaved: string;
   configSaveFailed: string;
   configLoading: string;
-  configIntro: string;
   configLogLevelLabel: string;
   configLogLevelHelp: string;
   configDefaultProviderLabel: string;
@@ -442,8 +438,6 @@ const en: I18nStrings = {
   mainTabCost: 'Cost',
   mainTabLogs: 'Logs',
   mainTabConfig: 'Config',
-  homeGlobalCopy:
-    'Global dashboard for cross-project usage, health, and footprint. Project navigation lives inside the Skills workspace.',
   homeGlobalProjects: 'Projects',
   homeGlobalMonitoring: 'Monitored Projects',
   homeGlobalSkills: 'Discovered Skills',
@@ -451,11 +445,8 @@ const en: I18nStrings = {
   homeGlobalProjectListTitle: 'Project Snapshot',
   homeGlobalProjectListEmpty: 'No registered projects yet.',
   projectOverviewTitle: 'Project Overview',
-  projectOverviewCopy:
-    'Project-level usage, activity, cost, and logs. This is the former project home and now lives under Skills.',
   skillsSubtabProjectOverview: 'Project Overview',
   skillsSubtabLibrary: 'Skill Manager',
-  skillsLibraryTitle: 'Skill Manager',
   activityEmpty: 'No trace activity yet.',
   logsEmpty: 'No logs yet.',
   configTitle: 'Ornn Config',
@@ -465,8 +456,6 @@ const en: I18nStrings = {
   configAutoSaved: 'Auto-saved',
   configSaveFailed: 'Failed to save config',
   configLoading: 'Loading config...',
-  configIntro:
-    'These settings are written to ~/.ornn/config/settings.toml and apply globally across all registered projects.',
   configLogLevelLabel: 'Log Level',
   configLogLevelHelp: 'Controls Ornn host-side log verbosity written into settings.toml.',
   configDefaultProviderLabel: 'Default Provider',
@@ -863,7 +852,6 @@ const zh: I18nStrings = {
   mainTabCost: '成本',
   mainTabLogs: '日志',
   mainTabConfig: '配置',
-  homeGlobalCopy: '跨项目总览页，优先回答整体使用情况、运行健康度和技能资产规模；项目导航只放在技能工作台里。',
   homeGlobalProjects: '项目总数',
   homeGlobalMonitoring: '监控中项目',
   homeGlobalSkills: '已发现技能',
@@ -871,10 +859,8 @@ const zh: I18nStrings = {
   homeGlobalProjectListTitle: '项目快照',
   homeGlobalProjectListEmpty: '还没有已注册项目。',
   projectOverviewTitle: '项目总览',
-  projectOverviewCopy: '项目级使用现场，聚合总览、活动、成本和日志；这里就是原来的项目主页。',
   skillsSubtabProjectOverview: '项目总览',
   skillsSubtabLibrary: '技能管理',
-  skillsLibraryTitle: '技能管理',
   activityEmpty: '暂无追踪活动。',
   logsEmpty: '暂无日志。',
   configTitle: 'Ornn 配置',
@@ -884,7 +870,6 @@ const zh: I18nStrings = {
   configAutoSaved: '已自动保存',
   configSaveFailed: '配置保存失败',
   configLoading: '配置加载中...',
-  configIntro: '这些配置会写入 ~/.ornn/config/settings.toml，并对所有已注册项目全局生效。',
   configLogLevelLabel: '日志级别',
   configLogLevelHelp: '控制写入 settings.toml 的宿主日志详细程度。',
   configDefaultProviderLabel: '默认模型服务',
