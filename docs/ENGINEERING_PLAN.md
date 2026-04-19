@@ -1,5 +1,234 @@
 # OrnnSkills 工程计划 v1.0
 
+> 说明：本文件后续大部分章节仍保留 V1 时代以 `origin skill / project shadow` 为核心的历史设计。以下 `0. V2.0 Skill Domain Refactor Addendum` 为当前优先级更高的补充方案，后续 V2.0 的对象模型、读模型和 Skills 页信息架构应优先遵循本节，而不是继续沿用“一个 skill_id 代表一切”的旧假设。
+
+## 0. V2.0 Skill Domain Refactor Addendum
+
+### 0.1 重构目标
+
+本轮重构的目标不是简单改列表样式，而是把 OrnnSkills 从“项目内 shadow 管理器”升级为“skill-first 的本地管理器”。核心要解决 4 个问题:
+
+1. 明确区分 `Skill Family`、`Skill Instance`、`Skill Revision`
+2. 让 `Skills` 页既支持全局 skill 视角，也支持项目内实例视角
+3. 让活跃监控、版本、迁移、演进基于同一套对象模型表达
+4. 在不打断现有 daemon / shadow 演进链路的前提下，逐步迁移到新模型
+
+### 0.2 目标对象模型
+
+V2.0 默认采用以下对象层级:
+
+- `SkillFamily`
+  - 用户认知中的“同一个 skill”
+  - Skills 页默认列表单位
+- `SkillInstance`
+  - 某个项目、某个宿主、某个安装路径中的一个安装副本
+  - 启停、迁移、卸载、平移等操作目标
+- `SkillRevision`
+  - 某个实例内部的修订历史
+  - 对应当前 effective revision / disabled / rollback 语义
+- `SkillRelease`
+  - 跨实例可共享的内容基线
+  - V2.0 P0 可先不直接暴露到 UI
+- `SkillUsageFacts / SkillUsageSummary`
+  - 使用观察事实与聚合结果
+  - 不能继续只依赖 `traceCount`
+
+### 0.3 唯一键与身份规则
+
+V2.0 需要同时维护三类唯一性:
+
+1. `family_id`
+   - 解决“这是不是同一个 skill 家族”
+   - 推荐基于 `skill_key = publisher/name` 或规范化 skill 名生成
+2. `instance_id`
+   - 解决“这是不是同一个安装实例”
+   - 推荐基于 `project_id + runtime + install_path` 生成稳定自然键，并保留内部 UUID
+3. `content_digest`
+   - 解决“这是不是同一份内容”
+   - 推荐对规范化 skill 内容做 hash
+
+不再允许单一 `skill_id` 同时承担 family、instance、content 三种语义。
+
+### 0.4 兼容策略
+
+第一阶段不直接重写 daemon 主链路，而是采用“旧写入链路 + 新投影读模型”的兼容策略:
+
+- `.ornn/shadows`
+- `.ornn/skills/*/versions`
+- `trace_skill_mappings`
+- `agent-usage.ndjson`
+
+以上数据源继续按现有方式生产。
+
+新增一个 `skill domain projector` 负责:
+
+- 从旧数据结构投影出 `families / instances / revisions / usage summaries`
+- 补全 UI 所需的 family 级与 instance 级聚合结果
+- 让 dashboard 先切换到新读模型，而不是先动优化闭环
+
+### 0.5 存储层重构
+
+建议在现有 SQLite / state 文件之上新增以下读模型表:
+
+- `skill_families`
+- `skill_instances`
+- `skill_revisions`
+- `skill_releases`
+- `skill_usage_facts`
+- `skill_usage_rollups`
+- `skill_identity_links`
+
+旧表到新表的映射建议如下:
+
+- `origin_skills`
+  - 迁入 `skill_families` + `skill_releases` 的来源基线语义
+  - 不能再只按 `skill_id` 作为唯一主键理解整个 skill
+- `shadow_skills`
+  - 迁入 `skill_instances` + 当前有效 `skill_revisions`
+  - 现有 `UNIQUE(project_id, skill_id)` 需要废弃或降级，因为它无法表达同项目多宿主实例
+- `snapshots` / `evolution_records_index`
+  - 迁入 `skill_revisions` 的时间线视图
+- `trace_skill_mappings`
+  - 先归并到 family usage，再尽量回填到 instance usage
+- `agent-usage`
+  - 作为 usage rollup 的补充来源
+  - 只表示分析链路消耗，不等于“用户理解的技能使用次数”
+
+### 0.6 API 与读模型设计
+
+Dashboard 后端建议补充两套面向视角的 API:
+
+1. `Skill 视角`
+   - `GET /api/skills/families`
+   - `GET /api/skills/families/:familyId`
+   - `GET /api/skills/families/:familyId/instances`
+2. `项目视角`
+   - `GET /api/projects/:projectId/skill-groups`
+   - `GET /api/projects/:projectId/skill-instances`
+   - `GET /api/projects/:projectId/skill-instances/:instanceId`
+
+原则:
+
+- `Skills` 页默认读 family 级 API
+- 项目工作台读 project + instance 级 API
+- 操作型接口尽量面向 `instance_id`，不要继续只靠 `skill_id`
+
+### 0.7 前端信息架构重构
+
+V2.0 的 `Skills` 页需要明确分成两个工作区:
+
+1. `技能库`
+   - 默认页
+   - 无项目侧边导航
+   - 列表单位是 `Skill Family`
+   - 回答“这个 skill 整体有没有价值、分布在哪、值不值得继续维护”
+2. `项目工作台`
+   - 带项目侧边导航
+   - 页面单位是项目内的 `skill family 组`
+   - 组内再展示不同宿主的 `Skill Instance`
+   - 回答“这个项目里到底哪个实例该处理”
+
+页面规则:
+
+- 项目导航仅出现在 `Skills -> 项目工作台`
+- `主页` 与 `配置` 不显示项目导航
+- 默认详情入口优先进入 family 详情，再下钻到实例详情
+- `shadow skill` 不再作为普通用户的主术语，改用 `技能 / 技能实例 / 修订`
+
+### 0.8 当前 UI 到目标 UI 的映射
+
+当前实现:
+
+- `项目 -> 同名卡片 -> 不同宿主实例`
+
+这套结构可以保留，但只能作为 `项目工作台` 的一种展示方式，不能继续充当全局 skill 管理模型。
+
+目标实现:
+
+- `技能库`
+  - `Skill Family 列表 -> Family 详情 -> Instances / Revisions / Usage`
+- `项目工作台`
+  - `项目 -> 项目内 Skill Family 组 -> 宿主实例`
+
+### 0.9 分阶段实施计划
+
+#### Phase 0: 术语与契约冻结
+
+- 明确 `family / instance / revision / release / usage` 语义
+- 在文档和 AGENTS 中同步默认术语
+- 所有新 UI/接口命名优先采用新术语
+
+验收:
+
+- 设计文档、PRD、AGENTS 不再把 `shadow skill` 当成用户主语义
+
+#### Phase 1: 新 schema 与 projector
+
+- 新增 domain tables 或等价 state 文件
+- 实现 `skill domain projector`
+- 从旧 `.ornn` 结构投影出 families / instances / revisions / usage rollups
+
+验收:
+
+- 能在不改 daemon 写入逻辑的前提下读出 family 与 instance 两层数据
+
+#### Phase 2: Usage 与 identity 回填
+
+- 增加 family 归并规则与置信度字段
+- 回填安装时间、首次发现、最近发现、最近使用、活跃状态
+- 区分 observed / analyzed / optimized 等不同事实
+
+验收:
+
+- 任意 skill 都能同时回答“有几个实例”和“最近有没有被使用”
+
+#### Phase 3: Skills 页切换到双视角
+
+- 新建 `技能库` 视图，默认展示全局 family 列表
+- 保留项目工作台，承接现有项目内同名分组逻辑
+- 项目导航只在项目工作台显示
+
+验收:
+
+- 用户不选项目也能在 Skills 页直接管理全局 skill 资产
+
+#### Phase 4: 详情页重构
+
+- 支持 family 详情
+- 支持 instance drill-down
+- 支持从项目实例回跳到 family 详情
+
+验收:
+
+- 同一个 skill 能顺着看到“整体价值 -> 各项目实例 -> 实例修订历史”
+
+#### Phase 5: 写路径迁移
+
+- 安装、卸载、启停、迁移、回滚等 mutation API 面向 `instance_id`
+- 新写入链路开始优先写新模型
+- 保留旧数据导出/兼容层
+
+验收:
+
+- 核心管理动作不再依赖“只传 skill_id + project_id”的旧假设
+
+#### Phase 6: 清理旧语义
+
+- 逐步收缩 `origin skill / project shadow` 对 UI 的直接暴露
+- 把 legacy 兼容层收口到内部模块
+- 最后再评估是否需要把 `variant` 升级为公开对象
+
+验收:
+
+- 普通用户主界面中不再直接出现旧模型的内部术语
+
+### 0.10 关键风险
+
+- `family` 归并可能误判，因此必须存储 `identity_method + confidence`
+- `traceCount` 与真实“技能被使用次数”语义不同，迁移期必须并行展示或严格更名
+- 如果一开始就把 `variant` 升格为强对象，复杂度会显著增加，建议后置
+- 如果直接重写 daemon 写路径而不先做 projector，回归面会过大，不适合作为第一步
+
 ## 1. 技术栈选型
 
 ### 1.1 核心技术栈
