@@ -1473,6 +1473,22 @@ document.getElementById('eventModal').addEventListener('click', function(e) {
 });
 `;
 
+const DASHBOARD_SKILL_LIBRARY_STALE_SNAPSHOT_SNIPPET = `  if (projectPath && (!state.projectData[projectPath] || state.staleProjectData[projectPath])) {
+    await loadProjectSnapshot(projectPath, { force: !!state.staleProjectData[projectPath] });
+  }`;
+
+const DASHBOARD_SKILL_LIBRARY_STALE_SNAPSHOT_OPTIMIZED = `  const hasProjectSnapshot = !!(projectPath && state.projectData[projectPath]);
+  const shouldRefreshProjectSnapshot = !!projectPath && (
+    !hasProjectSnapshot ||
+    (state.staleProjectData[projectPath] && !isSkillLibraryInlineSurfaceActive())
+  );
+  if (shouldRefreshProjectSnapshot) {
+    await loadProjectSnapshot(projectPath, { force: !!state.staleProjectData[projectPath] });
+  }`;
+
 export function renderDashboardSkillsSource(): string {
-  return DASHBOARD_SKILLS_SOURCE;
+  return DASHBOARD_SKILLS_SOURCE.replace(
+    DASHBOARD_SKILL_LIBRARY_STALE_SNAPSHOT_SNIPPET,
+    DASHBOARD_SKILL_LIBRARY_STALE_SNAPSHOT_OPTIMIZED
+  );
 }
