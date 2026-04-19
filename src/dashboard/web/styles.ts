@@ -141,19 +141,6 @@ export function renderDashboardStylesSource(): string {
   .main-tab.active { color: var(--text); }
   .main-tab.active::after { background: var(--blue); }
   .page-shell { display: flex; flex-direction: column; gap: 14px; }
-  .page-hero {
-    display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
-    padding: 14px 16px; border: 1px solid var(--border); border-radius: 8px;
-    background:
-      radial-gradient(circle at top right, rgba(88,166,255,.14), transparent 34%),
-      linear-gradient(180deg, rgba(22,27,34,.96), rgba(13,17,23,.92));
-  }
-  .page-title { font-size: 22px; font-weight: 700; color: var(--text); }
-  .page-meta {
-    display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px;
-    border: 1px solid rgba(88,166,255,.25); border-radius: 999px;
-    background: rgba(88,166,255,.08); color: var(--blue); font-size: 10px;
-  }
   .sub-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
   .sub-tab {
     font-family: var(--font); font-size: 11px; padding: 6px 12px; border-radius: 999px;
