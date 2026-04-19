@@ -274,17 +274,33 @@ export function renderDashboardStylesSource(): string {
   .skills-list { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
   @media (max-width: 1200px) { .skills-list { grid-template-columns: repeat(2, 1fr); } }
   @media (max-width: 800px) { .skills-list { grid-template-columns: 1fr; } }
-  .skill-library-layout { display: grid; grid-template-columns: minmax(280px, 320px) minmax(0, 1fr); gap: 14px; align-items: start; }
+  .skill-library-layout {
+    display: grid;
+    grid-template-columns: minmax(280px, 320px) minmax(0, 1fr);
+    gap: 0;
+    align-items: stretch;
+    min-height: 720px;
+    background: var(--bg1);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
   .skill-library-sidebar, .skill-library-detail { min-width: 0; }
+  .skill-library-sidebar {
+    background: var(--bg1);
+    border-right: 1px solid var(--border);
+    min-height: 100%;
+  }
+  .skill-library-detail {
+    background: var(--bg0);
+    padding: 14px;
+  }
   .skill-library-sidebar-shell {
     display: flex;
     flex-direction: column;
     min-height: 0;
     height: 100%;
-    background: var(--bg1);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    overflow: hidden;
+    background: transparent;
   }
   .skill-library-sidebar-title {
     display: flex;
@@ -294,29 +310,32 @@ export function renderDashboardStylesSource(): string {
   }
   .skill-library-count { color: var(--muted); font-size: 10px; }
   .skill-library-toolbar {
-    padding: 10px 12px;
+    padding: 8px 12px;
     border-bottom: 1px solid var(--border);
     display: flex;
     align-items: center;
     gap: 10px;
+    background: rgba(22,27,34,.92);
   }
   .skill-library-runtime-bar { justify-content: flex-start; }
   .skill-library-search-box { min-width: 0; width: 100%; }
   .skill-library-sort-bar { justify-content: space-between; flex-wrap: wrap; }
   .skill-library-sort-bar .sort-controls { flex-wrap: wrap; }
   .skill-library-nav-scroll {
-    padding: 10px 8px;
+    padding: 4px 0;
     display: flex;
     flex-direction: column;
-    gap: 8px;
   }
   .skill-library-nav-card { height: 100%; }
   .skill-library-nav-card .card-body { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
-  .skill-library-nav-list { display: flex; flex-direction: column; gap: 8px; }
+  .skill-library-nav-list { display: flex; flex-direction: column; gap: 0; }
   .skill-nav-item {
-    gap: 5px;
+    gap: 4px;
+    border-width: 1px 0 1px 2px;
+    border-radius: 0;
+    padding: 10px 12px;
   }
-  .skill-nav-item:hover { transform: none; }
+  .skill-nav-item:hover { transform: none; background: rgba(33,38,45,.88); }
   .skill-nav-item.active {
     box-shadow: inset 0 0 0 1px rgba(88,166,255,.14);
   }
@@ -330,13 +349,15 @@ export function renderDashboardStylesSource(): string {
     min-width: 22px;
     padding: 2px 7px;
     border-radius: 999px;
-    border: 1px solid var(--border);
-    background: rgba(13,17,23,.7);
-    color: var(--muted);
+    border: 1px solid rgba(88,166,255,.28);
+    background: rgba(88,166,255,.08);
+    color: var(--blue);
     font-size: 10px;
     line-height: 1;
     flex-shrink: 0;
   }
+  .skill-nav-item .project-top { align-items: center; }
+  .skill-nav-item .project-meta { color: var(--muted); }
   .skill-inline-card { min-height: 0; }
   .skill-inline-card-header {
     display: flex;
@@ -419,7 +440,9 @@ export function renderDashboardStylesSource(): string {
   }
   .skill-inline-history { background: var(--bg1); }
   @media (max-width: 980px) {
-    .skill-library-layout { grid-template-columns: 1fr; }
+    .skill-library-layout { grid-template-columns: 1fr; min-height: 0; }
+    .skill-library-sidebar { border-right: none; border-bottom: 1px solid var(--border); }
+    .skill-library-detail { padding: 12px; }
     .skill-library-toolbar { align-items: stretch; }
     .skill-library-runtime-bar .runtime-tabs,
     .skill-library-sort-bar .sort-controls { width: 100%; flex-wrap: wrap; }
