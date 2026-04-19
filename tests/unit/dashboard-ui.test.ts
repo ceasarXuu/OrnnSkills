@@ -1279,6 +1279,98 @@ describe('dashboard ui recovery', () => {
     );
   });
 
+  it('does not block project bootstrap on dashboard language persistence', async () => {
+    const projectPath = '/tmp/ornn-project';
+    const encodedPath = encodeURIComponent(projectPath);
+    let resolveLangRequest: ((value: unknown) => void) | null = null;
+    const { dashboard, getElement, getFetchCalls } = loadDashboardTestHarness(
+      {},
+      {
+        fetchImpl: async (url) => {
+          if (url === '/api/lang') {
+            return await new Promise((resolve) => {
+              resolveLangRequest = resolve;
+            }) as {
+              ok: boolean;
+              status?: number;
+              statusText?: string;
+              json: () => Promise<unknown>;
+            };
+          }
+          if (url === `/api/projects/${encodedPath}/snapshot`) {
+            return {
+              ok: true,
+              status: 200,
+              statusText: 'OK',
+              json: async () => ({
+                daemon: {
+                  isRunning: true,
+                  isPaused: false,
+                  pid: 1,
+                  startedAt: '2026-04-10T05:23:00.000Z',
+                  processedTraces: 0,
+                  lastCheckpointAt: null,
+                  retryQueueSize: 0,
+                  monitoringState: 'active',
+                  pausedAt: null,
+                  optimizationStatus: {
+                    currentState: 'idle',
+                    currentSkillId: null,
+                    lastOptimizationAt: null,
+                    lastError: null,
+                    queueSize: 0,
+                  },
+                },
+                skills: [],
+                skillGroups: [],
+                skillInstances: [],
+                traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
+                recentTraces: [],
+                decisionEvents: [],
+                activityScopes: [],
+                agentUsage: {
+                  callCount: 0,
+                  promptTokens: 0,
+                  completionTokens: 0,
+                  totalTokens: 0,
+                  durationMsTotal: 0,
+                  avgDurationMs: 0,
+                  lastCallAt: null,
+                  byModel: {},
+                  byScope: {},
+                  bySkill: {},
+                },
+              }),
+            };
+          }
+          return {
+            ok: true,
+            status: 200,
+            statusText: 'OK',
+            json: async () => ({ projects: [] }),
+          };
+        },
+      }
+    );
+
+    getElement('mainPanel');
+    dashboard.state.selectedMainTab = 'skills';
+    const selectProjectPromise = dashboard.selectProject(projectPath);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(getFetchCalls()).toContain(`/api/projects/${encodedPath}/snapshot`);
+    expect(dashboard.state.projectData[projectPath]).toBeTruthy();
+
+    resolveLangRequest?.({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({ ok: true, lang: 'zh' }),
+    });
+    await selectProjectPromise;
+  });
+
   it('renders decision summary cards and metric groups in overview', () => {
     const { dashboard, getElement } = loadDashboardTestHarness();
     const projectPath = '/tmp/ornn-project';
