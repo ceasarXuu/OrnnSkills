@@ -297,7 +297,7 @@ function loadDashboardTestHarness(
   const script = scriptMatch[1]
     .replace(/\binit\(\);\s*$/, '')
     .concat(
-      '\n;globalThis.__dashboardTest = { state, init, switchLang, selectProject, selectMainTab, renderMainPanel, safeRenderMainPanel, renderSidebar, buildActivityRows, copyActivityDetail, openActivityDetail, renderCostPanel, viewSkill, switchSkillRuntime, loadVersion, handleUpdate, openApplyToAllSkillModal, closeApplyToAllSkillModal, confirmApplyCurrentSkillToAll, triggerProjectPicker: openProjectPicker, toggleProjectMonitoring, saveProjectConfig };'
+      '\n;globalThis.__dashboardTest = { state, init, switchLang, selectProject, selectMainTab, renderMainPanel, safeRenderMainPanel, renderSidebar, buildActivityRows, copyActivityDetail, openActivityDetail, renderCostPanel, viewSkill, switchSkillRuntime, loadVersion, handleUpdate, openApplyToAllSkillModal, closeApplyToAllSkillModal, confirmApplyCurrentSkillToAll, saveCurrentSkill, triggerProjectPicker: openProjectPicker, toggleProjectMonitoring, saveProjectConfig };'
     );
 
   vm.runInNewContext(script, runtime);
@@ -318,7 +318,7 @@ function loadDashboardTestHarness(
           copyActivityDetail: (projectPath: string, rowId: string) => Promise<void>;
           openActivityDetail: (projectPath: string, rowId: string) => Promise<void>;
           renderCostPanel: (projectPath: string) => string;
-          viewSkill: (projectPath: string, skillId: string, runtime?: string) => Promise<void>;
+          viewSkill: (projectPath: string, skillId: string, runtime?: string, instanceId?: string) => Promise<void>;
           switchSkillRuntime: (runtime: string) => Promise<void>;
           loadVersion: (
             encProject: string,
@@ -330,6 +330,7 @@ function loadDashboardTestHarness(
           openApplyToAllSkillModal: () => void;
           closeApplyToAllSkillModal: () => void;
           confirmApplyCurrentSkillToAll: () => Promise<void>;
+          saveCurrentSkill: () => Promise<void>;
           triggerProjectPicker: () => Promise<void>;
           toggleProjectMonitoring: (projectPath: string, paused: boolean) => Promise<void>;
           saveProjectConfig: (options?: Record<string, unknown>) => Promise<void>;
@@ -384,9 +385,7 @@ describe('dashboard ui recovery', () => {
       {},
       {
         fetchMap: {
-          '/api/projects': {
-            projects: [{ path: projectPath, name: 'OrnnSkills', isRunning: true, skillCount: 1 }],
-          },
+          projects: [{ path: projectPath, name: 'OrnnSkills', isRunning: true, skillCount: 1 }],
           [`/api/projects/${encodedPath}/snapshot`]: {
             daemon: {
               isRunning: true,
@@ -2251,7 +2250,7 @@ describe('dashboard ui recovery', () => {
     getElement('mainPanel');
     dashboard.state.selectedProjectId = projectPath;
     dashboard.state.selectedMainTab = 'skills';
-    dashboard.state.selectedSkillsSubTab = 'skill_library';
+    dashboard.state.selectedSkillsSubTab = 'project_overview';
     dashboard.state.selectedRuntimeTab = 'all';
     dashboard.state.projectData = {
       [projectPath]: {
@@ -2682,6 +2681,238 @@ describe('dashboard ui recovery', () => {
     expect(getElement('modalSaveHint').textContent).toContain('2');
   });
 
+  it('uses the clicked library instance project and runtime even when another project is selected', async () => {
+    const selectedProjectPath = '/tmp/selected-project';
+    const libraryProjectPath = '/tmp/library-project';
+    const skillId = 'test-driven-development';
+    const runtimeId = 'claude';
+    const instanceId = 'instance-library';
+    const encodedLibraryProject = encodeURIComponent(libraryProjectPath);
+    const encodedSkill = encodeURIComponent(skillId);
+    const encodedInstance = encodeURIComponent(instanceId);
+    const skillEndpoint = `/api/projects/${encodedLibraryProject}/skills/${encodedSkill}?runtime=${runtimeId}`;
+    const saveEndpoint = `/api/projects/${encodedLibraryProject}/skill-instances/${encodedInstance}`;
+    const snapshot = {
+      daemon: {
+        isRunning: true,
+        pid: 1,
+        startedAt: '2026-04-10T00:00:00.000Z',
+        processedTraces: 0,
+        lastCheckpointAt: null,
+        retryQueueSize: 0,
+        optimizationStatus: {
+          currentState: 'idle',
+          currentSkillId: null,
+          lastOptimizationAt: null,
+          lastError: null,
+          queueSize: 0,
+        },
+      },
+      skills: [],
+      skillGroups: [],
+      skillInstances: [],
+      traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
+      recentTraces: [],
+      decisionEvents: [],
+      activityScopes: [],
+      agentUsage: {
+        callCount: 0,
+        promptTokens: 0,
+        completionTokens: 0,
+        totalTokens: 0,
+        durationMsTotal: 0,
+        avgDurationMs: 0,
+        lastCallAt: null,
+        byModel: {},
+        byScope: {},
+        bySkill: {},
+      },
+    };
+    const { dashboard, getElement, getFetchRequests } = loadDashboardTestHarness(
+      {},
+      {
+        lang: 'zh',
+        fetchMap: {
+          [`/api/projects/${encodedLibraryProject}/snapshot`]: snapshot,
+          [skillEndpoint]: {
+            content: '# remote content',
+            versions: [2],
+            effectiveVersion: 2,
+          },
+          [saveEndpoint]: {
+            ok: true,
+            unchanged: false,
+            version: 3,
+            metadata: { version: 3 },
+            instance: { instanceId, skillId, runtime: runtimeId },
+          },
+          [`/api/projects/${encodedLibraryProject}/skill-instances/${encodedInstance}/versions/2`]: {
+            content: '# remote content',
+            metadata: {
+              version: 2,
+              createdAt: '2026-04-12T00:00:00.000Z',
+              reason: 'seed',
+              isDisabled: false,
+            },
+          },
+        },
+      }
+    );
+
+    dashboard.state.selectedProjectId = selectedProjectPath;
+    dashboard.state.projectData = {
+      [selectedProjectPath]: snapshot,
+    };
+
+    getElement('skillModal');
+    getElement('modalSkillName');
+    getElement('modalSkillStatus');
+    getElement('modalSaveHint');
+    getElement('modalSaveBtn');
+    getElement('modalApplyAllBtn');
+    getElement('modalContent');
+    getElement('versionList');
+
+    await dashboard.viewSkill(libraryProjectPath, skillId, runtimeId, instanceId);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(dashboard.state.currentSkillProjectId).toBe(libraryProjectPath);
+    expect(getElement('modalContent').value).toBe('# remote content');
+
+    getElement('modalContent').value = '# updated remote content';
+    await dashboard.saveCurrentSkill();
+
+    const requests = getFetchRequests();
+    expect(requests.some((entry) => entry.url === `/api/projects/${encodedLibraryProject}/snapshot`)).toBe(true);
+    expect(requests.some((entry) => entry.url === skillEndpoint)).toBe(true);
+    const saveRequest = requests.find((entry) => entry.url === saveEndpoint);
+    expect(saveRequest).toBeTruthy();
+    expect(saveRequest?.init?.method).toBe('PUT');
+    expect(JSON.parse(String(saveRequest?.init?.body))).toMatchObject({
+      content: '# updated remote content',
+      runtime: runtimeId,
+    });
+  });
+
+  it('uses the modal instance project for apply preview and family apply', async () => {
+    const selectedProjectPath = '/tmp/selected-project';
+    const libraryProjectPath = '/tmp/library-project';
+    const skillId = 'test-driven-development';
+    const runtimeId = 'claude';
+    const instanceId = 'instance-library';
+    const encodedLibraryProject = encodeURIComponent(libraryProjectPath);
+    const encodedSkill = encodeURIComponent(skillId);
+    const encodedInstance = encodeURIComponent(instanceId);
+    const skillEndpoint = `/api/projects/${encodedLibraryProject}/skills/${encodedSkill}?runtime=${runtimeId}`;
+    const previewEndpoint = `/api/projects/${encodedLibraryProject}/skill-instances/${encodedInstance}/apply-preview`;
+    const applyEndpoint = `/api/projects/${encodedLibraryProject}/skill-instances/${encodedInstance}/apply-to-family`;
+    const snapshot = {
+      daemon: {
+        isRunning: true,
+        pid: 1,
+        startedAt: '2026-04-10T00:00:00.000Z',
+        processedTraces: 0,
+        lastCheckpointAt: null,
+        retryQueueSize: 0,
+        optimizationStatus: {
+          currentState: 'idle',
+          currentSkillId: null,
+          lastOptimizationAt: null,
+          lastError: null,
+          queueSize: 0,
+        },
+      },
+      skills: [],
+      skillGroups: [],
+      skillInstances: [],
+      traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
+      recentTraces: [],
+      decisionEvents: [],
+      activityScopes: [],
+      agentUsage: {
+        callCount: 0,
+        promptTokens: 0,
+        completionTokens: 0,
+        totalTokens: 0,
+        durationMsTotal: 0,
+        avgDurationMs: 0,
+        lastCallAt: null,
+        byModel: {},
+        byScope: {},
+        bySkill: {},
+      },
+    };
+    const { dashboard, getElement, getFetchRequests } = loadDashboardTestHarness(
+      {},
+      {
+        lang: 'zh',
+        fetchMap: {
+          [`/api/projects/${encodedLibraryProject}/snapshot`]: snapshot,
+          [skillEndpoint]: {
+            content: '# remote content',
+            versions: [],
+            effectiveVersion: null,
+          },
+          [previewEndpoint]: {
+            instanceId,
+            totalTargets: 1,
+            targets: [
+              {
+                projectPath: '/tmp/target-project',
+                runtime: runtimeId,
+              },
+            ],
+          },
+          [applyEndpoint]: {
+            ok: true,
+            instanceId,
+            totalTargets: 1,
+            updatedTargets: 1,
+            skippedTargets: 0,
+            failedTargets: 0,
+          },
+        },
+      }
+    );
+
+    dashboard.state.selectedProjectId = selectedProjectPath;
+    dashboard.state.projectData = {
+      [selectedProjectPath]: snapshot,
+    };
+
+    getElement('skillModal');
+    getElement('modalSkillName');
+    getElement('modalSkillStatus');
+    getElement('modalSaveHint');
+    getElement('modalSaveBtn');
+    getElement('modalApplyAllBtn');
+    getElement('modalContent');
+    getElement('versionList');
+    getElement('applyAllSkillModal');
+    getElement('applyAllConfirmTitle');
+    getElement('applyAllConfirmBody');
+    getElement('applyAllConfirmBtn');
+    getElement('applyAllCancelBtn');
+
+    await dashboard.viewSkill(libraryProjectPath, skillId, runtimeId, instanceId);
+    getElement('modalContent').value = '# propagated content';
+
+    dashboard.openApplyToAllSkillModal();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(getFetchRequests().some((entry) => entry.url === previewEndpoint)).toBe(true);
+
+    await dashboard.confirmApplyCurrentSkillToAll();
+
+    const applyRequest = getFetchRequests().find((entry) => entry.url === applyEndpoint);
+    expect(applyRequest).toBeTruthy();
+    expect(applyRequest?.init?.method).toBe('POST');
+    expect(JSON.parse(String(applyRequest?.init?.body))).toMatchObject({
+      content: '# propagated content',
+      runtime: runtimeId,
+    });
+  });
+
   it('renders an interactive scope tag for auto-optimized versions', async () => {
     const projectPath = '/tmp/ornn-project';
     const skillId = 'test-driven-development';
@@ -3038,6 +3269,196 @@ describe('dashboard ui recovery', () => {
     expect(html).toContain('详情');
     expect(html).toContain('操作');
     expect(html).not.toContain('<th>Trace ID</th>');
+  });
+
+  it('renders the skill library as a split layout with left navigation and inline detail workspace', () => {
+    const { dashboard, getElement } = loadDashboardTestHarness({}, { lang: 'zh' });
+    const projectPath = '/tmp/ornn-project';
+    const family = {
+      familyId: 'family-1',
+      familyName: 'test-driven-development',
+      status: 'active',
+      runtimes: ['codex'],
+      instanceCount: 1,
+      projectCount: 1,
+      runtimeCount: 1,
+      usage: { observedCalls: 4 },
+      lastSeenAt: '2026-04-10T05:23:00.000Z',
+    };
+
+    getElement('mainPanel');
+    dashboard.state.selectedProjectId = projectPath;
+    dashboard.state.projectData = {
+      [projectPath]: {
+        daemon: {},
+        skills: [
+          {
+            skillId: 'test-driven-development',
+            runtime: 'codex',
+            status: 'active',
+            traceCount: 4,
+            current_revision: 3,
+            updatedAt: '2026-04-10T05:23:00.000Z',
+          },
+        ],
+        skillInstances: [
+          {
+            instanceId: 'instance-1',
+            familyId: family.familyId,
+            projectPath,
+            skillId: 'test-driven-development',
+            runtime: 'codex',
+            effectiveVersion: 3,
+            status: 'active',
+            lastUsedAt: '2026-04-10T05:23:00.000Z',
+          },
+        ],
+        traceStats: {
+          total: 4,
+          byRuntime: { codex: 4 },
+          byStatus: { success: 4 },
+          byEventType: { tool_call: 4 },
+        },
+        recentTraces: [],
+        decisionEvents: [],
+        agentUsage: {
+          callCount: 0,
+          promptTokens: 0,
+          completionTokens: 0,
+          totalTokens: 0,
+          durationMsTotal: 0,
+          avgDurationMs: 0,
+          lastCallAt: null,
+          byModel: {},
+          byScope: {},
+          bySkill: {},
+        },
+      },
+    };
+    dashboard.state.selectedMainTab = 'skills';
+    dashboard.state.selectedSkillsSubTab = 'skill_library';
+    dashboard.state.skillLibraryLoaded = true;
+    dashboard.state.skillFamilies = [family];
+    dashboard.state.skillFamilyDetailsById = { [family.familyId]: family };
+    dashboard.state.skillFamilyInstancesById = {
+      [family.familyId]: dashboard.state.projectData[projectPath].skillInstances,
+    };
+    dashboard.state.selectedSkillFamilyId = family.familyId;
+    dashboard.state.currentSkillProjectId = projectPath;
+    dashboard.state.currentSkillId = 'test-driven-development';
+    dashboard.state.currentSkillRuntime = 'codex';
+    dashboard.state.currentSkillInstanceId = 'instance-1';
+
+    dashboard.renderMainPanel(projectPath);
+
+    const html = getElement('mainPanel').innerHTML;
+    expect(html).toContain('skill-library-layout');
+    expect(html).toContain('skillLibraryNavContainer');
+    expect(html).toContain('skillLibraryInlineDetailContainer');
+    expect(html).toContain('skillInlineContent');
+    expect(html).toContain('skill-instance-item');
+  });
+
+  it('loads skill library details into the inline editor instead of opening the modal', async () => {
+    const projectPath = '/tmp/ornn-project';
+    const encodedProject = encodeURIComponent(projectPath);
+    const { dashboard, getElement } = loadDashboardTestHarness(
+      {},
+      {
+        lang: 'zh',
+        fetchMap: {
+          [`/api/projects/${encodedProject}/skills/test-driven-development?runtime=codex`]: {
+            content: '# inline content',
+            versions: [],
+            effectiveVersion: null,
+          },
+        },
+      }
+    );
+
+    getElement('mainPanel');
+    getElement('skillModal');
+    getElement('skillLibraryInlineDetailContainer');
+    getElement('skillInlineName');
+    getElement('skillInlineStatus');
+    getElement('skillInlineRuntimeSelect');
+    getElement('skillInlineSaveHint');
+    getElement('skillInlineSaveBtn');
+    getElement('skillInlineApplyAllBtn');
+    getElement('skillInlineContent');
+    getElement('skillInlineVersionList');
+
+    dashboard.state.selectedProjectId = projectPath;
+    dashboard.state.selectedMainTab = 'skills';
+    dashboard.state.selectedSkillsSubTab = 'skill_library';
+    dashboard.state.selectedSkillFamilyId = 'family-1';
+    dashboard.state.projectData = {
+      [projectPath]: {
+        daemon: {},
+        skills: [
+          {
+            skillId: 'test-driven-development',
+            runtime: 'codex',
+            status: 'active',
+            traceCount: 1,
+            current_revision: 3,
+            updatedAt: '2026-04-10T05:23:00.000Z',
+          },
+        ],
+        skillInstances: [
+          {
+            instanceId: 'instance-1',
+            familyId: 'family-1',
+            projectPath,
+            skillId: 'test-driven-development',
+            runtime: 'codex',
+            effectiveVersion: 3,
+            status: 'active',
+            lastUsedAt: '2026-04-10T05:23:00.000Z',
+          },
+        ],
+        traceStats: { total: 1, byRuntime: { codex: 1 }, byStatus: { success: 1 }, byEventType: { tool_call: 1 } },
+        recentTraces: [],
+        decisionEvents: [],
+        agentUsage: {
+          callCount: 0,
+          promptTokens: 0,
+          completionTokens: 0,
+          totalTokens: 0,
+          durationMsTotal: 0,
+          avgDurationMs: 0,
+          lastCallAt: null,
+          byModel: {},
+          byScope: {},
+          bySkill: {},
+        },
+      },
+    };
+    dashboard.state.skillFamilies = [
+      {
+        familyId: 'family-1',
+        familyName: 'test-driven-development',
+        status: 'active',
+        runtimes: ['codex'],
+        instanceCount: 1,
+        projectCount: 1,
+        runtimeCount: 1,
+        usage: { observedCalls: 1 },
+      },
+    ];
+    dashboard.state.skillFamilyDetailsById = {
+      'family-1': dashboard.state.skillFamilies[0],
+    };
+    dashboard.state.skillFamilyInstancesById = {
+      'family-1': dashboard.state.projectData[projectPath].skillInstances,
+    };
+
+    await dashboard.viewSkill(projectPath, 'test-driven-development', 'codex', 'instance-1');
+
+    expect(getElement('skillModal').classList.contains('visible')).toBe(false);
+    expect(getElement('skillInlineName').textContent).toContain('test-driven-development');
+    expect(getElement('skillInlineRuntimeSelect').value).toBe('codex');
+    expect(getElement('skillInlineContent').value).toBe('# inline content');
   });
 
   it('renders raw trace rows with scope and detail actions', async () => {

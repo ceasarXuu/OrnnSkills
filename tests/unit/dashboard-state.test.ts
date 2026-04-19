@@ -11,7 +11,10 @@ describe('dashboard web state', () => {
     expect(state.selectedMainTab).toBe('home');
     expect(state.selectedSkillsSubTab).toBe('project_overview');
     expect(state.currentSkillRuntime).toBe('codex');
+    expect(state.selectedSkillFamilyId).toBeNull();
     expect(state.preferredSkillRuntime).toBe('claude');
+    expect(state.skillFamilies).toEqual([]);
+    expect(state.skillLibraryLoaded).toBe(false);
     expect(state.providerCatalog).toEqual([]);
     expect(state.activityColumnWidths).toEqual({ skill: 240 });
     expect(GLOBAL_CONFIG_SCOPE).toBe('__global__');
@@ -41,6 +44,8 @@ describe('dashboard web state', () => {
         },
       },
       skills: [],
+      skillGroups: [],
+      skillInstances: [],
       traceStats: { total: 0, byRuntime: {}, byStatus: {}, byEventType: {} },
       recentTraces: [],
       decisionEvents: [],

@@ -1,10 +1,13 @@
 type DashboardSkillsPanelInput = {
+  cardClassName?: string;
   deps: {
     renderSkillCard: (skill: { skillId?: string }, projectPath: string) => string;
     renderSkillsEmptyState: () => string;
     t: (key: string) => string;
   };
   filteredSkills: Array<{ skillId?: string }>;
+  listClassName?: string;
+  listContainerId?: string;
   projectPath: string;
   searchQuery: string;
   selectedRuntimeTab: string;
@@ -14,9 +17,12 @@ type DashboardSkillsPanelInput = {
 
 export function renderDashboardSkillsPanel(input: DashboardSkillsPanelInput): string {
   const { deps } = input;
+  const cardClassName = input.cardClassName ? ` ${input.cardClassName}` : '';
+  const listClassName = input.listClassName || 'skills-list';
+  const listContainerId = input.listContainerId || 'skillsListContainer';
 
   return `
-    <div class="card">
+    <div class="card${cardClassName}">
       <div class="card-header">
         <span>${deps.t('skillsTitle')}</span>
         <div style="display:flex;align-items:center;gap:12px;">
@@ -46,10 +52,10 @@ export function renderDashboardSkillsPanel(input: DashboardSkillsPanelInput): st
           </div>
         </div>
 
-        <div id="skillsListContainer">
+        <div id="${listContainerId}">
           ${input.filteredSkills.length === 0
             ? deps.renderSkillsEmptyState()
-            : '<div class="skills-list">' + input.filteredSkills.map((skill) => deps.renderSkillCard(skill, input.projectPath)).join('') + '</div>'}
+            : `<div class="${listClassName}">` + input.filteredSkills.map((skill) => deps.renderSkillCard(skill, input.projectPath)).join('') + '</div>'}
         </div>
       </div>
     </div>
