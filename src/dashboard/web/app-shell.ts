@@ -52,7 +52,10 @@ ${styleCss}
       <span class="header-version" id="appVersion">${labels.headerVersion}</span>
       <span class="header-version" id="appBuild">build #${shortBuildId}</span>
     </div>
-    <div style="display:flex;align-items:center;gap:16px;">
+    <div class="header-center">
+      <div class="workspace-tabs" id="workspaceTabs"></div>
+    </div>
+    <div class="header-right">
       <div class="lang-switcher">
         <button class="lang-btn ${lang === 'en' ? 'active' : ''}" onclick="switchLang('en')">EN</button>
         <button class="lang-btn ${lang === 'zh' ? 'active' : ''}" onclick="switchLang('zh')">中文</button>
@@ -63,10 +66,6 @@ ${styleCss}
       </div>
     </div>
   </header>
-
-  <div class="workspace-bar">
-    <div class="workspace-tabs" id="workspaceTabs"></div>
-  </div>
 
   <div class="main" id="workspaceMain">
     <!-- Sidebar: Project List -->

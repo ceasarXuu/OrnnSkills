@@ -39,6 +39,9 @@ describe('dashboard app shell', () => {
     expect(html).toContain('id="projectSidebar"');
     expect(html).toContain('id="projectList"');
     expect(html).toContain('id="workspaceTabs"');
+    expect(html).not.toContain('class="workspace-bar"');
+    expect(html.indexOf('id="workspaceTabs"')).toBeGreaterThan(html.indexOf('<header class="header">'));
+    expect(html.indexOf('id="workspaceTabs"')).toBeLessThan(html.indexOf('id="workspaceMain"'));
     expect(html).toContain('id="skillModal"');
     expect(html).toContain('id="modalRuntimeSelect"');
     expect(html.indexOf('id="modalRuntimeSelect"')).toBeLessThan(html.indexOf('onclick="closeModal()"'));

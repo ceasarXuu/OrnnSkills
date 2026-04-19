@@ -9,5 +9,10 @@ describe('renderDashboardStylesSource', () => {
     expect(css).toContain('.project-item.active');
     expect(css).toContain('.activity-table { width: 100%;');
     expect(css).toContain('.provider-row {');
+    expect(css).toContain('.header-center');
+    expect(css).toContain('.workspace-tabs { justify-content: center;');
+    expect(css).toContain('.main-tab {');
+    expect(css).toContain('border: none;');
+    expect(css).toContain('background: transparent;');
   });
 });

@@ -21,13 +21,26 @@ export function renderDashboardStylesSource(): string {
   html, body { height: 100%; background: var(--bg0); color: var(--text); font-family: var(--font); font-size: 13px; }
 
   /* ─── Layout ─────────────────────────────────────── */
-  .app { display: grid; grid-template-rows: 44px 48px 1fr; height: 100vh; }
+  .app { display: grid; grid-template-rows: auto 1fr; height: 100vh; }
   .header {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 0 16px; background: var(--bg1); border-bottom: 1px solid var(--border);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    gap: 20px;
+    min-height: 56px;
+    padding: 0 16px;
+    background: var(--bg1);
+    border-bottom: 1px solid var(--border);
     grid-row: 1;
   }
   .header-left { display: flex; align-items: center; gap: 12px; }
+  .header-center {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+  }
+  .header-right { display: flex; align-items: center; justify-self: end; gap: 16px; }
   .header-logo { font-size: 15px; font-weight: 600; color: var(--blue); }
   .header-version { color: var(--muted); font-size: 11px; }
   .header-status { display: flex; align-items: center; gap: 6px; font-size: 11px; }
@@ -38,15 +51,9 @@ export function renderDashboardStylesSource(): string {
   .dot-gray { background: var(--muted); }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
 
-  .workspace-bar {
-    display: flex; align-items: center;
-    padding: 0 16px; background: linear-gradient(180deg, rgba(22,27,34,.98), rgba(13,17,23,.94));
-    border-bottom: 1px solid var(--border);
-    grid-row: 2;
-  }
-  .workspace-tabs { display: flex; gap: 8px; align-items: center; }
+  .workspace-tabs { justify-content: center; display: flex; align-items: center; min-width: 0; }
 
-  .main { display: grid; grid-template-columns: minmax(0, 1fr); height: 100%; overflow: hidden; grid-row: 3; }
+  .main { display: grid; grid-template-columns: minmax(0, 1fr); height: 100%; overflow: hidden; grid-row: 2; }
   .main.project-nav-visible { grid-template-columns: 200px minmax(0, 1fr); }
 
   /* ─── Sidebar ─────────────────────────────────────── */
@@ -106,14 +113,33 @@ export function renderDashboardStylesSource(): string {
   /* ─── Main Panel ─────────────────────────────────── */
   .panel { overflow-y: auto; background: var(--bg0); }
   .panel-inner { padding: 16px; display: flex; flex-direction: column; gap: 14px; min-height: 100%; }
-  .main-tabs { display: flex; gap: 8px; }
+  .main-tabs { display: flex; gap: 24px; align-items: center; }
   .main-tab {
-    font-family: var(--font); font-size: 11px; padding: 6px 12px; border-radius: 6px;
-    border: 1px solid var(--border); background: var(--bg1); color: var(--muted);
-    cursor: pointer; transition: all .15s;
+    position: relative;
+    font-family: var(--font);
+    font-size: 11px;
+    padding: 12px 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    transition: color .15s, opacity .15s;
   }
-  .main-tab:hover { border-color: var(--blue); color: var(--text); }
-  .main-tab.active { background: var(--blue); color: #fff; border-color: var(--blue); }
+  .main-tab::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 3px;
+    height: 2px;
+    border-radius: 999px;
+    background: transparent;
+    transition: background .15s;
+  }
+  .main-tab:hover { color: var(--text); }
+  .main-tab.active { color: var(--text); }
+  .main-tab.active::after { background: var(--blue); }
   .page-shell { display: flex; flex-direction: column; gap: 14px; }
   .page-hero {
     display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap;
@@ -165,6 +191,29 @@ export function renderDashboardStylesSource(): string {
   }
   .project-shell { display: flex; flex-direction: column; gap: 14px; }
   @media (max-width: 1180px) { .home-grid { grid-template-columns: 1fr; } }
+  @media (max-width: 980px) {
+    .header {
+      grid-template-columns: 1fr;
+      justify-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+    }
+    .header-left, .header-right {
+      justify-self: center;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .workspace-tabs {
+      width: 100%;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .workspace-tabs::-webkit-scrollbar { display: none; }
+    .main-tabs {
+      min-width: max-content;
+      margin: 0 auto;
+    }
+  }
 
   .no-project {
     display: flex; align-items: center; justify-content: center;
