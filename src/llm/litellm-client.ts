@@ -164,13 +164,30 @@ export class LiteLLMClient implements LLMInstance {
     try {
       const maxAttempts = this.getStructuredResponseAttempts(responseFormat);
       let lastDiagnostics: CompletionExtractionDiagnostics | null = null;
+      let attemptMaxTokens = maxTokens;
 
       for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-        const response = await this.makeRequest(body, timeout);
+        const response = await this.makeRequest({
+          ...body,
+          max_tokens: attemptMaxTokens,
+        }, timeout);
         const extracted = this.extractContent(response, responseFormat);
         lastDiagnostics = extracted.diagnostics;
+        const structuredJson =
+          responseFormat === 'json_object' && extracted.source === 'content'
+            ? extractJsonObject(extracted.content)
+            : null;
+        const shouldRetryTruncatedStructuredContent =
+          responseFormat === 'json_object' &&
+          extracted.source === 'content' &&
+          !structuredJson &&
+          extracted.diagnostics.finishReason === 'length';
 
-        if (extracted.content) {
+        if (structuredJson) {
+          return structuredJson;
+        }
+
+        if (extracted.content && !shouldRetryTruncatedStructuredContent) {
           if (extracted.source === 'reasoning_json') {
             logger.warn('Recovered structured response from reasoning_content after empty content', {
               provider: this.provider,
@@ -184,6 +201,12 @@ export class LiteLLMClient implements LLMInstance {
         }
 
         if (attempt < maxAttempts) {
+          const nextMaxTokens = this.getNextStructuredResponseMaxTokens(
+            attemptMaxTokens,
+            responseFormat,
+            extracted.diagnostics,
+            shouldRetryTruncatedStructuredContent,
+          );
           logger.warn('Structured response returned no usable content, retrying', {
             provider: this.provider,
             modelName: this.modelName,
@@ -194,7 +217,10 @@ export class LiteLLMClient implements LLMInstance {
             reasoningHasJson: extracted.diagnostics.reasoningHasJson,
             responseModel: extracted.diagnostics.responseModel,
             totalTokens: extracted.diagnostics.totalTokens,
+            requestMaxTokens: attemptMaxTokens,
+            retryMaxTokens: nextMaxTokens,
           });
+          attemptMaxTokens = nextMaxTokens;
         }
       }
 
@@ -412,6 +438,28 @@ export class LiteLLMClient implements LLMInstance {
       return 1;
     }
     return this.provider === 'deepseek' ? 3 : 2;
+  }
+
+  private getNextStructuredResponseMaxTokens(
+    currentMaxTokens: number,
+    responseFormat: LiteLLMCompletionOptions['responseFormat'],
+    diagnostics: CompletionExtractionDiagnostics,
+    shouldRetryTruncatedStructuredContent: boolean,
+  ): number {
+    if (responseFormat !== 'json_object') {
+      return currentMaxTokens;
+    }
+
+    if (!shouldRetryTruncatedStructuredContent && diagnostics.finishReason !== 'length') {
+      return currentMaxTokens;
+    }
+
+    const current = Math.max(1, Math.floor(currentMaxTokens));
+    const retryCap = this.provider === 'deepseek'
+      ? Math.min(6400, Math.max(this.maxTokens, current) * 4)
+      : Math.min(4096, Math.max(this.maxTokens, current) * 2);
+
+    return Math.min(retryCap, current * 2);
   }
 
   private buildEmptyResponseErrorMessage(

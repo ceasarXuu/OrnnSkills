@@ -1,4 +1,5 @@
-import { beforeAll, afterAll } from 'vitest';
+import { beforeAll, afterAll, afterEach } from 'vitest';
+import { resetSharedLLMRequestGuard } from '../src/llm/request-guard.js';
 import { logger } from '../src/utils/logger.js';
 
 let originalSilent: boolean;
@@ -10,4 +11,8 @@ beforeAll(() => {
 
 afterAll(() => {
   (logger as { silent: boolean }).silent = originalSilent;
+});
+
+afterEach(() => {
+  resetSharedLLMRequestGuard();
 });

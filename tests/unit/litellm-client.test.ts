@@ -253,6 +253,79 @@ describe('LiteLLMClient connectivity probe', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it('retries structured deepseek responses when non-empty content is truncated before a valid json object completes', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          model: 'deepseek-reasoner',
+          choices: [
+            {
+              index: 0,
+              finish_reason: 'length',
+              message: {
+                role: 'assistant',
+                content: '{"ok":true,',
+              },
+            },
+          ],
+          usage: {
+            prompt_tokens: 5,
+            completion_tokens: 32,
+            total_tokens: 37,
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          model: 'deepseek-reasoner',
+          choices: [
+            {
+              index: 0,
+              finish_reason: 'stop',
+              message: {
+                role: 'assistant',
+                content: '{"ok":true,"retry":2}',
+              },
+            },
+          ],
+          usage: {
+            prompt_tokens: 5,
+            completion_tokens: 20,
+            total_tokens: 25,
+          },
+        }),
+      });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new LiteLLMClient({
+      provider: 'deepseek',
+      modelName: 'deepseek/deepseek-reasoner',
+      apiKey: 'test-key',
+      maxTokens: 32,
+    });
+
+    await expect(client.completion({
+      prompt: 'return json',
+      timeout: 1000,
+      responseFormat: 'json_object',
+    })).resolves.toBe('{"ok":true,"retry":2}');
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    const [, firstInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const [, secondInit] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect(JSON.parse(String(firstInit.body))).toMatchObject({
+      max_tokens: 32,
+      response_format: { type: 'json_object' },
+    });
+    expect(JSON.parse(String(secondInit.body))).toMatchObject({
+      response_format: { type: 'json_object' },
+    });
+    expect(JSON.parse(String(secondInit.body)).max_tokens).toBeGreaterThan(32);
+  });
+
   it('includes diagnostics after exhausting structured-response retries', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValue({

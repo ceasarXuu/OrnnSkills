@@ -294,3 +294,7 @@ export function getSharedLLMRequestGuard(): LLMRequestGuard {
   }
   return sharedGuard;
 }
+
+export function resetSharedLLMRequestGuard(): void {
+  sharedGuard = null;
+}

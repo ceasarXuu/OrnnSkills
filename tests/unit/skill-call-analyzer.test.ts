@@ -230,6 +230,87 @@ describe('SkillCallAnalyzer', () => {
     });
   });
 
+  it('recovers when a deepseek structured response is truncated before the json object closes', async () => {
+    readDashboardConfigMock.mockResolvedValue({
+      autoOptimize: true,
+      userConfirm: false,
+      runtimeSync: true,
+      defaultProvider: 'deepseek',
+      logLevel: 'info',
+      providers: [
+        {
+          provider: 'deepseek',
+          modelName: 'deepseek/deepseek-reasoner',
+          apiKeyEnvVar: 'DEEPSEEK_API_KEY',
+          apiKey: 'test-key',
+          hasApiKey: true,
+        },
+      ],
+    });
+
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              finish_reason: 'length',
+              message: {
+                content: '{"decision":"no_optimization","reason":"still writing",',
+              },
+            },
+          ],
+          usage: {
+            prompt_tokens: 12,
+            completion_tokens: 1600,
+            total_tokens: 1612,
+          },
+          model: 'deepseek-reasoner',
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              finish_reason: 'stop',
+              message: {
+                content: JSON.stringify({
+                  decision: 'no_optimization',
+                  reason: 'enough evidence',
+                  confidence: 0.9,
+                  evidence: [],
+                }),
+              },
+            },
+          ],
+          usage: {
+            prompt_tokens: 12,
+            completion_tokens: 40,
+            total_tokens: 52,
+          },
+          model: 'deepseek-reasoner',
+        }),
+      });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const analyzer = createSkillCallAnalyzer();
+    const result = await analyzer.analyzeWindow('/tmp/project', {
+      windowId: 'window-3b',
+      skillId: 'test-skill',
+      runtime: 'codex',
+      sessionId: 'session-1',
+      closeReason: 'completed',
+      startedAt: '2026-04-10T00:00:00.000Z',
+      lastTraceAt: '2026-04-10T00:01:00.000Z',
+      traces: [],
+    } as never, 'content');
+
+    expect(result.success).toBe(true);
+    expect(result.decision).toBe('no_optimization');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it('maps empty model responses to a user-friendly failure reason', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
