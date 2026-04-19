@@ -1,10 +1,12 @@
 import { dirname, join, resolve, win32, posix } from 'node:path';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync } from 'node:fs';
 import type { Language } from '../../dashboard/i18n.js';
+import { readRecentRotatingLogEntries } from '../../utils/global-log-source.js';
 
 export const GLOBAL_ORNN_DIR = join(process.env.HOME || '', '.ornn');
 export const PID_FILE = join(GLOBAL_ORNN_DIR, 'daemon.pid');
 export const LOG_DIR = join(GLOBAL_ORNN_DIR, 'logs');
+const RECENT_LOG_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 export function getPidFilePath(_projectRoot?: string): string {
   return PID_FILE;
@@ -67,14 +69,30 @@ export function formatUptime(startedAt?: string): string {
   return `${seconds}s`;
 }
 
-export function getLogStats(): { errorCount: number; warningCount: number } {
+function parseLocalTimestamp(value: string): number | null {
+  if (!value) return null;
+  const isoLike = value.includes('T') ? value : value.replace(' ', 'T');
+  const timestamp = new Date(isoLike).getTime();
+  return Number.isNaN(timestamp) ? null : timestamp;
+}
+
+export function getLogStats(now: Date | string = new Date()): { errorCount: number; warningCount: number } {
   if (!existsSync(LOG_DIR)) return { errorCount: 0, warningCount: 0 };
   try {
     const errorLogPath = join(LOG_DIR, 'error.log');
     if (!existsSync(errorLogPath)) return { errorCount: 0, warningCount: 0 };
-    const content = readFileSync(errorLogPath, 'utf-8');
-    const errorCount = content.split('\n').filter((line) => line.includes('ERROR')).length;
-    return { errorCount, warningCount: 0 };
+    const nowMs = typeof now === 'string' ? new Date(now).getTime() : now.getTime();
+    if (Number.isNaN(nowMs)) return { errorCount: 0, warningCount: 0 };
+
+    const recentEntries = readRecentRotatingLogEntries(errorLogPath, 400).filter((entry) => {
+      const entryTimestamp = parseLocalTimestamp(entry.timestamp);
+      if (entryTimestamp === null) return false;
+      return nowMs - entryTimestamp <= RECENT_LOG_WINDOW_MS;
+    });
+
+    const errorCount = recentEntries.filter((entry) => entry.level === 'ERROR').length;
+    const warningCount = recentEntries.filter((entry) => entry.level === 'WARN').length;
+    return { errorCount, warningCount };
   } catch {
     return { errorCount: 0, warningCount: 0 };
   }

@@ -3,10 +3,26 @@ import { join } from 'node:path';
 import { existsSync, mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 
-const LOG_DIR = join(homedir(), '.ornn', 'logs');
-
 /** Fields added by Winston internals — excluded from metadata output. */
 const SKIP_FIELDS = new Set(['timestamp', 'level', 'message', 'stack', 'context', 'splat', 'service']);
+
+function isTruthyEnv(value: string | undefined): boolean {
+  if (!value) return false;
+  const normalized = value.trim().toLowerCase();
+  return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
+}
+
+function resolveLogDir(): string {
+  return process.env.ORNN_LOG_DIR?.trim() || join(homedir(), '.ornn', 'logs');
+}
+
+function shouldWriteFileLogs(): boolean {
+  return !isTruthyEnv(process.env.ORNN_DISABLE_FILE_LOGGING) && !isTruthyEnv(process.env.VITEST);
+}
+
+function shouldSilenceConsoleLogs(): boolean {
+  return process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'test' || isTruthyEnv(process.env.VITEST);
+}
 
 /**
  * 脱敏敏感信息
@@ -131,8 +147,10 @@ function resolveLogLevel(): string {
  * 创建日志目录
  */
 function ensureLogDir(): void {
-  if (!existsSync(LOG_DIR)) {
-    mkdirSync(LOG_DIR, { recursive: true });
+  if (!shouldWriteFileLogs()) return;
+  const logDir = resolveLogDir();
+  if (!existsSync(logDir)) {
+    mkdirSync(logDir, { recursive: true });
   }
 }
 
@@ -147,27 +165,35 @@ const logFormat = winston.format.combine(
  */
 function createLogger(): winston.Logger {
   ensureLogDir();
+  const logDir = resolveLogDir();
+  const transports: winston.transport[] = [];
 
-  return winston.createLogger({
-    level: resolveLogLevel(),
-    format: logFormat,
-    transports: [
+  if (shouldWriteFileLogs()) {
+    transports.push(
       new winston.transports.File({
-        filename: join(LOG_DIR, 'error.log'),
+        filename: join(logDir, 'error.log'),
         level: 'error',
         maxsize: 5 * 1024 * 1024, // 5MB
         maxFiles: 5,
       }),
       new winston.transports.File({
-        filename: join(LOG_DIR, 'combined.log'),
+        filename: join(logDir, 'combined.log'),
         maxsize: 10 * 1024 * 1024, // 10MB
         maxFiles: 10,
-      }),
-      // 控制台日志（仅在开发环境）
-      new winston.transports.Console({
-        silent: process.env.NODE_ENV === 'production',
-      }),
-    ],
+      })
+    );
+  }
+
+  transports.push(
+    new winston.transports.Console({
+      silent: shouldSilenceConsoleLogs(),
+    })
+  );
+
+  return winston.createLogger({
+    level: resolveLogLevel(),
+    format: logFormat,
+    transports,
   });
 }
 
