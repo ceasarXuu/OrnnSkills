@@ -36,6 +36,7 @@ describe('dashboard app shell', () => {
     expect(html).toContain('body { background: #000; }');
     expect(html).toContain('连接中…');
     expect(html).toContain('id="projectList"');
+    expect(html).toContain('id="workspaceTabs"');
     expect(html).toContain('id="skillModal"');
     expect(html).toContain('id="modalRuntimeSelect"');
     expect(html.indexOf('id="modalRuntimeSelect"')).toBeLessThan(html.indexOf('onclick="closeModal()"'));

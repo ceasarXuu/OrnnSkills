@@ -64,6 +64,10 @@ ${styleCss}
     </div>
   </header>
 
+  <div class="workspace-bar">
+    <div class="workspace-tabs" id="workspaceTabs"></div>
+  </div>
+
   <div class="main">
     <!-- Sidebar: Project List -->
     <aside class="sidebar">

@@ -358,6 +358,25 @@ function loadDashboardTestHarness(
 }
 
 describe('dashboard ui recovery', () => {
+  it('renders only three app-level primary tabs after bootstrap', async () => {
+    const { dashboard, getElement } = loadDashboardTestHarness({}, { lang: 'zh' });
+
+    getElement('workspaceTabs');
+    await dashboard.init();
+
+    const html = getElement('workspaceTabs').innerHTML;
+    expect(html).toContain("selectMainTab('home')");
+    expect(html).toContain("selectMainTab('skills')");
+    expect(html).toContain("selectMainTab('config')");
+    expect(html).toMatch(/主页|Home/);
+    expect(html).toMatch(/技能|Skills/);
+    expect(html).toMatch(/配置|Config/);
+    expect(html).not.toContain("selectMainTab('overview')");
+    expect(html).not.toContain("selectMainTab('activity')");
+    expect(html).not.toContain("selectMainTab('cost')");
+    expect(html).not.toContain("selectMainTab('logs')");
+  });
+
   it('uses host terminology consistently in localized dashboard copy', () => {
     const zhHtml = getDashboardHtml(47432, 'zh', 'test-build-id');
     expect(zhHtml).toContain('宿主');

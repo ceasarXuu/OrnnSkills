@@ -21,7 +21,7 @@ export function renderDashboardStylesSource(): string {
   html, body { height: 100%; background: var(--bg0); color: var(--text); font-family: var(--font); font-size: 13px; }
 
   /* ─── Layout ─────────────────────────────────────── */
-  .app { display: grid; grid-template-rows: 44px 1fr; height: 100vh; }
+  .app { display: grid; grid-template-rows: 44px 48px 1fr; height: 100vh; }
   .header {
     display: flex; align-items: center; justify-content: space-between;
     padding: 0 16px; background: var(--bg1); border-bottom: 1px solid var(--border);
@@ -38,7 +38,15 @@ export function renderDashboardStylesSource(): string {
   .dot-gray { background: var(--muted); }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
 
-  .main { display: grid; grid-template-columns: 200px 1fr; height: 100%; overflow: hidden; grid-row: 2; }
+  .workspace-bar {
+    display: flex; align-items: center;
+    padding: 0 16px; background: linear-gradient(180deg, rgba(22,27,34,.98), rgba(13,17,23,.94));
+    border-bottom: 1px solid var(--border);
+    grid-row: 2;
+  }
+  .workspace-tabs { display: flex; gap: 8px; align-items: center; }
+
+  .main { display: grid; grid-template-columns: 200px 1fr; height: 100%; overflow: hidden; grid-row: 3; }
 
   /* ─── Sidebar ─────────────────────────────────────── */
   .sidebar {
@@ -104,6 +112,27 @@ export function renderDashboardStylesSource(): string {
   }
   .main-tab:hover { border-color: var(--blue); color: var(--text); }
   .main-tab.active { background: var(--blue); color: #fff; border-color: var(--blue); }
+  .page-shell { display: flex; flex-direction: column; gap: 14px; }
+  .page-hero {
+    display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+    padding: 14px 16px; border: 1px solid var(--border); border-radius: 8px;
+    background:
+      radial-gradient(circle at top right, rgba(88,166,255,.14), transparent 34%),
+      linear-gradient(180deg, rgba(22,27,34,.96), rgba(13,17,23,.92));
+  }
+  .page-kicker {
+    font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--blue);
+  }
+  .page-title { font-size: 22px; font-weight: 700; color: var(--text); margin-top: 6px; }
+  .page-copy { font-size: 11px; color: var(--muted); margin-top: 6px; max-width: 72ch; line-height: 1.5; }
+  .page-meta {
+    display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px;
+    border: 1px solid rgba(88,166,255,.25); border-radius: 999px;
+    background: rgba(88,166,255,.08); color: var(--blue); font-size: 10px;
+  }
+  .home-grid { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(280px, 1fr); gap: 14px; align-items: start; }
+  .home-primary, .home-secondary { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+  @media (max-width: 1180px) { .home-grid { grid-template-columns: 1fr; } }
 
   .no-project {
     display: flex; align-items: center; justify-content: center;

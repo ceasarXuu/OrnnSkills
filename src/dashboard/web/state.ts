@@ -20,7 +20,7 @@ export function createDashboardState<TActivityColumnWidths>(
     searchQuery: '',
     sortBy: 'name',
     sortOrder: 'asc',
-    selectedMainTab: 'overview',
+    selectedMainTab: 'home',
     currentSkillRuntime: 'codex',
     currentSkillVersion: null,
     currentSkillEffectiveVersion: null,

@@ -33,6 +33,7 @@ export interface I18nStrings {
   mainSelectProject: string;
   mainLoading: string;
   mainNoData: string;
+  mainTabHome: string;
   mainTabOverview: string;
   mainTabSkills: string;
   mainTabActivity: string;
@@ -422,6 +423,7 @@ const en: I18nStrings = {
   mainSelectProject: '← Select a project',
   mainLoading: 'Loading...',
   mainNoData: 'No data',
+  mainTabHome: 'Home',
   mainTabOverview: 'Overview',
   mainTabSkills: 'Skills',
   mainTabActivity: 'Activity',
@@ -828,8 +830,9 @@ const zh: I18nStrings = {
   mainSelectProject: '← 选择一个项目',
   mainLoading: '加载中...',
   mainNoData: '暂无数据',
+  mainTabHome: '主页',
   mainTabOverview: '总览',
-  mainTabSkills: '技能列表',
+  mainTabSkills: '技能',
   mainTabActivity: '实时追踪',
   mainTabCost: '成本',
   mainTabLogs: '日志',

@@ -8,7 +8,7 @@ describe('dashboard web state', () => {
     const loads = createProjectSnapshotLoads();
 
     expect(state.selectedProjectId).toBeNull();
-    expect(state.selectedMainTab).toBe('overview');
+    expect(state.selectedMainTab).toBe('home');
     expect(state.currentSkillRuntime).toBe('codex');
     expect(state.preferredSkillRuntime).toBe('claude');
     expect(state.providerCatalog).toEqual([]);
