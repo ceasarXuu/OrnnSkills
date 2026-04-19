@@ -2,6 +2,11 @@
 
 ## 📊 总体进度：Phase 1 ✅ 完成
 
+### 2026-04-19
+
+- 📝 记录环境验证经验：dashboard 是由运行中的 daemon 进程内嵌输出完整 HTML/CSS/JS；排查“源码已改但页面还是旧样式”时，不能只看仓库文件和单测，必须直接 `curl http://127.0.0.1:<port>/` 检查实际返回的标记和样式是否仍包含旧 `workspace-bar`、旧 `main-tab` 规则
+- 📝 记录启动经验：全局 `ornn` 实际执行的是 `/opt/homebrew/lib/node_modules/ornn-skills/dist/cli/index.js`；要让当前仓库的 dashboard 改动真正落到正在使用的界面，需要先 `npm run build`、再 `npm install -g .`，最后重启 daemon，否则很容易出现“仓库代码和浏览器界面不是同一个版本”的假象
+
 ### 2026-04-18
 
 - ✅ 修复 daemon stale runtime 路由回归：项目已从全局注册表移除但 runtime 尚未被下一轮 sync 清理时，daemon 现在会先核验注册表事实来源，不再继续处理该项目的新 trace
