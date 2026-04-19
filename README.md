@@ -361,7 +361,7 @@ npm run format
 ## Documentation
 
 - [PRD - Product Requirements Document](docs/PRD.md)
-- [Engineering Plan](docs/ENGINEERING_PLAN.md)
+- [Skill Domain Refactor Plan](docs/SKILL-DOMAIN-REFACTOR-PLAN.md)
 - [Trace-Skill Mapping Documentation](docs/TRACE-SKILL-MAPPING.md)
 - [User Guide](USER-GUIDE.md)
 

@@ -1,6 +1,6 @@
-# OrnnSkills 工程计划 v1.0
+# OrnnSkills Skill Domain Refactor 专项计划
 
-> 说明：本文件后续大部分章节仍保留 V1 时代以 `origin skill / project shadow` 为核心的历史设计。以下 `0. V2.0 Skill Domain Refactor Addendum` 为当前优先级更高的补充方案，后续 V2.0 的对象模型、读模型和 Skills 页信息架构应优先遵循本节，而不是继续沿用“一个 skill_id 代表一切”的旧假设。
+> 说明：本文件聚焦 V2.0 的 `Skill Domain Refactor` 专项。后续章节仍保留部分 V1 时代以 `origin skill / project shadow` 为核心的历史设计，作为迁移兼容背景；当前实现与任务拆分应优先遵循本文件顶部的 V2.0 专项部分，而不是继续沿用“一个 skill_id 代表一切”的旧假设。
 
 ## 0. V2.0 Skill Domain Refactor Addendum
 
@@ -259,7 +259,7 @@ V2.0 的 `Skills` 页需要明确分成两个工作区:
 主要改动模块:
 
 - `docs/PRD.md`
-- `docs/ENGINEERING_PLAN.md`
+- `docs/SKILL-DOMAIN-REFACTOR-PLAN.md`
 - `AGENTS.md`
 - `src/types/index.ts` 或新建 `src/domain/skill-domain.ts`
 
@@ -848,7 +848,7 @@ OrnnSkills/
 │
 ├── docs/                       # 文档
 │   ├── PRD.md
-│   ├── ENGINEERING_PLAN.md
+│   ├── SKILL-DOMAIN-REFACTOR-PLAN.md
 │   ├── API.md
 │   └── ARCHITECTURE.md
 │

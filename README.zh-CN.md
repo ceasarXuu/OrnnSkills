@@ -361,7 +361,7 @@ npm run format
 ## 文档
 
 - [PRD - 产品需求文档](docs/PRD.md)
-- [工程计划](docs/ENGINEERING_PLAN.md)
+- [Skill Domain Refactor 专项计划](docs/SKILL-DOMAIN-REFACTOR-PLAN.md)
 - [Trace-Skill 映射功能文档](docs/TRACE-SKILL-MAPPING.md)
 - [用户使用指南](USER-GUIDE.md)
 
