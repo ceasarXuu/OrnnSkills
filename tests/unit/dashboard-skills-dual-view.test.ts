@@ -7,7 +7,7 @@ describe('dashboard skills dual view', () => {
     const state = createDashboardState(() => ({}), () => 'codex');
     const emptyProjectData = buildEmptyProjectData();
 
-    expect(state.selectedSkillsSubTab).toBe('project_overview');
+    expect(state.selectedSkillsSubTab).toBe('skill_library');
     expect(state.skillFamilies).toEqual([]);
     expect(state.skillFamilyDetailsById).toEqual({});
     expect(state.skillFamilyInstancesById).toEqual({});
@@ -16,14 +16,14 @@ describe('dashboard skills dual view', () => {
     expect(emptyProjectData.skillInstances).toEqual([]);
   });
 
-  it('renders main panel source with project navigation only for the project workbench', async () => {
+  it('renders main panel source with project navigation on the standalone project tab', async () => {
     const { renderDashboardMainPanelSource } = await import('../../src/dashboard/web/main-panel/source.js');
 
     const source = renderDashboardMainPanelSource();
 
-    expect(source).toContain("normalizeSkillsSubTab(state.selectedSkillsSubTab) === 'project_overview'");
-    expect(source).toContain("activeSubTab === 'project_overview'");
+    expect(source).toContain("normalizeMainTab(state.selectedMainTab) === 'project'");
+    expect(source).toContain("workspaceState.mainTab === 'project'");
     expect(source).toContain('renderProjectWorkbenchContent');
-    expect(source).toContain('renderSkillLibraryContent');
+    expect(source).not.toContain('renderSkillsSubTabs');
   });
 });

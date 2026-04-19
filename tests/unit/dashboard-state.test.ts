@@ -8,8 +8,8 @@ describe('dashboard web state', () => {
     const loads = createProjectSnapshotLoads();
 
     expect(state.selectedProjectId).toBeNull();
-    expect(state.selectedMainTab).toBe('home');
-    expect(state.selectedSkillsSubTab).toBe('project_overview');
+    expect(state.selectedMainTab).toBe('skills');
+    expect(state.selectedSkillsSubTab).toBe('skill_library');
     expect(state.currentSkillRuntime).toBe('codex');
     expect(state.selectedSkillFamilyId).toBeNull();
     expect(state.preferredSkillRuntime).toBe('claude');

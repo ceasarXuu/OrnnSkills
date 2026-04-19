@@ -789,7 +789,7 @@ function renderRecentTraces(traces) {
 }
 
 function isSkillLibraryInlineSurfaceActive() {
-  return isSkillLibraryViewActive() && !!document.getElementById('skillLibraryInlineDetailContainer');
+  return isSkillLibraryViewActive() && !!state.selectedSkillFamilyId;
 }
 
 function getSkillDetailElement(key) {
@@ -857,7 +857,7 @@ function renderVersionHistory(encProject, encSkill, encRuntime) {
 }
 
 function refreshInlineSkillLibraryDetail() {
-  if (!isSkillLibraryViewActive()) return;
+  if (!isSkillLibraryInlineSurfaceActive()) return;
   const detailContainer = document.getElementById('skillLibraryInlineDetailContainer');
   if (detailContainer) {
     detailContainer.outerHTML = renderSkillLibraryDetail();
@@ -955,7 +955,7 @@ async function viewSkill(projectPath, skillId, runtime, instanceId) {
     })
     : [resolvedRuntime];
 
-  if (isSkillLibraryViewActive()) {
+  if (isSkillLibraryInlineSurfaceActive()) {
     refreshInlineSkillLibraryDetail();
   } else {
     const modal = document.getElementById('skillModal');
@@ -1071,7 +1071,7 @@ async function switchSkillRuntime(runtime) {
     targetInstanceId
   );
 
-  if (state.selectedMainTab === 'skills') {
+  if (normalizeMainTab(state.selectedMainTab) === 'project') {
     updateSkillsList();
   }
 }
@@ -1181,7 +1181,7 @@ async function toggleSkillVersionDisabled(encProject, encSkill, encRuntime, vers
     if (skill) {
       skill.effectiveVersion = state.currentSkillEffectiveVersion;
     }
-    if (state.selectedProjectId === projectPath && state.selectedMainTab === 'skills') {
+    if (state.selectedProjectId === projectPath && normalizeMainTab(state.selectedMainTab) === 'project') {
       updateSkillsList();
     }
     if (normalizeMainTab(state.selectedMainTab) === 'skills' && normalizeSkillsSubTab(state.selectedSkillsSubTab) === 'skill_library') {
@@ -1313,7 +1313,7 @@ async function refreshCurrentSkillModal(runtime, successHint) {
   const projectPath = getCurrentSkillProjectId();
   if (!projectPath || !state.currentSkillId) return;
   const snapshot = await loadProjectSnapshot(projectPath, { force: true });
-  if (snapshot && state.selectedMainTab === 'skills') {
+  if (snapshot && normalizeMainTab(state.selectedMainTab) === 'project') {
     updateSkillsList();
   }
   if (normalizeMainTab(state.selectedMainTab) === 'skills' && normalizeSkillsSubTab(state.selectedSkillsSubTab) === 'skill_library') {

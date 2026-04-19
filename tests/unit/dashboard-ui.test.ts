@@ -359,26 +359,27 @@ function loadDashboardTestHarness(
 }
 
 describe('dashboard ui recovery', () => {
-  it('renders only three app-level primary tabs after bootstrap', async () => {
+  it('renders skills, project, config as the only primary tabs after bootstrap', async () => {
     const { dashboard, getElement } = loadDashboardTestHarness({}, { lang: 'zh' });
 
     getElement('workspaceTabs');
     await dashboard.init();
 
     const html = getElement('workspaceTabs').innerHTML;
-    expect(html).toContain("selectMainTab('home')");
     expect(html).toContain("selectMainTab('skills')");
+    expect(html).toContain("selectMainTab('project')");
     expect(html).toContain("selectMainTab('config')");
-    expect(html).toMatch(/主页|Home/);
     expect(html).toMatch(/技能|Skills/);
+    expect(html).toMatch(/项目|Project/);
     expect(html).toMatch(/配置|Config/);
+    expect(html).not.toContain("selectMainTab('home')");
     expect(html).not.toContain("selectMainTab('overview')");
     expect(html).not.toContain("selectMainTab('activity')");
     expect(html).not.toContain("selectMainTab('cost')");
     expect(html).not.toContain("selectMainTab('logs')");
   });
 
-  it('keeps project navigation inside the skills workspace and exposes project overview as a child tab', async () => {
+  it('shows project navigation on the standalone project tab instead of inside skills', async () => {
     const projectPath = '/tmp/ornn-project';
     const encodedPath = encodeURIComponent(projectPath);
     const { dashboard, getElement } = loadDashboardTestHarness(
@@ -432,11 +433,16 @@ describe('dashboard ui recovery', () => {
 
     dashboard.selectMainTab('skills');
 
+    expect(getElement('projectSidebar').style.display).toBe('none');
+    expect(getElement('mainPanel').innerHTML).not.toContain("selectSkillsSubTab(");
+
+    dashboard.selectMainTab('project');
+
     expect(getElement('projectSidebar').style.display).toBe('flex');
     const html = getElement('mainPanel').innerHTML;
-    expect(html).toContain("selectSkillsSubTab('project_overview')");
-    expect(html).toContain("selectSkillsSubTab('skill_library')");
-    expect(html).toMatch(/项目总览|Project Overview/);
+    expect(html).not.toContain("selectSkillsSubTab('project_overview')");
+    expect(html).not.toContain("selectSkillsSubTab('skill_library')");
+    expect(html).toContain('project-shell');
   });
 
   it('uses host terminology consistently in localized dashboard copy', () => {
@@ -453,7 +459,7 @@ describe('dashboard ui recovery', () => {
     expect(enHtml).toContain('client errors have been queued for reporting');
   });
 
-  it('keeps global home bootstrap free of project-only dependencies until entering skills', async () => {
+  it('keeps skill-library bootstrap free of project-only dependencies until entering project', async () => {
     const projectPath = '/tmp/ornn-project';
     const encodedPath = encodeURIComponent(projectPath);
     const { dashboard, getFetchCalls, clearFetchCalls } = loadDashboardTestHarness(
@@ -510,7 +516,7 @@ describe('dashboard ui recovery', () => {
     expect(fetchCalls.some((url) => url.endsWith('/config'))).toBe(false);
 
     clearFetchCalls();
-    dashboard.selectMainTab('skills');
+    dashboard.selectMainTab('project');
     await new Promise((resolve) => setTimeout(resolve, 0));
     await new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -2341,8 +2347,8 @@ describe('dashboard ui recovery', () => {
 
     getElement('mainPanel');
     dashboard.state.selectedProjectId = projectPath;
-    dashboard.state.selectedMainTab = 'skills';
-    dashboard.state.selectedSkillsSubTab = 'project_overview';
+    dashboard.state.selectedMainTab = 'project';
+    dashboard.state.selectedSkillsSubTab = 'skill_library';
     dashboard.state.selectedRuntimeTab = 'all';
     dashboard.state.projectData = {
       [projectPath]: {
