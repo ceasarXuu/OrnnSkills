@@ -1,6 +1,7 @@
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Trace } from '../../types/index.js';
+import { BoundedCache, DEFAULT_DASHBOARD_CACHE_MAX_AGE_MS } from './bounded-cache.js';
 import { tailNdjson } from './ndjson-tail.js';
 
 export interface TraceEntry {
@@ -21,6 +22,69 @@ export interface TraceStats {
   byEventType: Record<string, number>;
 }
 
+interface CachedTraceIdSet {
+  signature: string;
+  traceIds: Set<string>;
+}
+
+interface CachedProcessedTraceCount {
+  signature: string;
+  count: number;
+}
+
+const PROCESSED_TRACE_ID_FILE_CACHE_MAX_ENTRIES = 1024;
+const PROCESSED_TRACE_COUNT_PROJECT_CACHE_MAX_ENTRIES = 512;
+
+const processedTraceIdFileCache = new BoundedCache<string, CachedTraceIdSet>({
+  maxEntries: PROCESSED_TRACE_ID_FILE_CACHE_MAX_ENTRIES,
+  maxAgeMs: DEFAULT_DASHBOARD_CACHE_MAX_AGE_MS,
+});
+
+const processedTraceCountProjectCache = new BoundedCache<string, CachedProcessedTraceCount>({
+  maxEntries: PROCESSED_TRACE_COUNT_PROJECT_CACHE_MAX_ENTRIES,
+  maxAgeMs: DEFAULT_DASHBOARD_CACHE_MAX_AGE_MS,
+});
+
+function readTraceFileSignature(filePath: string): string {
+  if (!existsSync(filePath)) return 'missing';
+  try {
+    const stat = statSync(filePath);
+    return `${stat.size}:${Math.floor(stat.mtimeMs)}`;
+  } catch {
+    return 'error';
+  }
+}
+
+function collectProcessedTraceIdsForFile(filePath: string, signature: string): Set<string> {
+  const cached = processedTraceIdFileCache.get(filePath);
+  if (cached && cached.signature === signature) {
+    return cached.traceIds;
+  }
+
+  const traceIds = new Set<string>();
+  let content = '';
+  try {
+    content = readFileSync(filePath, 'utf-8');
+  } catch {
+    return traceIds;
+  }
+
+  for (const line of content.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    try {
+      const raw = JSON.parse(line) as { trace_id?: unknown };
+      if (typeof raw.trace_id === 'string' && raw.trace_id) {
+        traceIds.add(raw.trace_id);
+      }
+    } catch {
+      // ignore malformed rows
+    }
+  }
+
+  processedTraceIdFileCache.set(filePath, { signature, traceIds });
+  return traceIds;
+}
+
 export function listTraceNdjsonPaths(projectRoot: string): string[] {
   const stateDir = join(projectRoot, '.ornn', 'state');
   if (!existsSync(stateDir)) return [];
@@ -38,27 +102,41 @@ export function listTraceNdjsonPaths(projectRoot: string): string[] {
 }
 
 export function countProcessedTraceIds(projectRoot: string): number {
+  const tracePaths = listTraceNdjsonPaths(projectRoot);
+  const fileSignatures = tracePaths.map((filePath) => `${filePath}:${readTraceFileSignature(filePath)}`);
+  const projectSignature = fileSignatures.join('|') || 'missing';
+  const cached = processedTraceCountProjectCache.get(projectRoot);
+  if (cached && cached.signature === projectSignature) {
+    return cached.count;
+  }
+
   const traceIds = new Set<string>();
-  for (const filePath of listTraceNdjsonPaths(projectRoot)) {
-    let content = '';
-    try {
-      content = readFileSync(filePath, 'utf-8');
-    } catch {
-      continue;
-    }
-    for (const line of content.split(/\r?\n/)) {
-      if (!line.trim()) continue;
-      try {
-        const raw = JSON.parse(line) as { trace_id?: unknown };
-        if (typeof raw.trace_id === 'string' && raw.trace_id) {
-          traceIds.add(raw.trace_id);
-        }
-      } catch {
-        // ignore malformed rows
-      }
+  for (const filePath of tracePaths) {
+    const signature = readTraceFileSignature(filePath);
+    const fileTraceIds = collectProcessedTraceIdsForFile(filePath, signature);
+    for (const traceId of fileTraceIds) {
+      traceIds.add(traceId);
     }
   }
-  return traceIds.size;
+
+  const count = traceIds.size;
+  processedTraceCountProjectCache.set(projectRoot, {
+    signature: projectSignature,
+    count,
+  });
+  return count;
+}
+
+export function getProcessedTraceCacheStats() {
+  return {
+    fileCache: processedTraceIdFileCache.snapshot(),
+    projectCache: processedTraceCountProjectCache.snapshot(),
+  };
+}
+
+export function resetProcessedTraceCaches(): void {
+  processedTraceIdFileCache.clear();
+  processedTraceCountProjectCache.clear();
 }
 
 function collectRecentTraceCandidates(projectRoot: string, maxLinesPerFile: number): TraceEntry[] {

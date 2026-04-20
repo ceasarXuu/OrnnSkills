@@ -2,6 +2,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { normalizeAgentUsageModelId, type AgentUsageSummary } from '../../core/agent-usage/index.js';
 import type { AgentUsageRecord } from '../../types/index.js';
+import { BoundedCache, DEFAULT_DASHBOARD_CACHE_MAX_AGE_MS } from './bounded-cache.js';
 import { tailNdjson } from './ndjson-tail.js';
 
 export interface AgentUsageStats {
@@ -32,15 +33,31 @@ interface CachedAgentUsageStats {
   stats: AgentUsageStats;
 }
 
-const agentUsageStatsCache = new Map<string, CachedAgentUsageStats>();
+interface CachedFileInfo {
+  signature: string;
+  mtimeMs: number;
+}
 
-function readFileSignature(filePath: string): string {
-  if (!existsSync(filePath)) return 'missing';
+const AGENT_USAGE_STATS_CACHE_MAX_ENTRIES = 256;
+
+const agentUsageStatsCache = new BoundedCache<string, CachedAgentUsageStats>({
+  maxEntries: AGENT_USAGE_STATS_CACHE_MAX_ENTRIES,
+  maxAgeMs: DEFAULT_DASHBOARD_CACHE_MAX_AGE_MS,
+});
+
+function readCachedFileInfo(filePath: string): CachedFileInfo | null {
+  if (!existsSync(filePath)) return null;
   try {
     const stat = statSync(filePath);
-    return `${stat.size}:${Math.floor(stat.mtimeMs)}`;
+    return {
+      signature: `${stat.size}:${Math.floor(stat.mtimeMs)}`,
+      mtimeMs: stat.mtimeMs,
+    };
   } catch {
-    return 'error';
+    return {
+      signature: 'error',
+      mtimeMs: 0,
+    };
   }
 }
 
@@ -207,29 +224,10 @@ function readAgentUsageStatsFromNdjson(filePath: string): AgentUsageStats {
   }
 }
 
-export function readAgentUsageStats(projectRoot: string): AgentUsageStats {
-  const ndjsonPath = join(projectRoot, '.ornn', 'state', 'agent-usage.ndjson');
-  if (existsSync(ndjsonPath)) {
-    const signature = readFileSignature(ndjsonPath);
-    const cached = agentUsageStatsCache.get(ndjsonPath);
-    if (cached && cached.signature === signature) {
-      return cached.stats;
-    }
-    const stats = readAgentUsageStatsFromNdjson(ndjsonPath);
-    agentUsageStatsCache.set(ndjsonPath, { signature, stats });
-    return stats;
-  }
-
-  const summaryPath = join(projectRoot, '.ornn', 'state', 'agent-usage-summary.json');
-  if (!existsSync(summaryPath)) return emptyAgentUsageStats();
-  const signature = readFileSignature(summaryPath);
-  const cached = agentUsageStatsCache.get(summaryPath);
-  if (cached && cached.signature === signature) {
-    return cached.stats;
-  }
+function readAgentUsageStatsFromSummary(filePath: string): AgentUsageStats {
   try {
-    const parsed = JSON.parse(readFileSync(summaryPath, 'utf-8')) as Partial<AgentUsageSummary>;
-    const stats = {
+    const parsed = JSON.parse(readFileSync(filePath, 'utf-8')) as Partial<AgentUsageSummary>;
+    return {
       callCount: typeof parsed.callCount === 'number' ? parsed.callCount : 0,
       promptTokens: typeof parsed.promptTokens === 'number' ? parsed.promptTokens : 0,
       completionTokens: typeof parsed.completionTokens === 'number' ? parsed.completionTokens : 0,
@@ -253,11 +251,52 @@ export function readAgentUsageStats(projectRoot: string): AgentUsageStats {
         ? normalizeUsageBucketMap((parsed as { bySkill: Record<string, unknown> }).bySkill)
         : {},
     } satisfies AgentUsageStats;
-    agentUsageStatsCache.set(summaryPath, { signature, stats });
-    return stats;
   } catch {
     return emptyAgentUsageStats();
   }
+}
+
+function readCachedAgentUsageStats(
+  filePath: string,
+  signature: string,
+  loader: (path: string) => AgentUsageStats
+): AgentUsageStats {
+  const cached = agentUsageStatsCache.get(filePath);
+  if (cached && cached.signature === signature) {
+    return cached.stats;
+  }
+  const stats = loader(filePath);
+  agentUsageStatsCache.set(filePath, { signature, stats });
+  return stats;
+}
+
+export function getAgentUsageStatsCacheStats() {
+  return agentUsageStatsCache.snapshot();
+}
+
+export function resetAgentUsageStatsCache(): void {
+  agentUsageStatsCache.clear();
+}
+
+export function readAgentUsageStats(projectRoot: string): AgentUsageStats {
+  const ndjsonPath = join(projectRoot, '.ornn', 'state', 'agent-usage.ndjson');
+  const summaryPath = join(projectRoot, '.ornn', 'state', 'agent-usage-summary.json');
+  const ndjsonInfo = readCachedFileInfo(ndjsonPath);
+  const summaryInfo = readCachedFileInfo(summaryPath);
+
+  if (summaryInfo && (!ndjsonInfo || summaryInfo.mtimeMs >= ndjsonInfo.mtimeMs)) {
+    return readCachedAgentUsageStats(summaryPath, summaryInfo.signature, readAgentUsageStatsFromSummary);
+  }
+
+  if (ndjsonInfo) {
+    return readCachedAgentUsageStats(ndjsonPath, ndjsonInfo.signature, readAgentUsageStatsFromNdjson);
+  }
+
+  if (summaryInfo) {
+    return readCachedAgentUsageStats(summaryPath, summaryInfo.signature, readAgentUsageStatsFromSummary);
+  }
+
+  return emptyAgentUsageStats();
 }
 
 export function readAgentUsageRecords(projectRoot: string, limit = 400): AgentUsageRecord[] {
