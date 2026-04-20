@@ -119,8 +119,17 @@ export function createDashboardSseHub(dependencies: SseHubDependencies) {
 
     const projectPaths = new Set(projects.map((project) => project.path));
     const projectsSignature = buildProjectsSignature(projects);
+    const liveProjectVersions = new Map<string, string>();
     const { lines: newLogs, cursor } = readLogsSince(logCursor);
     logCursor = cursor;
+
+    for (const project of projects) {
+      try {
+        liveProjectVersions.set(project.path, readProjectSnapshotVersion(project.path));
+      } catch {
+        liveProjectVersions.delete(project.path);
+      }
+    }
 
     for (const client of clients) {
       for (const existingPath of Array.from(client.projectSnapshotVersions.keys())) {
@@ -131,16 +140,16 @@ export function createDashboardSseHub(dependencies: SseHubDependencies) {
 
       const changedProjects: string[] = [];
       for (const project of projects) {
-        try {
-          const version = readProjectSnapshotVersion(project.path);
-          if (client.projectSnapshotVersions.get(project.path) === version) {
-            continue;
-          }
-          client.projectSnapshotVersions.set(project.path, version);
-          changedProjects.push(project.path);
-        } catch {
+        const version = liveProjectVersions.get(project.path);
+        if (!version) {
           client.projectSnapshotVersions.delete(project.path);
+          continue;
         }
+        if (client.projectSnapshotVersions.get(project.path) === version) {
+          continue;
+        }
+        client.projectSnapshotVersions.set(project.path, version);
+        changedProjects.push(project.path);
       }
 
       const projectsChanged = client.projectsSignature !== projectsSignature;

@@ -5,7 +5,7 @@ import {
 } from '../activity-event-builder/index.js';
 import { createChildLogger } from '../../utils/logger.js';
 import { runtimeFromShadowId, skillIdFromShadowId } from '../../utils/parse.js';
-import type { TaskEpisode } from '../task-episode/index.js';
+import { filterEpisodeWindowTraces, type TaskEpisode } from '../task-episode/index.js';
 import type {
   DaemonStatusLike,
   DecisionEventsLike,
@@ -191,8 +191,7 @@ export class ShadowManualOptimizeService {
   }
 
   private buildEpisodeWindowTraces(episode: TaskEpisode, sessionTraces: Trace[]): Trace[] {
-    const traceRefSet = new Set(episode.traceRefs);
-    return sessionTraces.filter((trace) => traceRefSet.has(trace.trace_id));
+    return filterEpisodeWindowTraces(episode, sessionTraces);
   }
 
   private buildScopedTraceSlice(sessionTraces: Trace[], anchorTraceIds: string[]): Trace[] {

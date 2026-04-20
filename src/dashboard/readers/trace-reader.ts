@@ -183,3 +183,37 @@ export function readTracesByIds(projectRoot: string, traceIds: string[]): Trace[
 
   return [...traces.values()].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
 }
+
+export function readTracesBySessionWindow(
+  projectRoot: string,
+  sessionIds: string[],
+  startedAt: string,
+  endedAt: string
+): Trace[] {
+  const stateDir = join(projectRoot, '.ornn', 'state');
+  const traces: Trace[] = [];
+
+  for (const sessionId of new Set(sessionIds.filter(Boolean))) {
+    const filePath = join(stateDir, `${sessionId}.ndjson`);
+    if (!existsSync(filePath)) {
+      continue;
+    }
+
+    let content = '';
+    try {
+      content = readFileSync(filePath, 'utf-8');
+    } catch {
+      continue;
+    }
+
+    for (const line of content.split(/\r?\n/)) {
+      if (!line.trim()) continue;
+      const trace = parseTraceRecord(line);
+      if (!trace) continue;
+      if (trace.timestamp < startedAt || trace.timestamp > endedAt) continue;
+      traces.push(trace);
+    }
+  }
+
+  return traces.sort((left, right) => left.timestamp.localeCompare(right.timestamp));
+}

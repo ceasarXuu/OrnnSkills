@@ -8,6 +8,7 @@ import {
 import { analyzeSkillWindow } from '../analyze-skill-window/index.js';
 import { generateDecisionExplanation } from '../decision-explainer/index.js';
 import { createSkillCallWindow, type SkillCallWindow } from '../skill-call-window/index.js';
+import { filterEpisodeWindowTraces } from '../task-episode/index.js';
 import type { SkillCallAnalysisResult } from '../skill-call-analyzer/index.js';
 import { createChildLogger } from '../../utils/logger.js';
 import { runtimeFromShadowId, skillIdFromShadowId } from '../../utils/parse.js';
@@ -432,8 +433,7 @@ export class ShadowEpisodeProbeService {
   }
 
   private buildEpisodeWindowTraces(episode: TaskEpisode, sessionTraces: Trace[]): Trace[] {
-    const traceRefSet = new Set(episode.traceRefs);
-    return sessionTraces.filter((trace) => traceRefSet.has(trace.trace_id));
+    return filterEpisodeWindowTraces(episode, sessionTraces);
   }
 
   private buildSkillCallWindow(

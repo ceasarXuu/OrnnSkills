@@ -126,4 +126,53 @@ describe('dashboard sse hub', () => {
     expect(broadcastPayloadWrite).toContain('"changedProjects":["/tmp/demo-project"]');
     expect(broadcastPayloadWrite).not.toContain('projectData');
   });
+
+  it('reads each project snapshot version only once per broadcast even with multiple clients', async () => {
+    const { createDashboardSseHub } = await import('../../src/dashboard/sse/hub.js');
+    const resA = createFakeResponse();
+    const resB = createFakeResponse();
+    const projects = [
+      {
+        path: '/tmp/demo-project-a',
+        name: 'demo-project-a',
+        isRunning: true,
+        monitoringState: 'active' as const,
+        pausedAt: null,
+        skillCount: 1,
+      },
+      {
+        path: '/tmp/demo-project-b',
+        name: 'demo-project-b',
+        isRunning: false,
+        monitoringState: 'active' as const,
+        pausedAt: null,
+        skillCount: 3,
+      },
+    ];
+
+    const readProjectSnapshotVersion = vi.fn((projectPath: string) =>
+      projectPath === '/tmp/demo-project-a' ? 'v-project-a' : 'v-project-b'
+    );
+    const hub = createDashboardSseHub({
+      createGlobalLogCursor: vi.fn().mockReturnValue({ path: null, offset: 0 }),
+      readGlobalLogs: vi.fn().mockReturnValue([]),
+      readLogsSince: vi.fn().mockReturnValue({
+        lines: [],
+        cursor: { path: null, offset: 0 },
+      }),
+      readProjectSnapshotVersion,
+      logger: { warn: vi.fn() },
+    });
+
+    hub.initializeCursor();
+    hub.connectClient(resA, projects);
+    hub.connectClient(resB, projects);
+
+    readProjectSnapshotVersion.mockClear();
+    hub.broadcast(projects);
+
+    expect(readProjectSnapshotVersion).toHaveBeenCalledTimes(projects.length);
+    expect(readProjectSnapshotVersion).toHaveBeenNthCalledWith(1, '/tmp/demo-project-a');
+    expect(readProjectSnapshotVersion).toHaveBeenNthCalledWith(2, '/tmp/demo-project-b');
+  });
 });

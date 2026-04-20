@@ -2,6 +2,13 @@
 
 ## 📊 总体进度：Phase 1 ✅ 完成
 
+### 2026-04-20
+
+- ✅ 从设计层收紧长时间运行的性能退化：`task-episodes.json` 不再把全量 trace id / turn id 当成持久化真相，而是改为“累计计数 + 有界热窗口”模型；活跃 episode 与已关闭 episode 分别应用不同保留上限，运行时间再长也不会让该文件线性膨胀
+- ✅ 把 episode 上下文恢复从 “traceRefs 精确枚举” 改成 “按 session + 时间窗重建”：activity detail、自动 probe、手动 optimize 现在都能直接从 session trace 里恢复完整窗口，不再要求 `task-episodes.json` 永久保存全部 trace 引用
+- ✅ 收紧 dashboard SSE 广播的版本探测放大效应：同一轮 broadcast 现在按项目只计算一次 snapshot version，不再随着连接客户端数量线性重复做版本读取
+- 📝 记录性能经验：像 `task-episodes.json` 这种既在热路径写入、又会被 dashboard 周期读取的状态文件，绝不能把“完整历史明细”直接当作在线事实来源；正确边界应该是“热窗口 + 可重建上下文 + 累计统计”，否则运行时长最终一定会转换成持续卡顿
+
 ### 2026-04-19
 
 - ✅ 调整 dashboard 一级导航：移除“主页” tab，并将原 `技能 -> 项目总览` 拆成独立一级 `项目` tab；当前固定顺序为 `技能 -> 项目 -> 配置`

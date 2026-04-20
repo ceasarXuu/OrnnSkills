@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
   readTaskEpisodeSnapshot: vi.fn(),
   readRecentDecisionEvents: vi.fn(),
   readAgentUsageRecords: vi.fn(),
-  readTracesByIds: vi.fn(),
+  readTracesBySessionWindow: vi.fn(),
   readProjectLanguage: vi.fn(),
   buildActivityScopeDetailFromData: vi.fn(),
 }));
@@ -21,7 +21,7 @@ vi.mock('../../src/dashboard/data-reader.js', () => ({
   readTaskEpisodeSnapshot: mocks.readTaskEpisodeSnapshot,
   readRecentDecisionEvents: mocks.readRecentDecisionEvents,
   readAgentUsageRecords: mocks.readAgentUsageRecords,
-  readTracesByIds: mocks.readTracesByIds,
+  readTracesBySessionWindow: mocks.readTracesBySessionWindow,
 }));
 
 vi.mock('../../src/dashboard/language-state.js', () => ({
@@ -122,13 +122,19 @@ describe('dashboard project read routes', () => {
   it('handles GET /api/projects/:id/activity-scopes/:scopeId', async () => {
     const { handleProjectReadRoutes } = await import('../../src/dashboard/routes/project-read-routes.js');
     const json = vi.fn();
-    const episode = { episodeId: 'scope-1', traceRefs: ['trace-1'] };
+    const episode = {
+      episodeId: 'scope-1',
+      traceRefs: ['trace-1'],
+      sessionIds: ['session-1'],
+      startedAt: '2026-04-20T08:00:00.000Z',
+      lastActivityAt: '2026-04-20T08:05:00.000Z',
+    };
     const detail = { scopeId: 'scope-1', status: 'active', timeline: [] };
     mocks.readTaskEpisodeSnapshot.mockReturnValue({ episodes: [episode] });
     mocks.readProjectLanguage.mockResolvedValue('zh');
     mocks.readRecentDecisionEvents.mockReturnValue([{ id: 'decision-1' }]);
     mocks.readAgentUsageRecords.mockReturnValue([{ id: 'agent-1' }]);
-    mocks.readTracesByIds.mockReturnValue([{ traceId: 'trace-1' }]);
+    mocks.readTracesBySessionWindow.mockReturnValue([{ traceId: 'trace-1' }]);
     mocks.buildActivityScopeDetailFromData.mockReturnValue(detail);
 
     const handled = await handleProjectReadRoutes({
@@ -144,6 +150,12 @@ describe('dashboard project read routes', () => {
     expect(handled).toBe(true);
     expect(mocks.readTaskEpisodeSnapshot).toHaveBeenCalledWith('/tmp/demo-project');
     expect(mocks.readProjectLanguage).toHaveBeenCalledWith('/tmp/demo-project', 'en');
+    expect(mocks.readTracesBySessionWindow).toHaveBeenCalledWith(
+      '/tmp/demo-project',
+      ['session-1'],
+      '2026-04-20T08:00:00.000Z',
+      '2026-04-20T08:05:00.000Z'
+    );
     expect(mocks.buildActivityScopeDetailFromData).toHaveBeenCalledWith({
       lang: 'zh',
       projectName: 'demo-project',

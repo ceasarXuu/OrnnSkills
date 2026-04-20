@@ -57,12 +57,23 @@ export function findActiveEpisode(
 }
 
 export function recalculateEpisodeStats(episode: TaskEpisode): void {
-  const mappedTraceIds = episode.skillSegments.flatMap((segment) => segment.mappedTraceIds);
-  episode.stats.totalTraceCount = episode.traceRefs.length;
-  episode.stats.totalTurnCount = episode.turnIds.length;
-  episode.stats.mappedTraceCount = new Set(mappedTraceIds).size;
-  episode.stats.tracesSinceLastProbe = Math.max(0, episode.traceRefs.length - episode.probeState.lastProbeTraceIndex);
-  episode.stats.turnsSinceLastProbe = Math.max(0, episode.turnIds.length - episode.probeState.lastProbeTurnIndex);
+  const archivedTraceCount = episode.retention?.archivedTraceCount ?? 0;
+  const archivedTurnCount = episode.retention?.archivedTurnCount ?? 0;
+  const mappedTraceCount = episode.skillSegments.reduce((count, segment) => {
+    return count + segment.mappedTraceIds.length + (segment.retention?.archivedMappedTraceCount ?? 0);
+  }, 0);
+
+  episode.stats.totalTraceCount = episode.traceRefs.length + archivedTraceCount;
+  episode.stats.totalTurnCount = episode.turnIds.length + archivedTurnCount;
+  episode.stats.mappedTraceCount = mappedTraceCount;
+  episode.stats.tracesSinceLastProbe = Math.max(
+    0,
+    episode.stats.totalTraceCount - episode.probeState.lastProbeTraceIndex
+  );
+  episode.stats.turnsSinceLastProbe = Math.max(
+    0,
+    episode.stats.totalTurnCount - episode.probeState.lastProbeTurnIndex
+  );
 }
 
 export function selectContextOwner(episodes: TaskEpisode[]): TaskEpisode | null {

@@ -1,5 +1,5 @@
 import type { DecisionEventRecord } from '../core/decision-events/index.js';
-import type { TaskEpisode } from '../core/task-episode/index.js';
+import { filterEpisodeWindowTraces, type TaskEpisode } from '../core/task-episode/index.js';
 import { buildTraceTimelineText, summarizeTraceForTimeline } from '../core/trace-summary/index.js';
 import type { Language } from './i18n.js';
 import type { AgentUsageRecord, Trace } from '../types/index.js';
@@ -218,10 +218,7 @@ function buildTraceLookup(traces: Trace[]): Map<string, Trace> {
 }
 
 function buildEpisodeTraces(episode: TaskEpisode, traces: Trace[]): Trace[] {
-  const allowed = new Set(episode.traceRefs);
-  return traces
-    .filter((trace) => allowed.has(trace.trace_id))
-    .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+  return filterEpisodeWindowTraces(episode, traces);
 }
 
 export function buildActivityScopeSummariesFromData(

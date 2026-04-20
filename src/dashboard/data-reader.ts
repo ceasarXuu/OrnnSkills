@@ -12,7 +12,11 @@ import {
 import { basename, join } from 'node:path';
 import { homedir } from 'node:os';
 import type { DecisionEventRecord } from '../core/decision-events/index.js';
-import type { TaskEpisodeSnapshot } from '../core/task-episode/index.js';
+import {
+  createEmptyTaskEpisodeSnapshot,
+  normalizeTaskEpisodeSnapshot,
+  type TaskEpisodeSnapshot,
+} from '../core/task-episode/index.js';
 import { collectSkillVersionTreeSignature, readFileSignature } from '../core/skill-domain/source-signature.js';
 import type { ProjectSkillGroup, SkillInstance } from '../types/index.js';
 import {
@@ -47,7 +51,7 @@ import {
 } from './readers/agent-usage-reader.js';
 export { readSkills, readSkillContent, readSkillVersion } from './readers/skills-reader.js';
 export type { SkillInfo, SkillVersionMeta, DashboardSkillInfo } from './readers/skills-reader.js';
-export { readRecentTraces, readTracesByIds, computeTraceStats } from './readers/trace-reader.js';
+export { readRecentTraces, readTracesByIds, readTracesBySessionWindow, computeTraceStats } from './readers/trace-reader.js';
 export type { TraceEntry, TraceStats } from './readers/trace-reader.js';
 export { readRecentDecisionEvents } from './readers/decision-events-reader.js';
 export { readDaemonStatus } from './readers/daemon-status-reader.js';
@@ -189,22 +193,13 @@ export function readProjectSnapshotVersion(projectRoot: string): string {
 export function readTaskEpisodeSnapshot(projectRoot: string): TaskEpisodeSnapshot {
   const snapshotPath = join(projectRoot, '.ornn', 'state', 'task-episodes.json');
   if (!existsSync(snapshotPath)) {
-    return {
-      updatedAt: new Date().toISOString(),
-      episodes: [],
-    };
+    return createEmptyTaskEpisodeSnapshot();
   }
 
   try {
     const parsed = JSON.parse(readFileSync(snapshotPath, 'utf-8')) as Partial<TaskEpisodeSnapshot>;
-    return {
-      updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : new Date().toISOString(),
-      episodes: Array.isArray(parsed.episodes) ? parsed.episodes : [],
-    };
+    return normalizeTaskEpisodeSnapshot(parsed);
   } catch {
-    return {
-      updatedAt: new Date().toISOString(),
-      episodes: [],
-    };
+    return createEmptyTaskEpisodeSnapshot();
   }
 }

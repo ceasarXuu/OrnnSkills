@@ -4,7 +4,7 @@ import {
   readRecentTraces,
   readTaskEpisodeSnapshot,
   readAgentUsageRecords,
-  readTracesByIds,
+  readTracesBySessionWindow,
   computeTraceStats,
   readProjectSnapshot,
 } from '../data-reader.js';
@@ -71,7 +71,12 @@ export async function handleProjectReadRoutes(context: ProjectReadRouteContext):
       episode,
       decisionEvents: readRecentDecisionEvents(projectPath, 800),
       agentUsageRecords: readAgentUsageRecords(projectPath, 800),
-      traces: readTracesByIds(projectPath, episode.traceRefs),
+      traces: readTracesBySessionWindow(
+        projectPath,
+        episode.sessionIds,
+        episode.startedAt,
+        episode.lastActivityAt
+      ),
     });
 
     if (!detail) {
