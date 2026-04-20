@@ -3598,6 +3598,187 @@ describe('dashboard ui recovery', () => {
     expect(html).not.toContain('OpenCode · v1 · pending');
   });
 
+  it('does not refetch the active inline skill history on project updates', async () => {
+    const projectPath = '/Users/xuzhang/OrnnSkills';
+    const skillId = 'astartes-coding-custodes';
+    const runtimeId = 'codex';
+    const familyId = 'family-astartes';
+    const encodedProject = encodeURIComponent(projectPath);
+    const encodedSkill = encodeURIComponent(skillId);
+    const encodedFamily = encodeURIComponent(familyId);
+    const family = {
+      familyId,
+      familyName: skillId,
+      status: 'pending',
+      runtimes: ['codex', 'claude'],
+      instanceCount: 2,
+      projectCount: 1,
+      runtimeCount: 2,
+      usage: { observedCalls: 7 },
+      lastSeenAt: '2026-04-16T18:00:50.529Z',
+    };
+    const instances = [
+      {
+        instanceId: 'instance-codex',
+        familyId,
+        projectPath,
+        skillId,
+        runtime: 'codex',
+        effectiveVersion: 6,
+        status: 'pending',
+        lastUsedAt: '2026-04-16T18:00:50.529Z',
+      },
+      {
+        instanceId: 'instance-claude',
+        familyId,
+        projectPath,
+        skillId,
+        runtime: 'claude',
+        effectiveVersion: 1,
+        status: 'pending',
+        lastUsedAt: '2026-04-15T18:00:50.529Z',
+      },
+    ];
+    const skillResponse = {
+      content: '# astartes-coding-custodes',
+      versions: [4, 5, 6],
+      effectiveVersion: 6,
+    };
+    const snapshot = {
+      daemon: {
+        isRunning: true,
+        pid: 1,
+        startedAt: '2026-04-10T00:00:00.000Z',
+        processedTraces: 8,
+        lastCheckpointAt: null,
+        retryQueueSize: 0,
+        optimizationStatus: {
+          currentState: 'idle',
+          currentSkillId: null,
+          lastOptimizationAt: null,
+          lastError: null,
+          queueSize: 0,
+        },
+      },
+      skills: [
+        {
+          skillId,
+          runtime: 'codex',
+          status: 'pending',
+          updatedAt: '2026-04-16T18:00:50.529Z',
+          traceCount: 7,
+          versionsAvailable: [4, 5, 6],
+          effectiveVersion: 6,
+        },
+        {
+          skillId,
+          runtime: 'claude',
+          status: 'pending',
+          updatedAt: '2026-04-15T18:00:50.529Z',
+          traceCount: 1,
+          versionsAvailable: [1],
+          effectiveVersion: 1,
+        },
+      ],
+      skillInstances: instances,
+      traceStats: {
+        total: 8,
+        byRuntime: { codex: 7, claude: 1 },
+        byStatus: { pending: 8 },
+        byEventType: { tool_call: 8 },
+      },
+      recentTraces: [],
+      decisionEvents: [],
+      agentUsage: {
+        callCount: 0,
+        promptTokens: 0,
+        completionTokens: 0,
+        totalTokens: 0,
+        durationMsTotal: 0,
+        avgDurationMs: 0,
+        lastCallAt: null,
+        byModel: {},
+        byScope: {},
+        bySkill: {},
+      },
+    };
+    const { dashboard, getElement, getFetchCalls, clearFetchCalls } = loadDashboardTestHarness(
+      {},
+      {
+        lang: 'zh',
+        fetchMap: {
+          [`/api/projects/${encodedProject}/snapshot`]: snapshot,
+          [`/api/projects/${encodedProject}/skills/${encodedSkill}?runtime=${runtimeId}`]: skillResponse,
+          [`/api/projects/${encodedProject}/skill-instances/instance-codex/versions/4`]: {
+            metadata: {
+              createdAt: '2026-04-14T00:00:00.000Z',
+              reason: 'Bootstrap source sync',
+            },
+          },
+          [`/api/projects/${encodedProject}/skill-instances/instance-codex/versions/5`]: {
+            metadata: {
+              createdAt: '2026-04-15T00:00:00.000Z',
+              reason: 'Manual edit from dashboard',
+            },
+          },
+          [`/api/projects/${encodedProject}/skill-instances/instance-codex/versions/6`]: {
+            metadata: {
+              createdAt: '2026-04-16T00:00:00.000Z',
+              reason: 'Bootstrap source sync (project -> project-preferred)',
+            },
+          },
+          [`/api/skills/families`]: { families: [family] },
+          [`/api/skills/families/${encodedFamily}`]: { family },
+          [`/api/skills/families/${encodedFamily}/instances`]: { instances },
+        },
+      }
+    );
+
+    getElement('mainPanel');
+    getElement('skillLibraryInlineDetailContainer');
+    getElement('skillInlineName');
+    getElement('skillInlineStatus');
+    getElement('skillInlineSaveHint');
+    getElement('skillInlineSaveBtn');
+    getElement('skillInlineApplyAllBtn');
+    getElement('skillInlineProjectPath');
+    getElement('skillInlineRuntimeSelect');
+    getElement('skillInlineContent');
+    getElement('skillInlineVersionList');
+
+    dashboard.state.selectedProjectId = projectPath;
+    dashboard.state.selectedMainTab = 'skills';
+    dashboard.state.selectedSkillsSubTab = 'skill_library';
+    dashboard.state.skillLibraryLoaded = true;
+    dashboard.state.skillFamilies = [family];
+    dashboard.state.skillFamilyDetailsById = { [familyId]: family };
+    dashboard.state.skillFamilyInstancesById = { [familyId]: instances };
+    dashboard.state.selectedSkillFamilyId = familyId;
+    dashboard.state.projectData = { [projectPath]: snapshot };
+    dashboard.state.currentSkillProjectId = projectPath;
+    dashboard.state.currentSkillId = skillId;
+    dashboard.state.currentSkillRuntime = runtimeId;
+    dashboard.state.currentSkillInstanceId = 'instance-codex';
+
+    dashboard.renderMainPanel(projectPath);
+    await dashboard.viewSkill(projectPath, skillId, runtimeId, 'instance-codex');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    clearFetchCalls();
+
+    await (
+      dashboard as unknown as { handleUpdate: (data: Record<string, unknown>) => Promise<void> }
+    ).handleUpdate({
+      changedProjects: [projectPath],
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const fetchCalls = getFetchCalls();
+    expect(fetchCalls).not.toContain(`/api/projects/${encodedProject}/skills/${encodedSkill}?runtime=${runtimeId}`);
+    expect(fetchCalls).not.toContain(`/api/projects/${encodedProject}/skill-instances/instance-codex/versions/4`);
+    expect(fetchCalls).not.toContain(`/api/projects/${encodedProject}/skill-instances/instance-codex/versions/5`);
+    expect(fetchCalls).not.toContain(`/api/projects/${encodedProject}/skill-instances/instance-codex/versions/6`);
+  });
+
   it('loads skill library details into the inline editor instead of opening the modal', async () => {
     const projectPath = '/tmp/ornn-project';
     const encodedProject = encodeURIComponent(projectPath);

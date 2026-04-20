@@ -523,7 +523,7 @@ async function ensureSkillLibraryInlineSkill(familyId, options) {
   await viewSkill(target.projectPath, target.skillId, targetRuntime, target.instanceId);
 }
 
-async function loadSkillLibrary(force = false) {
+async function loadSkillLibrary(force = false, options) {
   if (state.skillLibraryLoading) return state.skillFamilies;
   if (!force && state.skillLibraryLoaded && Array.isArray(state.skillFamilies) && state.skillFamilies.length > 0) {
     if (isSkillLibraryViewActive() && state.selectedSkillFamilyId) {
@@ -545,7 +545,7 @@ async function loadSkillLibrary(force = false) {
       state.selectedSkillFamilyId = state.skillFamilies[0].familyId;
     }
     if (state.selectedSkillFamilyId) {
-      await loadSkillFamilyDetail(state.selectedSkillFamilyId, force);
+      await loadSkillFamilyDetail(state.selectedSkillFamilyId, force, options);
     } else if (isSkillLibraryViewActive()) {
       safeRenderMainPanel('', 'loadSkillLibrary');
     }
@@ -561,7 +561,7 @@ async function loadSkillLibrary(force = false) {
   }
 }
 
-async function loadSkillFamilyDetail(familyId, force = false) {
+async function loadSkillFamilyDetail(familyId, force = false, options) {
   if (!familyId) return null;
   if (!force && state.skillFamilyDetailsById[familyId] && state.skillFamilyInstancesById[familyId]) {
     if (isSkillLibraryViewActive() && state.selectedSkillFamilyId === familyId) {
@@ -579,7 +579,20 @@ async function loadSkillFamilyDetail(familyId, force = false) {
   state.skillFamilyDetailsById[familyId] = familyData.family || null;
   state.skillFamilyInstancesById[familyId] = Array.isArray(instancesData.instances) ? instancesData.instances : [];
   if (isSkillLibraryViewActive() && state.selectedSkillFamilyId === familyId) {
-    await ensureSkillLibraryInlineSkill(familyId, { force: force });
+    const preserveInlineDetail = !!(options && options.preserveInlineDetail && state.currentSkillInstanceId);
+    const instances = state.skillFamilyInstancesById[familyId];
+    const hasCurrentInstance = preserveInlineDetail && instances.some(function(instance) {
+      return instance && instance.instanceId === state.currentSkillInstanceId;
+    });
+    if (hasCurrentInstance) {
+      console.debug('[dashboard] refreshed skill family detail without reloading inline editor', {
+        familyId: familyId,
+        instanceId: state.currentSkillInstanceId,
+        runtime: state.currentSkillRuntime,
+      });
+    } else {
+      await ensureSkillLibraryInlineSkill(familyId, { force: force });
+    }
   }
   return {
     family: state.skillFamilyDetailsById[familyId],
