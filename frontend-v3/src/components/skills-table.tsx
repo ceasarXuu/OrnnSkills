@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react'
 import { Search01Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import {
   Pagination,
@@ -42,7 +42,6 @@ interface SkillsTableProps {
   onQueryChange: (value: string) => void
   onSelectSkill: (skill: DashboardSkill) => void
   query: string
-  selectedProjectName: string | null
   selectedSkillKey: string
   skills: DashboardSkill[]
 }
@@ -52,7 +51,6 @@ export function SkillsTable({
   onQueryChange,
   onSelectSkill,
   query,
-  selectedProjectName,
   selectedSkillKey,
   skills,
 }: SkillsTableProps) {
@@ -60,7 +58,7 @@ export function SkillsTable({
 
   useEffect(() => {
     setPage(1)
-  }, [query, selectedProjectName])
+  }, [query])
 
   const pagination = useMemo(() => paginateSkills(skills, page, PAGE_SIZE), [page, skills])
   const visiblePages = useMemo(
@@ -78,19 +76,10 @@ export function SkillsTable({
     <Card className="border-border/70 bg-card/92 shadow-[0_20px_60px_-42px_color-mix(in_oklab,var(--foreground)_28%,transparent)] backdrop-blur">
       <CardHeader className="gap-5 border-b border-border/70">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-          <div className="space-y-3">
-            <div>
-              <CardTitle className="text-xl">技能目录</CardTitle>
-              <CardDescription className="mt-1">
-                中央区域只负责技能表本身，搜索、分页和行选择都在这一个受控表面里完成。
-              </CardDescription>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Badge variant="outline">{selectedProjectName ?? '未选择项目'}</Badge>
-              <Badge variant="outline">{formatCompactNumber(pagination.totalItems)} skills</Badge>
-              <Badge variant={query ? 'secondary' : 'outline'}>
-                第 {pagination.currentPage} / {pagination.totalPages} 页
-              </Badge>
+          <div className="space-y-1">
+            <CardTitle className="text-xl">技能列表</CardTitle>
+            <div className="text-sm text-muted-foreground">
+              {formatCompactNumber(pagination.totalItems)} skills
             </div>
           </div>
           <div className="w-full xl:max-w-sm">

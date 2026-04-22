@@ -50,10 +50,8 @@ function DashboardWorkspacePage() {
   const [query, setQuery] = useState('')
   const [selectedSkill, setSelectedSkill] = useState<DashboardSkill | null>(null)
   const {
-    connectionState,
     isLoadingProjects,
     isLoadingSnapshot,
-    lastSyncedAt,
     loadError,
     projects,
     selectProject,
@@ -100,13 +98,7 @@ function DashboardWorkspacePage() {
     <div className="dark min-h-screen bg-background text-foreground">
       <div className="pointer-events-none fixed inset-0 -z-10 bg-[linear-gradient(180deg,color-mix(in_oklab,var(--background)_96%,transparent),color-mix(in_oklab,var(--background)_100%,transparent)),linear-gradient(0deg,color-mix(in_oklab,var(--foreground)_4%,transparent)_1px,transparent_1px),linear-gradient(90deg,color-mix(in_oklab,var(--foreground)_3%,transparent)_1px,transparent_1px)] bg-[size:auto,32px_32px,32px_32px]" />
 
-      <WorkspaceHeader
-        connectionState={connectionState}
-        currentView={currentView}
-        lastSyncedAt={lastSyncedAt}
-        projectCount={projects.length}
-        selectedProject={selectedProject}
-      />
+      <WorkspaceHeader currentView={currentView} />
 
       <main className="mx-auto max-w-[1680px] space-y-8 px-4 py-8 xl:px-6">
         {loadError ? (
@@ -234,7 +226,6 @@ function ViewContent({
           onSelectSkill={onSelectSkill}
           projects={projects}
           query={query}
-          selectedProject={project}
           selectedProjectId={selectedProjectId}
           selectedSkillKey={selectedSkillKey}
           snapshot={snapshot}

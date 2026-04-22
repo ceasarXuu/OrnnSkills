@@ -2,7 +2,7 @@ import type { ComponentProps } from 'react'
 import { AiBrain03Icon, ChartHistogramIcon, Layers01Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import {
   formatCompactNumber,
@@ -40,32 +40,19 @@ export function SkillsInsightRail({ snapshot }: SkillsInsightRailProps) {
       <CardHeader className="gap-3">
         <div className="flex items-center gap-2">
           <HugeiconsIcon icon={AiBrain03Icon} size={18} strokeWidth={1.8} />
-          <CardTitle>Insights</CardTitle>
+          <CardTitle>近期统计</CardTitle>
         </div>
-        <CardDescription>把右侧信息收成一个 rail，不再拆成多张零散卡片。</CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
-        <Section
-          description="按 scope 聚合最近窗口的调用量。"
-          entries={scopeEntries}
-          icon={AiBrain03Icon}
-          title="Scope Usage"
-          total={snapshot?.agentUsage}
-        />
+        <Section entries={scopeEntries} icon={AiBrain03Icon} title="按 Scope 调用" total={snapshot?.agentUsage} />
         <Separator />
-        <Section
-          description="最近被引用最多的技能。"
-          entries={skillEntries}
-          icon={Layers01Icon}
-          title="Hot Skills"
-          total={snapshot?.agentUsage}
-        />
+        <Section entries={skillEntries} icon={Layers01Icon} title="高频技能" total={snapshot?.agentUsage} />
         <Separator />
         <div className="space-y-4">
           <div className="flex items-center gap-2">
             <HugeiconsIcon icon={ChartHistogramIcon} size={16} strokeWidth={1.8} />
             <div>
-              <p className="font-medium">Event Distribution</p>
+              <p className="font-medium">事件分布</p>
               <p className="text-sm text-muted-foreground">
                 最近 checkpoint {formatRelativeTime(snapshot?.daemon?.lastCheckpointAt)}
               </p>
@@ -108,13 +95,11 @@ export function SkillsInsightRail({ snapshot }: SkillsInsightRailProps) {
 }
 
 function Section({
-  description,
   entries,
   icon,
   title,
   total,
 }: {
-  description: string
   entries: Array<[string, DashboardMetricBucket]>
   icon: ComponentProps<typeof HugeiconsIcon>['icon']
   title: string
@@ -124,10 +109,7 @@ function Section({
     <div className="space-y-4">
       <div className="flex items-center gap-2">
         <HugeiconsIcon icon={icon} size={16} strokeWidth={1.8} />
-        <div>
-          <p className="font-medium">{title}</p>
-          <p className="text-sm text-muted-foreground">{description}</p>
-        </div>
+        <p className="font-medium">{title}</p>
       </div>
       {entries.length === 0 ? (
         <Empty label="当前窗口没有可用统计。" />

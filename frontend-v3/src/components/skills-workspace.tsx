@@ -13,7 +13,6 @@ interface SkillsWorkspaceProps {
   onSelectSkill: (skill: DashboardSkill) => void
   projects: DashboardProject[]
   query: string
-  selectedProject: DashboardProject | null
   selectedProjectId: string
   selectedSkillKey: string
   snapshot: ProjectSnapshot | null
@@ -27,7 +26,6 @@ export function SkillsWorkspace({
   onSelectSkill,
   projects,
   query,
-  selectedProject,
   selectedProjectId,
   selectedSkillKey,
   snapshot,
@@ -37,20 +35,13 @@ export function SkillsWorkspace({
 
   return (
     <div className="space-y-8">
-      <SkillsHeroBand
-        filteredSkillCount={filteredSkills.length}
-        overview={overview}
-        projectCount={projects.length}
-        query={query}
-        selectedProject={selectedProject}
-      />
+      <SkillsHeroBand overview={overview} />
 
       <div className="grid gap-6 xl:grid-cols-[280px_minmax(0,1fr)] xl:items-start">
         <aside>
           <SkillsScopeSidebar
             onSelect={onSelectProject}
             projects={projects}
-            selectedProject={selectedProject}
             selectedProjectId={selectedProjectId}
           />
         </aside>
@@ -62,7 +53,6 @@ export function SkillsWorkspace({
               onQueryChange={onQueryChange}
               onSelectSkill={onSelectSkill}
               query={query}
-              selectedProjectName={selectedProject?.name ?? null}
               selectedSkillKey={selectedSkillKey}
               skills={filteredSkills}
             />
