@@ -17,10 +17,12 @@
     "SECURITY.md"
   ],
   "scripts": {
-    "build": "tsc && npm run build:dashboard-v2 && npm run ensure:cli-exec",
+    "build": "tsc && npm run build:dashboard-v2 && npm run build:dashboard-v3 && npm run ensure:cli-exec",
     "build:dashboard-v2": "npm --prefix frontend install && npm --prefix frontend run build",
+    "build:dashboard-v3": "npm --prefix frontend-v3 install && npm --prefix frontend-v3 run build",
     "dev": "tsx watch src/cli/index.ts",
     "dev:dashboard-v2": "npm --prefix frontend run dev",
+    "dev:dashboard-v3": "npm --prefix frontend-v3 run dev",
     "start": "node dist/cli/index.js",
     "ensure:cli-exec": "sh -c 'if [ -f dist/cli/index.js ]; then chmod +x dist/cli/index.js; fi'",
     "prepack": "npm run build",

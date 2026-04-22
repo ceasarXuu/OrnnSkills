@@ -1173,4 +1173,30 @@ describe('dashboard server sse bootstrap', () => {
       await dashboard.stop();
     }
   });
+
+  it('serves the v3 document for nested frontend routes under /v3', async () => {
+    const port = await getFreePort();
+    const customRoot = mkdtempSync(join(tmpdir(), 'ornn-dashboard-v3-routes-'));
+    const originalDistDir = process.env.ORNNSKILLS_DASHBOARD_V3_DIST_DIR;
+    process.env.ORNNSKILLS_DASHBOARD_V3_DIST_DIR = customRoot;
+    mkdirSync(join(customRoot, 'assets'), { recursive: true });
+    writeFileSync(join(customRoot, 'index.html'), '<html><body>dashboard v3 routes</body></html>');
+
+    const { createDashboardServer } = await import('../../src/dashboard/server.js');
+    const dashboard = createDashboardServer(port, 'zh');
+    await dashboard.start();
+
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/v3/skills`);
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get('content-type')).toContain('text/html');
+      expect(response.headers.get('x-dashboard-v3')).toBe('built');
+      await expect(response.text()).resolves.toContain('dashboard v3 routes');
+    } finally {
+      process.env.ORNNSKILLS_DASHBOARD_V3_DIST_DIR = originalDistDir;
+      rmSync(customRoot, { recursive: true, force: true });
+      await dashboard.stop();
+    }
+  });
 });

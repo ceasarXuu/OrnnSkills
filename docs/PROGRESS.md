@@ -4,6 +4,12 @@
 
 ### 2026-04-22
 
+- ✅ 启动完全隔离的 dashboard v3：新增 `frontend-v3/` 子工程和 `/v3` 独立入口，服务端已支持 `/v3`、`/v3/*`、`/v3/assets/*`，构建产物输出到 `dist/dashboard-v3`；这次不再复用 `frontend/` 里的业务 UI 文件，只保留 API / SSE 合同
+- ✅ 用 seed `b4NKaHect` 重写 v3 工作台骨架：v3 已直接基于 `radix-vega + olive + DM Sans + hugeicons` 落地项目侧栏、技能总览、项目视角、活动视图和技能详情弹层，页面视觉不再叠加 v2 那套私有蓝青皮肤
+- 📝 记录隔离经验：独立路由和独立构建产物只能隔离“资源入口”，并不能自动隔离“业务层自带的视觉判断”；如果新页面继续复用上一轮业务组件文件，最终仍会把旧视觉习惯带回来。真正想切干净，就必须连业务展示层一起从新目录重建
+- 📝 记录清理经验：新前端从 Vite 脚手架起步时，默认 `README / favicon / icons.svg / App.css / src/assets/*` 很容易跟着进仓库；这类模板残留要在第一次成型前就收掉，否则后续即使页面能跑，仓库里仍然会混着与产品无关的脚手架噪音
+- 📝 记录环境经验：当前机器的非交互 shell 在某些 exec 场景下拿不到 `mv` 的 PATH，做“移入回收站”这类安全清理时，直接用 `/bin/mv` 更稳
+
 - ✅ 收口 preset 风格漂移：`b4NKaHect` 虽然已经把 `radix-vega` 主题变量落进项目，但业务层页面之前仍带着大量手写 `text-white / border-white / cyan / slate / radial-gradient` 类，实际视觉被私有配色重新覆盖；现已把工作台主层收回到 `background / card / muted / primary / border` 语义 token
 - 📝 记录 preset 对齐经验：shadcn preset 只会提供 token 和基础件，不会自动替你修正业务层的私有样式；如果页面继续堆硬编码颜色类，最终效果一定更像“套着 shadcn 按钮的自定义皮肤”，而不是 seed 本身。为避免再次漂移，已补 `dashboard-v2-preset-alignment` 测试约束主工作台不得再写这套私有配色词
 

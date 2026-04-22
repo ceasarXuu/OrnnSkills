@@ -46,6 +46,11 @@ import {
   isDashboardV2DocumentRequest,
   resolveDashboardV2StaticAsset,
 } from './v2/assets.js';
+import {
+  getDashboardV3DocumentResponse,
+  isDashboardV3DocumentRequest,
+  resolveDashboardV3StaticAsset,
+} from './v3/assets.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -331,6 +336,52 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
 
         if (path.startsWith('/v2/') && (method === 'GET' || method === 'HEAD')) {
           const asset = resolveDashboardV2StaticAsset(path);
+          if (asset) {
+            res.writeHead(200, {
+              'Content-Type': asset.contentType,
+              'Cache-Control': asset.cacheControl,
+              'X-Dashboard-Build': buildId,
+            });
+            if (method === 'HEAD') {
+              res.end();
+              return;
+            }
+            res.end(asset.body);
+            return;
+          }
+        }
+
+        if (isDashboardV3DocumentRequest(path) && (method === 'GET' || method === 'HEAD')) {
+          const document = getDashboardV3DocumentResponse();
+          if (!document.hasBuild) {
+            logger.warn('Dashboard v3 requested before static bundle was built', {
+              path,
+              method,
+            });
+          } else {
+            logger.debug('Serving dashboard v3 document', {
+              path,
+              method,
+            });
+          }
+          res.writeHead(200, {
+            'Content-Type': 'text/html; charset=utf-8',
+            'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+            Pragma: 'no-cache',
+            Expires: '0',
+            'X-Dashboard-Build': buildId,
+            'X-Dashboard-V3': document.hasBuild ? 'built' : 'fallback',
+          });
+          if (method === 'HEAD') {
+            res.end();
+            return;
+          }
+          res.end(document.body);
+          return;
+        }
+
+        if (path.startsWith('/v3/') && (method === 'GET' || method === 'HEAD')) {
+          const asset = resolveDashboardV3StaticAsset(path);
           if (asset) {
             res.writeHead(200, {
               'Content-Type': asset.contentType,
