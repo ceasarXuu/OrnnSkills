@@ -16,6 +16,8 @@
   - `skills` 页首屏必须先进入 `技能工作台`，不允许再把项目 hero / metric cards 放在技能表之前
   - `projects` 页才承载项目摘要、daemon 状态和 summary-heavy chrome
   - `activity` 页聚焦 trace / decision event，不复用项目总览 chrome
+  - `config` 页必须作为一级工作区长期保留，不能再因为布局清理被隐式并回默认视图
+  - `config` 页只承载全局 provider / safety / prompt 治理，不混入项目摘要 chrome
   - 项目在 `skills` 页里只作为 scope/filter，不作为主叙事对象
 
 结论：**这份文档保留 V2 迁移记录，但当前真正的 clean-slate 前端重写已经进入 V3。**

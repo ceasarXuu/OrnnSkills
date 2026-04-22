@@ -107,6 +107,12 @@ export function getViewCopy(view: DashboardView) {
         title: '活动与决策',
         description: '聚焦最近 trace 和 decision event，快速判断哪个项目上下文值得继续跟踪。',
       }
+    case 'config':
+      return {
+        eyebrow: 'Config Workspace',
+        title: '配置工作区',
+        description: '集中管理 provider、默认模型、LLM 安全阈值和演进提示词来源。',
+      }
     default:
       return {
         eyebrow: 'Dashboard Workspace',

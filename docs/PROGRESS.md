@@ -2,6 +2,14 @@
 
 ## 📊 总体进度：Phase 1 ✅ 完成
 
+### 2026-04-23
+
+- ✅ 恢复 v3 的一级 `配置` 工作区：`/v3/config` 已重新回到顶层导航，`config` 现在和 `技能 / 项目 / 活动` 一样是显式一级视图，不再通过默认 fallback 间接兜底
+- ✅ 接回真实配置工作台：v3 已补齐 `GET/POST /api/config`、`/api/providers/catalog`、`/api/provider-health`、`/api/config/providers/connectivity` 的前端 client 和独立状态层；当前可直接查看 provider stack、默认 provider、LLM safety、prompt source/override，并保存配置
+- ✅ 补齐 shadcn 表单基件：v3 新增 `select / switch / textarea / label / alert`，配置页继续沿用 `Card / Button / Badge / Tabs / Input` 组合，不再为表单场景手写私有控件
+- 📝 记录 IA 经验：对 dashboard 这种多工作区产品，`config` 不能只算“将来会补”的附属页；只要它是主路径之一，就必须在 `DashboardView`、header tabs、view copy、layout rule 这四层同时显式存在，否则后续清理布局时很容易被静默删掉
+- 📝 记录浏览器验证经验：v3 页面常驻 SSE，做 Playwright/浏览器脚本冒烟时不要等 `networkidle`，否则很容易被长连接拖到超时；更稳的做法是 `domcontentloaded + 固定等待 + 抓取 body 文本/控制台`
+
 ### 2026-04-22
 
 - ✅ 启动完全隔离的 dashboard v3：新增 `frontend-v3/` 子工程和 `/v3` 独立入口，服务端已支持 `/v3`、`/v3/*`、`/v3/assets/*`，构建产物输出到 `dist/dashboard-v3`；这次不再复用 `frontend/` 里的业务 UI 文件，只保留 API / SSE 合同

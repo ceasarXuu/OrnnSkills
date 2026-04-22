@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom'
 import { ActivityStream } from '@/components/activity-stream'
+import { ConfigWorkspace } from '@/components/config-workspace'
 import { DashboardHero } from '@/components/dashboard-hero'
 import { InsightStack } from '@/components/insight-stack'
 import { MetricGrid } from '@/components/metric-grid'
@@ -21,7 +22,7 @@ import type {
   ProjectSnapshot,
 } from '@/types/dashboard'
 
-const DASHBOARD_VIEWS: DashboardView[] = ['skills', 'projects', 'activity']
+const DASHBOARD_VIEWS: DashboardView[] = ['skills', 'projects', 'activity', 'config']
 
 function normalizeDashboardView(view?: string): DashboardView {
   if (view && DASHBOARD_VIEWS.includes(view as DashboardView)) {
@@ -245,6 +246,8 @@ function ViewContent({
           <InsightStack snapshot={snapshot} />
         </div>
       ) : null}
+
+      {currentView === 'config' ? <ConfigWorkspace /> : null}
     </>
   )
 }

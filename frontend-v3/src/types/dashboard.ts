@@ -1,6 +1,6 @@
 export type MonitoringState = 'active' | 'paused'
 export type ConnectionState = 'connecting' | 'connected' | 'reconnecting' | 'error'
-export type DashboardView = 'skills' | 'projects' | 'activity'
+export type DashboardView = 'skills' | 'projects' | 'activity' | 'config'
 
 export interface DashboardProject {
   path: string

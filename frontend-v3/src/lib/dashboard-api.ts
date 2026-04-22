@@ -4,6 +4,13 @@ import type {
   DashboardSsePayload,
   ProjectSnapshot,
 } from '@/types/dashboard'
+import type {
+  DashboardConfig,
+  DashboardConfigResponse,
+  DashboardConnectivityResponse,
+  DashboardProviderCatalogResponse,
+  DashboardProviderHealthResponse,
+} from '@/types/config'
 
 declare global {
   interface Window {
@@ -17,6 +24,23 @@ async function fetchJson<T>(path: string): Promise<T> {
     headers: {
       Accept: 'application/json',
     },
+  })
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+  }
+
+  return (await response.json()) as T
+}
+
+async function postJson<T>(path: string, body: unknown): Promise<T> {
+  const response = await fetch(path, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
   })
 
   if (!response.ok) {
@@ -66,6 +90,34 @@ export async function fetchProjectSnapshot(projectPath: string) {
   return await fetchJson<ProjectSnapshot>(
     `/api/projects/${encodeProjectPath(projectPath)}/snapshot`,
   )
+}
+
+export async function fetchDashboardConfig() {
+  const data = await fetchJson<DashboardConfigResponse>('/api/config')
+  return data.config
+}
+
+export async function saveDashboardConfig(config: DashboardConfig) {
+  return await postJson<{ ok: boolean }>('/api/config', { config })
+}
+
+export async function fetchDashboardProviderCatalog() {
+  const data = await fetchJson<DashboardProviderCatalogResponse>('/api/providers/catalog')
+  return Array.isArray(data.providers) ? data.providers : []
+}
+
+export async function fetchDashboardProviderHealth() {
+  const data = await fetchJson<DashboardProviderHealthResponse>('/api/provider-health')
+  return data.health
+}
+
+export async function checkDashboardProvidersConnectivity(providers: DashboardConfig['providers']) {
+  const data = await postJson<DashboardConnectivityResponse>(
+    '/api/config/providers/connectivity',
+    { providers },
+  )
+
+  return Array.isArray(data.results) ? data.results : []
 }
 
 export function connectDashboardEvents(

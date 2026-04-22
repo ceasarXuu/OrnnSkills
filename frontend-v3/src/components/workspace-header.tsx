@@ -88,6 +88,9 @@ export function WorkspaceHeader({
               <TabsTrigger asChild value="activity">
                 <Link to="/activity">活动</Link>
               </TabsTrigger>
+              <TabsTrigger asChild value="config">
+                <Link to="/config">配置</Link>
+              </TabsTrigger>
             </TabsList>
           </Tabs>
         </div>

@@ -30,6 +30,13 @@ export function resolveDashboardViewLayout(view: DashboardView): DashboardViewLa
         showMetrics: false,
         showProjectScopeBar: false,
       }
+    case 'config':
+      return {
+        showProjectRail: false,
+        showHero: false,
+        showMetrics: false,
+        showProjectScopeBar: false,
+      }
     default:
       return {
         showProjectRail: false,
