@@ -1196,6 +1196,9 @@ describe('dashboard server sse bootstrap', () => {
       expect(html).toContain('id="workspaceTabs"');
       expect(html).toContain('"requestedMainTab":"skills"');
       expect(html).not.toContain('dashboard v3 routes');
+
+      const legacyAliasResponse = await fetch(`http://127.0.0.1:${port}/v3/activity`);
+      expect(legacyAliasResponse.status).toBe(404);
     } finally {
       process.env.ORNNSKILLS_DASHBOARD_V3_DIST_DIR = originalDistDir;
       rmSync(customRoot, { recursive: true, force: true });

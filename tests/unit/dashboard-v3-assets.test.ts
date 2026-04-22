@@ -64,6 +64,10 @@ describe('dashboard v3 asset helpers', () => {
     expect(asset?.cacheControl).toContain('immutable');
     expect(asset?.body.toString('utf-8')).toContain('console.log("v3")');
     expect(isDashboardV3DocumentRequest('/v3/skills')).toBe(true);
+    expect(isDashboardV3DocumentRequest('/v3/project')).toBe(true);
+    expect(isDashboardV3DocumentRequest('/v3/config')).toBe(true);
+    expect(isDashboardV3DocumentRequest('/v3/activity')).toBe(false);
+    expect(isDashboardV3DocumentRequest('/v3/projects')).toBe(false);
     expect(isDashboardV3DocumentRequest('/v3/assets/app.js')).toBe(false);
   });
 

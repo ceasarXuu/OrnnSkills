@@ -22,21 +22,16 @@ interface DashboardV3StaticAsset {
 }
 
 export function isDashboardV3DocumentRequest(requestPath: string): boolean {
-  if (requestPath === '/v3' || requestPath === '/v3/') {
-    return true;
-  }
-
-  if (!requestPath.startsWith('/v3/')) {
-    return false;
-  }
-
-  const relativePath = requestPath.slice('/v3/'.length);
-  if (relativePath.length === 0 || relativePath.startsWith('assets/')) {
-    return false;
-  }
-
-  const lastSegment = relativePath.split('/').pop() ?? '';
-  return !lastSegment.includes('.');
+  return (
+    requestPath === '/v3' ||
+    requestPath === '/v3/' ||
+    requestPath === '/v3/skills' ||
+    requestPath === '/v3/skills/' ||
+    requestPath === '/v3/project' ||
+    requestPath === '/v3/project/' ||
+    requestPath === '/v3/config' ||
+    requestPath === '/v3/config/'
+  );
 }
 
 function getDashboardV3DistRoot(): string {
@@ -78,27 +73,11 @@ function getContentType(filePath: string): string {
 function resolveDashboardV3RequestedMainTab(
   requestPath: string,
 ): 'skills' | 'project' | 'config' {
-  if (
-    requestPath === '/v3/config' ||
-    requestPath === '/v3/config/'
-  ) {
+  if (requestPath === '/v3/config' || requestPath === '/v3/config/') {
     return 'config';
   }
 
-  if (
-    requestPath === '/v3/project' ||
-    requestPath === '/v3/project/' ||
-    requestPath === '/v3/projects' ||
-    requestPath === '/v3/projects/' ||
-    requestPath === '/v3/activity' ||
-    requestPath === '/v3/activity/' ||
-    requestPath === '/v3/overview' ||
-    requestPath === '/v3/overview/' ||
-    requestPath === '/v3/cost' ||
-    requestPath === '/v3/cost/' ||
-    requestPath === '/v3/logs' ||
-    requestPath === '/v3/logs/'
-  ) {
+  if (requestPath === '/v3/project' || requestPath === '/v3/project/') {
     return 'project';
   }
 
