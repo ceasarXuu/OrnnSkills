@@ -36,11 +36,6 @@ import { renderDashboardBootstrapCacheSource } from './web/bootstrap-cache.js';
 import { renderDashboardStateSource } from './web/state.js';
 import { getDashboardSystemPromptDefaults } from '../core/prompt-defaults.js';
 
-interface DashboardBootstrapOverrides {
-  requestedConfigSubTab?: 'model' | 'evolution';
-  requestedMainTab?: 'skills' | 'project' | 'config';
-}
-
 interface DashboardAssetBundle {
   styleCss: string;
   scriptSource: string;
@@ -60,13 +55,11 @@ export function getDashboardStyleCss(): string {
 
 export function getDashboardInlineBootScript(
   lang: Language = 'en',
-  buildId = 'dev',
-  overrides: DashboardBootstrapOverrides = {}
+  buildId = 'dev'
 ): string {
   return `window.__DASHBOARD_BOOTSTRAP__ = ${JSON.stringify({
     lang: lang === 'zh' ? 'zh' : 'en',
     buildId,
-    ...overrides,
   })};`;
 }
 
@@ -113,26 +106,6 @@ const DASHBOARD_BUILD_ID = String(DASHBOARD_BOOTSTRAP.buildId || 'dev');
 const DASHBOARD_BUILD_SHORT = DASHBOARD_BUILD_ID.slice(-8);
 const DEFAULT_DASHBOARD_SYSTEM_PROMPTS = ${JSON.stringify(dashboardPromptDefaults)};
 ${dashboardStateSource}
-function applyRequestedWorkspaceFromBootstrap() {
-  const requestedMainTab = DASHBOARD_BOOTSTRAP.requestedMainTab;
-  if (
-    requestedMainTab !== 'skills' &&
-    requestedMainTab !== 'project' &&
-    requestedMainTab !== 'config'
-  ) {
-    return;
-  }
-
-  state.selectedMainTab = requestedMainTab;
-  if (requestedMainTab === 'skills') {
-    state.selectedSkillsSubTab = 'skill_library';
-  }
-  if (requestedMainTab === 'config') {
-    state.selectedConfigSubTab =
-      DASHBOARD_BOOTSTRAP.requestedConfigSubTab === 'evolution' ? 'evolution' : 'model';
-  }
-}
-
 ${dashboardBootstrapCacheSource}
 ${dashboardActivityPanelSource}
 ${dashboardConfigPanelSource}
@@ -318,12 +291,7 @@ export function getDashboardAssetBundle(): DashboardAssetBundle {
   return cachedDashboardAssetBundle;
 }
 
-export function getDashboardHtml(
-  _port: number,
-  lang: Language = 'en',
-  buildId = 'dev',
-  bootstrapOverrides: DashboardBootstrapOverrides = {}
-): string {
+export function getDashboardHtml(_port: number, lang: Language = 'en', buildId = 'dev'): string {
   const t = getI18n(lang);
   const assets = getDashboardAssetBundle();
 
@@ -331,7 +299,7 @@ export function getDashboardHtml(
     lang,
     styleHref: assets.styleHref,
     scriptHref: assets.scriptHref,
-    inlineBootstrapScript: getDashboardInlineBootScript(lang, buildId, bootstrapOverrides),
+    inlineBootstrapScript: getDashboardInlineBootScript(lang, buildId),
     labels: {
       headerConnecting: t.headerConnecting,
       sidebarProjects: t.sidebarProjects,

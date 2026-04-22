@@ -1174,7 +1174,7 @@ describe('dashboard server sse bootstrap', () => {
     }
   });
 
-  it('serves the shared dashboard shell for nested v3 routes under /v3', async () => {
+  it('serves the v3 document for nested frontend routes under /v3', async () => {
     const port = await getFreePort();
     const customRoot = mkdtempSync(join(tmpdir(), 'ornn-dashboard-v3-routes-'));
     const originalDistDir = process.env.ORNNSKILLS_DASHBOARD_V3_DIST_DIR;
@@ -1192,10 +1192,7 @@ describe('dashboard server sse bootstrap', () => {
       expect(response.status).toBe(200);
       expect(response.headers.get('content-type')).toContain('text/html');
       expect(response.headers.get('x-dashboard-v3')).toBe('built');
-      const html = await response.text();
-      expect(html).toContain('id="workspaceTabs"');
-      expect(html).toContain('"requestedMainTab":"skills"');
-      expect(html).not.toContain('dashboard v3 routes');
+      await expect(response.text()).resolves.toContain('dashboard v3 routes');
     } finally {
       process.env.ORNNSKILLS_DASHBOARD_V3_DIST_DIR = originalDistDir;
       rmSync(customRoot, { recursive: true, force: true });

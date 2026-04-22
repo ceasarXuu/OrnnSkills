@@ -352,11 +352,7 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
         }
 
         if (isDashboardV3DocumentRequest(path) && (method === 'GET' || method === 'HEAD')) {
-          const document = getDashboardV3DocumentResponse({
-            buildId,
-            lang: currentLang,
-            requestPath: path,
-          });
+          const document = getDashboardV3DocumentResponse();
           if (!document.hasBuild) {
             logger.warn('Dashboard v3 requested before static bundle was built', {
               path,
