@@ -56,7 +56,6 @@ function DashboardWorkspacePage() {
     lastSyncedAt,
     loadError,
     projects,
-    refreshWorkspace,
     selectProject,
     selectedProject,
     selectedProjectId,
@@ -105,7 +104,6 @@ function DashboardWorkspacePage() {
         connectionState={connectionState}
         currentView={currentView}
         lastSyncedAt={lastSyncedAt}
-        onRefresh={() => refreshWorkspace('manual')}
         projectCount={projects.length}
         selectedProject={selectedProject}
       />

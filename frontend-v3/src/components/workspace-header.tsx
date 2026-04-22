@@ -1,9 +1,8 @@
-import { Clock01Icon, RefreshIcon, SparklesIcon } from '@hugeicons/core-free-icons'
+import { Clock01Icon, SparklesIcon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Link } from 'react-router-dom'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { formatRelativeTime, getConnectionBadgeVariant } from '@/lib/format'
 import type { ConnectionState, DashboardProject, DashboardView } from '@/types/dashboard'
@@ -12,7 +11,6 @@ interface WorkspaceHeaderProps {
   connectionState: ConnectionState
   currentView: DashboardView
   lastSyncedAt: string | null
-  onRefresh: () => void | Promise<void>
   projectCount: number
   selectedProject: DashboardProject | null
 }
@@ -21,7 +19,6 @@ export function WorkspaceHeader({
   connectionState,
   currentView,
   lastSyncedAt,
-  onRefresh,
   projectCount,
   selectedProject,
 }: WorkspaceHeaderProps) {
@@ -61,28 +58,22 @@ export function WorkspaceHeader({
           </Tabs>
         </div>
 
-        <div className="flex flex-col gap-3 xl:items-end">
-          <div className="flex flex-wrap gap-2">
-            <Badge variant={getConnectionBadgeVariant(connectionState)}>
-              {connectionState === 'connected'
-                ? 'SSE 已连接'
-                : connectionState === 'reconnecting'
-                  ? 'SSE 重连中'
-                  : connectionState === 'error'
-                    ? 'SSE 失败'
-                    : 'SSE 连接中'}
-            </Badge>
-            <Badge variant="outline">{projectCount} Projects</Badge>
-            {selectedProject ? <Badge variant="outline">{selectedProject.name}</Badge> : null}
-            <Badge variant="outline">
-              <HugeiconsIcon icon={Clock01Icon} size={12} strokeWidth={1.8} />
-              {formatRelativeTime(lastSyncedAt)}
-            </Badge>
-          </div>
-          <Button onClick={() => void onRefresh()} variant="outline">
-            <HugeiconsIcon icon={RefreshIcon} size={16} strokeWidth={1.8} />
-            刷新快照
-          </Button>
+        <div className="flex flex-wrap gap-2 xl:justify-end">
+          <Badge variant={getConnectionBadgeVariant(connectionState)}>
+            {connectionState === 'connected'
+              ? 'SSE 已连接'
+              : connectionState === 'reconnecting'
+                ? 'SSE 重连中'
+                : connectionState === 'error'
+                  ? 'SSE 失败'
+                  : 'SSE 连接中'}
+          </Badge>
+          <Badge variant="outline">{projectCount} Projects</Badge>
+          {selectedProject ? <Badge variant="outline">{selectedProject.name}</Badge> : null}
+          <Badge variant="outline">
+            <HugeiconsIcon icon={Clock01Icon} size={12} strokeWidth={1.8} />
+            {formatRelativeTime(lastSyncedAt)}
+          </Badge>
         </div>
       </div>
     </header>
