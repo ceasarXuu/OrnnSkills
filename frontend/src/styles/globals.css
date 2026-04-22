@@ -99,19 +99,13 @@
 
 html {
   min-height: 100%;
-  background:
-    linear-gradient(180deg, rgba(7, 12, 18, 0.7), rgba(7, 12, 18, 0.98)),
-    hsl(var(--background));
+  background: hsl(var(--background));
 }
 
 body {
   margin: 0;
   min-height: 100svh;
-  background:
-    radial-gradient(circle at top left, rgba(72, 214, 255, 0.12), transparent 24%),
-    radial-gradient(circle at 78% 12%, rgba(234, 176, 80, 0.12), transparent 24%),
-    radial-gradient(circle at 40% 100%, rgba(107, 215, 136, 0.08), transparent 20%),
-    hsl(var(--background));
+  background: hsl(var(--background));
   color: hsl(var(--foreground));
   font-family: inherit;
   text-rendering: optimizeLegibility;

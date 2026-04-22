@@ -105,27 +105,27 @@ export function ActivityFeed({ isLoading, snapshot }: ActivityFeedProps) {
       </CardHeader>
       <CardContent className="space-y-4">
         {isLoading ? (
-          <div className="text-sm text-slate-300/70">正在同步活动事件…</div>
+          <div className="text-sm text-muted-foreground">正在同步活动事件...</div>
         ) : feed.length === 0 ? (
-          <div className="text-sm text-slate-300/70">当前项目还没有新的 trace 或决策事件。</div>
+          <div className="text-sm text-muted-foreground">当前项目还没有新的 trace 或决策事件。</div>
         ) : (
           feed.map((item) => {
             const Icon = getIcon(item.kind)
             return (
               <div
-                className="flex gap-4 rounded-3xl border border-white/6 bg-black/14 px-4 py-4"
+                className="flex gap-4 rounded-xl border border-border bg-muted/30 px-4 py-4"
                 key={`${item.kind}-${item.timestamp}-${item.title}`}
               >
-                <div className="mt-1 flex size-10 shrink-0 items-center justify-center rounded-2xl border border-white/8 bg-white/6">
-                  <Icon className="size-4 text-cyan-100" />
+                <div className="mt-1 flex size-10 shrink-0 items-center justify-center rounded-xl border border-border bg-background">
+                  <Icon className="size-4 text-primary" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="truncate text-sm font-medium text-white">{item.title}</p>
+                    <p className="truncate text-sm font-medium text-foreground">{item.title}</p>
                     <Badge variant={getTone(item.tone)}>{item.kind}</Badge>
                   </div>
-                  <p className="mt-2 text-sm leading-6 text-slate-300/72">{item.detail}</p>
-                  <div className="mt-3 flex items-center gap-2 text-xs text-slate-500">
+                  <p className="mt-2 text-sm leading-6 text-muted-foreground">{item.detail}</p>
+                  <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
                     <ArrowRightCircle className="size-3.5" />
                     <span>{formatRelativeTime(item.timestamp)}</span>
                   </div>

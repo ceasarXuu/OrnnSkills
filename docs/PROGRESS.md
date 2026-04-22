@@ -4,6 +4,9 @@
 
 ### 2026-04-22
 
+- ✅ 收口 preset 风格漂移：`b4NKaHect` 虽然已经把 `radix-vega` 主题变量落进项目，但业务层页面之前仍带着大量手写 `text-white / border-white / cyan / slate / radial-gradient` 类，实际视觉被私有配色重新覆盖；现已把工作台主层收回到 `background / card / muted / primary / border` 语义 token
+- 📝 记录 preset 对齐经验：shadcn preset 只会提供 token 和基础件，不会自动替你修正业务层的私有样式；如果页面继续堆硬编码颜色类，最终效果一定更像“套着 shadcn 按钮的自定义皮肤”，而不是 seed 本身。为避免再次漂移，已补 `dashboard-v2-preset-alignment` 测试约束主工作台不得再写这套私有配色词
+
 - ✅ 把 v2 preview 拆成真正的多视图工作台：`frontend/src/App.tsx` 不再直接承载全部状态和视图，现已拆成 `/v2/projects`、`/v2/skills`、`/v2/activity` 三个路由视图，并由独立的 `use-dashboard-workspace` 管理项目列表、快照缓存、SSE 刷新和手动刷新
 - ✅ 补齐第一批 shadcn 核心件并接入业务层：已通过 CLI 引入 `table / tabs / dialog`，技能列表改为 shadcn `Table`，主工作台导航改为 `Tabs`，技能详情入口改为 `Dialog`，不再继续在 v2 里手搓新的列表/切页/弹层基础件
 - ✅ 打通 `/v2/*` 前端路由的服务端回退：dashboard server 现在会把 `/v2/skills` 这类无扩展名子路径回退到 v2 `index.html`，刷新多视图路由不再 404

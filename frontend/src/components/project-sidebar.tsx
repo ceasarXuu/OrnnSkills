@@ -37,18 +37,17 @@ export function ProjectSidebar({
   const connection = getConnectionCopy(connectionState)
 
   return (
-    <aside className="relative overflow-hidden border-b border-white/8 bg-[#09101c] xl:border-b-0 xl:border-r xl:border-r-white/8">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(55,194,255,0.16),transparent_28%),linear-gradient(180deg,rgba(255,255,255,0.03),transparent_28%)]" />
-      <div className="relative flex h-full flex-col gap-6 px-5 py-6 sm:px-6">
+    <aside className="border-b border-border/70 bg-sidebar text-sidebar-foreground xl:border-r xl:border-b-0">
+      <div className="flex h-full flex-col gap-6 px-5 py-6 sm:px-6">
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="flex items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-2xl border border-cyan-200/20 bg-cyan-300/10 text-cyan-100">
+              <div className="flex size-10 items-center justify-center rounded-xl border border-border bg-card text-primary">
                 <Sparkles className="size-5" />
               </div>
               <div>
-                <p className="text-sm font-semibold text-white">OrnnSkills</p>
-                <p className="text-xs text-slate-300/72">独立 v2 入口</p>
+                <p className="text-sm font-semibold text-foreground">OrnnSkills</p>
+                <p className="text-xs text-muted-foreground">独立 v2 入口</p>
               </div>
             </div>
           </div>
@@ -62,28 +61,28 @@ export function ProjectSidebar({
           <Badge variant="secondary">{projects.length} Projects</Badge>
         </div>
 
-        <div className="rounded-3xl border border-white/8 bg-black/16 p-4">
-          <p className="text-[11px] font-medium uppercase tracking-[0.26em] text-slate-400">
+        <div className="rounded-xl border border-border bg-card p-4">
+          <p className="text-[11px] font-medium uppercase tracking-[0.26em] text-muted-foreground">
             Boundary
           </p>
-          <p className="mt-3 text-sm leading-6 text-slate-200/78">
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">
             新前端只消费现有 API 与 SSE，不复用旧 HTML 字符串、旧类名或旧样式层。
           </p>
         </div>
 
         <div className="flex-1 overflow-hidden">
           <div className="mb-3 flex items-center justify-between">
-            <p className="text-[11px] font-medium uppercase tracking-[0.26em] text-slate-400">
+            <p className="text-[11px] font-medium uppercase tracking-[0.26em] text-muted-foreground">
               Projects
             </p>
             {isLoading ? (
-              <span className="text-xs text-slate-500">loading</span>
+              <span className="text-xs text-muted-foreground">loading</span>
             ) : null}
           </div>
 
           <div className="space-y-3 overflow-y-auto pr-1">
             {projects.length === 0 ? (
-              <div className="rounded-3xl border border-dashed border-white/10 px-4 py-6 text-sm text-slate-300/70">
+              <div className="rounded-xl border border-dashed border-border px-4 py-6 text-sm text-muted-foreground">
                 还没有已注册项目。
               </div>
             ) : null}
@@ -94,10 +93,10 @@ export function ProjectSidebar({
               return (
                 <button
                   className={cn(
-                    'w-full rounded-3xl border px-4 py-4 text-left transition duration-200',
+                    'w-full rounded-xl border px-4 py-4 text-left transition-colors',
                     isActive
-                      ? 'border-cyan-300/26 bg-cyan-300/12 shadow-[0_18px_42px_rgba(59,196,255,0.16)]'
-                      : 'border-white/8 bg-white/4 hover:border-white/16 hover:bg-white/8',
+                      ? 'border-primary/30 bg-primary/10'
+                      : 'border-border bg-card hover:bg-muted/50',
                   )}
                   key={project.path}
                   onClick={() => onSelect(project.path)}
@@ -105,21 +104,21 @@ export function ProjectSidebar({
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-white">{project.name}</p>
-                      <p className="mt-1 truncate text-xs text-slate-300/60">{project.path}</p>
+                      <p className="truncate text-sm font-semibold text-foreground">{project.name}</p>
+                      <p className="mt-1 truncate text-xs text-muted-foreground">{project.path}</p>
                     </div>
                     {isPaused ? (
-                      <PauseCircle className="mt-0.5 size-4 shrink-0 text-amber-200" />
+                      <PauseCircle className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                     ) : (
                       <Circle
                         className={cn(
                           'mt-0.5 size-4 shrink-0',
-                          project.isRunning ? 'fill-emerald-300 text-emerald-300' : 'text-slate-600',
+                          project.isRunning ? 'fill-primary text-primary' : 'text-muted-foreground',
                         )}
                       />
                     )}
                   </div>
-                  <div className="mt-4 flex items-center justify-between text-xs text-slate-300/70">
+                  <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
                     <span>{project.skillCount ?? 0} skills</span>
                     <span>{isPaused ? 'Paused' : project.isRunning ? 'Running' : 'Idle'}</span>
                   </div>

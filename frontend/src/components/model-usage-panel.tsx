@@ -27,52 +27,52 @@ export function ModelUsagePanel({ isLoading, snapshot }: ModelUsagePanelProps) {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
-          <div className="rounded-3xl border border-white/6 bg-black/14 p-4">
-            <div className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-slate-400">
-              <Bot className="size-3.5" />
+          <div className="rounded-xl border border-border bg-muted/35 p-4">
+            <div className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-muted-foreground">
+              <Bot className="size-3.5 text-primary" />
               Calls
             </div>
-            <p className="mt-3 text-2xl font-semibold text-white">
+            <p className="mt-3 text-2xl font-semibold text-foreground">
               {formatCompactNumber(snapshot?.agentUsage?.callCount ?? 0)}
             </p>
           </div>
-          <div className="rounded-3xl border border-white/6 bg-black/14 p-4">
-            <div className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-slate-400">
-              <Gauge className="size-3.5" />
+          <div className="rounded-xl border border-border bg-muted/35 p-4">
+            <div className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-muted-foreground">
+              <Gauge className="size-3.5 text-primary" />
               Tokens
             </div>
-            <p className="mt-3 text-2xl font-semibold text-white">
+            <p className="mt-3 text-2xl font-semibold text-foreground">
               {formatCompactNumber(snapshot?.agentUsage?.totalTokens ?? 0)}
             </p>
           </div>
-          <div className="rounded-3xl border border-white/6 bg-black/14 p-4">
-            <div className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-slate-400">
-              <Timer className="size-3.5" />
+          <div className="rounded-xl border border-border bg-muted/35 p-4">
+            <div className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-muted-foreground">
+              <Timer className="size-3.5 text-primary" />
               Avg
             </div>
-            <p className="mt-3 text-2xl font-semibold text-white">
+            <p className="mt-3 text-2xl font-semibold text-foreground">
               {formatDuration(snapshot?.agentUsage?.avgDurationMs)}
             </p>
           </div>
         </div>
 
         {isLoading ? (
-          <div className="text-sm text-slate-300/70">正在拉取模型 usage…</div>
+          <div className="text-sm text-muted-foreground">正在拉取模型 usage...</div>
         ) : modelEntries.length === 0 ? (
-          <div className="text-sm text-slate-300/70">当前项目还没有模型使用记录。</div>
+          <div className="text-sm text-muted-foreground">当前项目还没有模型使用记录。</div>
         ) : (
           <div className="space-y-3">
             {modelEntries.map(([modelName, bucket]) => (
               <div
-                className="rounded-3xl border border-white/6 bg-white/4 px-4 py-4"
+                className="rounded-xl border border-border bg-muted/20 px-4 py-4"
                 key={modelName}
               >
-                <p className="truncate text-sm font-medium text-white">{modelName}</p>
-                <div className="mt-3 flex items-center justify-between gap-3 text-xs text-slate-300/70">
+                <p className="truncate text-sm font-medium text-foreground">{modelName}</p>
+                <div className="mt-3 flex items-center justify-between gap-3 text-xs text-muted-foreground">
                   <span>{formatCompactNumber(bucket.callCount ?? 0)} calls</span>
                   <span>{formatCompactNumber(bucket.totalTokens ?? 0)} tokens</span>
                 </div>
-                <div className="mt-2 flex items-center justify-between gap-3 text-xs text-slate-500">
+                <div className="mt-2 flex items-center justify-between gap-3 text-xs text-muted-foreground">
                   <span>{formatDuration(bucket.avgDurationMs)}</span>
                   <span>{formatRelativeTime(bucket.lastCallAt ?? undefined)}</span>
                 </div>
