@@ -14,6 +14,8 @@
   - 只复用 API / SSE 契约，不复用 `frontend/` 里的业务 UI 文件
 - `v3` 当前信息架构规则：
   - `skills` 页首屏必须先进入 `技能工作台`，不允许再把项目 hero / metric cards 放在技能表之前
+  - `skills` 页必须保持稳定框架：`sticky header -> hero band -> scope/table/insight grid`
+  - `skills` 页的分页、滚动、搜索和行选择必须收敛在中心 table workbench 内，不再散落到多个碎片卡片
   - `projects` 页才承载项目摘要、daemon 状态和 summary-heavy chrome
   - `activity` 页聚焦 trace / decision event，不复用项目总览 chrome
   - `config` 页必须作为一级工作区长期保留，不能再因为布局清理被隐式并回默认视图

@@ -9,7 +9,6 @@ describe('dashboard v3 view layout rules', () => {
       showProjectRail: false,
       showHero: false,
       showMetrics: false,
-      showProjectScopeBar: true,
     });
   });
 
@@ -18,7 +17,6 @@ describe('dashboard v3 view layout rules', () => {
       showProjectRail: true,
       showHero: true,
       showMetrics: true,
-      showProjectScopeBar: false,
     });
   });
 
@@ -27,7 +25,6 @@ describe('dashboard v3 view layout rules', () => {
       showProjectRail: true,
       showHero: false,
       showMetrics: false,
-      showProjectScopeBar: false,
     });
   });
 

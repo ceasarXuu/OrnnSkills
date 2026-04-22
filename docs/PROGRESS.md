@@ -4,6 +4,11 @@
 
 ### 2026-04-23
 
+- ✅ 重做 v3 技能页框架层：`/v3/skills` 已从“多张大卡竖堆”改成 `sticky workspace header + hero band + scope / table / insight` 的稳定工作台结构；header 现在只负责全局导航和运行状态，页面标题与主视觉已下沉到独立 hero
+- ✅ 补齐技能页页面级交互底板：技能表已接入受控分页、内滚动容器和统一 footer；全局滚动条也已按暗色主题收口，不再依赖浏览器默认样式
+- 📝 记录前端经验：用了 shadcn 组件，不等于页面就自动符合 shadcn 的组织原则。真正决定观感的是页面级骨架是否稳定，例如 header 是否只做全局层、hero 是否独立、内容区是否有固定网格、分页和滚动是否收在主表面里
+- 📝 记录响应式经验：技能工作台在 `xl` 就必须形成至少两栏结构，不能等到 `2xl` 才建立 scope + main 的页面骨架，否则 1280 一类常见桌面宽度仍会退化成纵向卡片堆栈
+
 - ✅ 恢复 v3 的一级 `配置` 工作区：`/v3/config` 已重新回到顶层导航，`config` 现在和 `技能 / 项目 / 活动` 一样是显式一级视图，不再通过默认 fallback 间接兜底
 - ✅ 接回真实配置工作台：v3 已补齐 `GET/POST /api/config`、`/api/providers/catalog`、`/api/provider-health`、`/api/config/providers/connectivity` 的前端 client 和独立状态层；当前可直接查看 provider stack、默认 provider、LLM safety、prompt source/override，并保存配置
 - ✅ 补齐 shadcn 表单基件：v3 新增 `select / switch / textarea / label / alert`，配置页继续沿用 `Card / Button / Badge / Tabs / Input` 组合，不再为表单场景手写私有控件

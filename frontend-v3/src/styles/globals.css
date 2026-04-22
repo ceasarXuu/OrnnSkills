@@ -121,10 +121,27 @@
   * {
     @apply border-border outline-ring/50;
     }
+  html {
+    @apply font-sans antialiased;
+    scrollbar-gutter: stable;
+    }
   body {
     @apply bg-background text-foreground;
+    min-height: 100vh;
     }
-  html {
-    @apply font-sans;
+  body::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+    }
+  body::-webkit-scrollbar-track {
+    background: color-mix(in oklab, var(--background) 92%, black 8%);
+    }
+  body::-webkit-scrollbar-thumb {
+    background: color-mix(in oklab, var(--muted-foreground) 32%, transparent);
+    border: 3px solid color-mix(in oklab, var(--background) 92%, black 8%);
+    border-radius: 999px;
+    }
+  body::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in oklab, var(--primary) 42%, var(--muted-foreground) 24%);
     }
 }

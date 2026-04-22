@@ -6,10 +6,9 @@ import { DashboardHero } from '@/components/dashboard-hero'
 import { InsightStack } from '@/components/insight-stack'
 import { MetricGrid } from '@/components/metric-grid'
 import { ProjectRail } from '@/components/project-rail'
-import { ProjectScopeBar } from '@/components/project-scope-bar'
 import { ProjectStatusPanel } from '@/components/project-status-panel'
 import { SkillDetailDialog } from '@/components/skill-detail-dialog'
-import { SkillsTable } from '@/components/skills-table'
+import { SkillsWorkspace } from '@/components/skills-workspace'
 import { WorkspaceHeader } from '@/components/workspace-header'
 import { useDashboardV3Workspace } from '@/features/dashboard/use-dashboard-v3-workspace'
 import { logDashboardV3Event } from '@/lib/dashboard-api'
@@ -100,28 +99,22 @@ function DashboardWorkspacePage() {
 
   return (
     <div className="dark min-h-screen bg-background text-foreground">
-      <div className="mx-auto max-w-[1680px] space-y-6 px-4 py-4 xl:px-6">
-        <WorkspaceHeader
-          connectionState={connectionState}
-          currentView={currentView}
-          lastSyncedAt={lastSyncedAt}
-          onRefresh={() => refreshWorkspace('manual')}
-          projectCount={projects.length}
-          selectedProject={selectedProject}
-        />
+      <div className="pointer-events-none fixed inset-0 -z-10 bg-[linear-gradient(180deg,color-mix(in_oklab,var(--background)_96%,transparent),color-mix(in_oklab,var(--background)_100%,transparent)),linear-gradient(0deg,color-mix(in_oklab,var(--foreground)_4%,transparent)_1px,transparent_1px),linear-gradient(90deg,color-mix(in_oklab,var(--foreground)_3%,transparent)_1px,transparent_1px)] bg-[size:auto,32px_32px,32px_32px]" />
 
+      <WorkspaceHeader
+        connectionState={connectionState}
+        currentView={currentView}
+        lastSyncedAt={lastSyncedAt}
+        onRefresh={() => refreshWorkspace('manual')}
+        projectCount={projects.length}
+        selectedProject={selectedProject}
+      />
+
+      <main className="mx-auto max-w-[1680px] space-y-8 px-4 py-8 xl:px-6">
         {loadError ? (
-          <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          <div className="rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             {loadError}
           </div>
-        ) : null}
-
-        {layout.showProjectScopeBar ? (
-          <ProjectScopeBar
-            onSelect={selectProject}
-            projects={projects}
-            selectedProjectId={selectedProjectId}
-          />
         ) : null}
 
         {layout.showProjectRail ? (
@@ -132,38 +125,44 @@ function DashboardWorkspacePage() {
               projects={projects}
               selectedProjectId={selectedProjectId}
             />
-            <main className="space-y-6">
+            <div className="space-y-6">
               <ViewContent
                 currentView={currentView}
                 filteredSkills={filteredSkills}
                 isLoadingSnapshot={isLoadingSnapshot}
                 layout={layout}
                 onQueryChange={setQuery}
+                onSelectProject={selectProject}
                 onSelectSkill={setSelectedSkill}
                 project={selectedProject}
+                projects={projects}
                 query={query}
+                selectedProjectId={selectedProjectId}
                 selectedSkillKey={selectedSkillKey}
                 snapshot={selectedSnapshot}
               />
-            </main>
+            </div>
           </div>
         ) : (
-          <main className="space-y-6">
+          <div className="space-y-6">
             <ViewContent
               currentView={currentView}
               filteredSkills={filteredSkills}
               isLoadingSnapshot={isLoadingSnapshot}
               layout={layout}
               onQueryChange={setQuery}
+              onSelectProject={selectProject}
               onSelectSkill={setSelectedSkill}
               project={selectedProject}
+              projects={projects}
               query={query}
+              selectedProjectId={selectedProjectId}
               selectedSkillKey={selectedSkillKey}
               snapshot={selectedSnapshot}
             />
-          </main>
+          </div>
         )}
-      </div>
+      </main>
 
       <SkillDetailDialog
         onOpenChange={(open) => {
@@ -184,9 +183,12 @@ interface ViewContentProps {
   isLoadingSnapshot: boolean
   layout: ReturnType<typeof resolveDashboardViewLayout>
   onQueryChange: (value: string) => void
+  onSelectProject: (projectPath: string) => void
   onSelectSkill: (skill: DashboardSkill) => void
   project: DashboardProject | null
+  projects: DashboardProject[]
   query: string
+  selectedProjectId: string
   selectedSkillKey: string
   snapshot: ProjectSnapshot | null
 }
@@ -197,9 +199,12 @@ function ViewContent({
   isLoadingSnapshot,
   layout,
   onQueryChange,
+  onSelectProject,
   onSelectSkill,
   project,
+  projects,
   query,
+  selectedProjectId,
   selectedSkillKey,
   snapshot,
 }: ViewContentProps) {
@@ -223,17 +228,19 @@ function ViewContent({
       ) : null}
 
       {currentView === 'skills' ? (
-        <div className="grid gap-6 2xl:grid-cols-[minmax(0,1.5fr)_360px]">
-          <SkillsTable
-            isLoading={isLoadingSnapshot}
-            onQueryChange={onQueryChange}
-            onSelectSkill={onSelectSkill}
-            query={query}
-            selectedSkillKey={selectedSkillKey}
-            skills={filteredSkills}
-          />
-          <InsightStack snapshot={snapshot} />
-        </div>
+        <SkillsWorkspace
+          filteredSkills={filteredSkills}
+          isLoading={isLoadingSnapshot}
+          onQueryChange={onQueryChange}
+          onSelectProject={onSelectProject}
+          onSelectSkill={onSelectSkill}
+          projects={projects}
+          query={query}
+          selectedProject={project}
+          selectedProjectId={selectedProjectId}
+          selectedSkillKey={selectedSkillKey}
+          snapshot={snapshot}
+        />
       ) : null}
 
       {currentView === 'projects' ? (
