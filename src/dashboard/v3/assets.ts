@@ -1,10 +1,18 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { extname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { getDashboardHtml } from '../ui.js';
+import type { Language } from '../i18n.js';
 
 interface DashboardV3DocumentResponse {
   body: string;
   hasBuild: boolean;
+}
+
+interface DashboardV3DocumentOptions {
+  buildId?: string;
+  lang?: Language;
+  requestPath?: string;
 }
 
 interface DashboardV3StaticAsset {
@@ -67,49 +75,47 @@ function getContentType(filePath: string): string {
   }
 }
 
-function getFallbackHtml(): string {
-  return [
-    '<!DOCTYPE html>',
-    '<html lang="zh-CN">',
-    '<head>',
-    '<meta charset="UTF-8"/>',
-    '<meta name="viewport" content="width=device-width, initial-scale=1.0"/>',
-    '<title>OrnnSkills Dashboard V3</title>',
-    '<style>',
-    ':root{color-scheme:dark;}',
-    'body{margin:0;min-height:100vh;display:grid;place-items:center;background:#272822;color:#f7f8f2;font-family:"DM Sans",system-ui,sans-serif;}',
-    '.panel{width:min(720px,calc(100vw - 32px));border:1px solid rgba(255,255,255,.1);border-radius:20px;background:rgba(255,255,255,.04);padding:32px;box-shadow:0 24px 80px rgba(0,0,0,.28);}',
-    '.eyebrow{font-size:11px;letter-spacing:.28em;text-transform:uppercase;color:rgba(247,248,242,.6);}',
-    'h1{margin:14px 0 10px;font-size:34px;line-height:1.05;font-weight:600;}',
-    'p{margin:0 0 12px;color:rgba(247,248,242,.72);line-height:1.7;}',
-    'code{padding:3px 8px;border-radius:999px;background:rgba(13,122,53,.22);color:#f7f8f2;}',
-    'a{color:#92e1a4;text-decoration:none;}',
-    '</style>',
-    '</head>',
-    '<body>',
-    '<div class="panel">',
-    '<div class="eyebrow">Dashboard V3</div>',
-    '<h1>Preview build is not available yet.</h1>',
-    '<p>独立隔离的 V3 前端入口已经接好，但静态 bundle 还没有构建出来。</p>',
-    '<p>先执行 <code>npm run build:dashboard-v3</code> 或 <code>npm run build</code>，然后刷新 <a href="/v3">/v3</a>。</p>',
-    '</div>',
-    '</body>',
-    '</html>',
-  ].join('');
-}
-
-export function getDashboardV3DocumentResponse(): DashboardV3DocumentResponse {
-  const distRoot = getDashboardV3DistRoot();
-  const indexPath = resolve(distRoot, 'index.html');
-  if (!existsSync(indexPath)) {
-    return {
-      body: getFallbackHtml(),
-      hasBuild: false,
-    };
+function resolveDashboardV3RequestedMainTab(
+  requestPath: string,
+): 'skills' | 'project' | 'config' {
+  if (
+    requestPath === '/v3/config' ||
+    requestPath === '/v3/config/'
+  ) {
+    return 'config';
   }
 
+  if (
+    requestPath === '/v3/project' ||
+    requestPath === '/v3/project/' ||
+    requestPath === '/v3/projects' ||
+    requestPath === '/v3/projects/' ||
+    requestPath === '/v3/activity' ||
+    requestPath === '/v3/activity/' ||
+    requestPath === '/v3/overview' ||
+    requestPath === '/v3/overview/' ||
+    requestPath === '/v3/cost' ||
+    requestPath === '/v3/cost/' ||
+    requestPath === '/v3/logs' ||
+    requestPath === '/v3/logs/'
+  ) {
+    return 'project';
+  }
+
+  return 'skills';
+}
+
+export function getDashboardV3DocumentResponse(
+  options: DashboardV3DocumentOptions = {},
+): DashboardV3DocumentResponse {
+  const requestPath = options.requestPath || '/v3/skills';
+  const lang = options.lang || 'en';
+  const buildId = options.buildId || 'dev';
+
   return {
-    body: readFileSync(indexPath, 'utf-8'),
+    body: getDashboardHtml(0, lang, buildId, {
+      requestedMainTab: resolveDashboardV3RequestedMainTab(requestPath),
+    }),
     hasBuild: true,
   };
 }
