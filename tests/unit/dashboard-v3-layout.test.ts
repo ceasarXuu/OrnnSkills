@@ -14,8 +14,8 @@ describe('dashboard v3 view layout rules', () => {
   it('uses the singular project view for summary-heavy chrome', () => {
     expect(resolveDashboardViewLayout('project')).toEqual({
       showProjectRail: true,
-      showHero: true,
-      showMetrics: true,
+      showHero: false,
+      showMetrics: false,
     });
   });
 

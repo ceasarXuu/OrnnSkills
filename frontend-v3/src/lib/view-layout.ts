@@ -17,8 +17,8 @@ export function resolveDashboardViewLayout(view: DashboardView): DashboardViewLa
     case 'project':
       return {
         showProjectRail: true,
-        showHero: true,
-        showMetrics: true,
+        showHero: false,
+        showMetrics: false,
       }
     case 'config':
       return {

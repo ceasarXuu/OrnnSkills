@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom'
 import { ConfigWorkspace } from '@/components/config-workspace'
-import { DashboardHero } from '@/components/dashboard-hero'
-import { MetricGrid } from '@/components/metric-grid'
 import { ProjectRail } from '@/components/project-rail'
 import { ProjectWorkbench } from '@/components/project-workbench'
 import { SkillDetailDialog } from '@/components/skill-detail-dialog'
@@ -55,7 +53,6 @@ function DashboardWorkspacePage() {
     loadError,
     projects,
     selectProject,
-    selectedProject,
     selectedProjectId,
     selectedSnapshot,
   } = useDashboardV3Workspace()
@@ -120,11 +117,9 @@ function DashboardWorkspacePage() {
                 currentView={currentView}
                 filteredSkills={filteredSkills}
                 isLoadingSnapshot={isLoadingSnapshot}
-                layout={layout}
                 onQueryChange={setQuery}
                 onSelectProject={selectProject}
                 onSelectSkill={setSelectedSkill}
-                project={selectedProject}
                 projects={projects}
                 query={query}
                 selectedProjectId={selectedProjectId}
@@ -139,11 +134,9 @@ function DashboardWorkspacePage() {
               currentView={currentView}
               filteredSkills={filteredSkills}
               isLoadingSnapshot={isLoadingSnapshot}
-              layout={layout}
               onQueryChange={setQuery}
               onSelectProject={selectProject}
               onSelectSkill={setSelectedSkill}
-              project={selectedProject}
               projects={projects}
               query={query}
               selectedProjectId={selectedProjectId}
@@ -171,11 +164,9 @@ interface ViewContentProps {
   currentView: DashboardView
   filteredSkills: DashboardSkill[]
   isLoadingSnapshot: boolean
-  layout: ReturnType<typeof resolveDashboardViewLayout>
   onQueryChange: (value: string) => void
   onSelectProject: (projectPath: string) => void
   onSelectSkill: (skill: DashboardSkill) => void
-  project: DashboardProject | null
   projects: DashboardProject[]
   query: string
   selectedProjectId: string
@@ -187,11 +178,9 @@ function ViewContent({
   currentView,
   filteredSkills,
   isLoadingSnapshot,
-  layout,
   onQueryChange,
   onSelectProject,
   onSelectSkill,
-  project,
   projects,
   query,
   selectedProjectId,
@@ -200,22 +189,6 @@ function ViewContent({
 }: ViewContentProps) {
   return (
     <>
-      {layout.showHero ? (
-        <DashboardHero
-          isLoading={isLoadingSnapshot}
-          project={project}
-          snapshot={snapshot}
-        />
-      ) : null}
-
-      {layout.showMetrics ? (
-        <MetricGrid
-          isLoading={isLoadingSnapshot}
-          project={project}
-          snapshot={snapshot}
-        />
-      ) : null}
-
       {currentView === 'skills' ? (
         <SkillsWorkspace
           onSelectProject={onSelectProject}
@@ -229,7 +202,6 @@ function ViewContent({
           isLoading={isLoadingSnapshot}
           onQueryChange={onQueryChange}
           onSelectSkill={onSelectSkill}
-          project={project}
           query={query}
           selectedSkillKey={selectedSkillKey}
           skills={filteredSkills}

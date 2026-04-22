@@ -18,20 +18,16 @@ const sources = {
     new URL('../../frontend-v3/src/components/config-workspace.tsx', import.meta.url),
     'utf8',
   ),
-  dashboardHero: readFileSync(
-    new URL('../../frontend-v3/src/components/dashboard-hero.tsx', import.meta.url),
-    'utf8',
-  ),
-  insightStack: readFileSync(
-    new URL('../../frontend-v3/src/components/insight-stack.tsx', import.meta.url),
-    'utf8',
-  ),
   projectRail: readFileSync(
     new URL('../../frontend-v3/src/components/project-rail.tsx', import.meta.url),
     'utf8',
   ),
-  projectStatusPanel: readFileSync(
-    new URL('../../frontend-v3/src/components/project-status-panel.tsx', import.meta.url),
+  projectWorkbench: readFileSync(
+    new URL('../../frontend-v3/src/components/project-workbench.tsx', import.meta.url),
+    'utf8',
+  ),
+  workspaceApp: readFileSync(
+    new URL('../../frontend-v3/src/App.tsx', import.meta.url),
     'utf8',
   ),
 }
