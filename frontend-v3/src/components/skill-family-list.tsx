@@ -4,25 +4,15 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatCompactNumber, formatRelativeTime } from '@/lib/format'
-import type { DashboardProject, DashboardSkillFamily } from '@/types/dashboard'
+import type { DashboardSkillFamily } from '@/types/dashboard'
 
 interface SkillFamilyListProps {
   families: DashboardSkillFamily[]
   isLoading: boolean
-  onPreferredProjectChange: (projectPath: string) => void
   onQueryChange: (value: string) => void
   onSelectFamily: (familyId: string) => void
-  preferredProjectPath: string
-  projects: DashboardProject[]
   query: string
   selectedFamilyId: string
 }
@@ -30,11 +20,8 @@ interface SkillFamilyListProps {
 export function SkillFamilyList({
   families,
   isLoading,
-  onPreferredProjectChange,
   onQueryChange,
   onSelectFamily,
-  preferredProjectPath,
-  projects,
   query,
   selectedFamilyId,
 }: SkillFamilyListProps) {
@@ -48,38 +35,20 @@ export function SkillFamilyList({
           </div>
         </div>
 
-        <div className="grid gap-3">
-          <label className="relative block">
-            <HugeiconsIcon
-              className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted-foreground"
-              icon={Search01Icon}
-              size={16}
-              strokeWidth={1.8}
-            />
-            <Input
-              className="h-10 rounded-xl border-border/80 bg-background/60 pl-10"
-              onChange={(event) => onQueryChange(event.target.value)}
-              placeholder="搜索 family / runtime / status"
-              value={query}
-            />
-          </label>
-
-          <Select
-            onValueChange={onPreferredProjectChange}
-            value={preferredProjectPath || undefined}
-          >
-            <SelectTrigger className="w-full rounded-xl">
-              <SelectValue placeholder="选择优先项目" />
-            </SelectTrigger>
-            <SelectContent>
-              {projects.map((project) => (
-                <SelectItem key={project.path} value={project.path}>
-                  {project.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        <label className="relative block">
+          <HugeiconsIcon
+            className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted-foreground"
+            icon={Search01Icon}
+            size={16}
+            strokeWidth={1.8}
+          />
+          <Input
+            className="h-10 rounded-xl border-border/80 bg-background/60 pl-10"
+            onChange={(event) => onQueryChange(event.target.value)}
+            placeholder="搜索 family / runtime / status"
+            value={query}
+          />
+        </label>
       </CardHeader>
 
       <CardContent className="px-0">

@@ -22,11 +22,8 @@ export function SkillsWorkspace({
         <SkillFamilyList
           families={skillLibrary.families}
           isLoading={skillLibrary.isLoadingFamilies}
-          onPreferredProjectChange={onSelectProject}
           onQueryChange={skillLibrary.setQuery}
           onSelectFamily={skillLibrary.selectFamily}
-          preferredProjectPath={selectedProjectId}
-          projects={projects}
           query={skillLibrary.query}
           selectedFamilyId={skillLibrary.selectedFamilyId}
         />
@@ -47,12 +44,15 @@ export function SkillsWorkspace({
           onApplyToFamily={skillLibrary.applyToFamily}
           onDraftChange={skillLibrary.setDraftContent}
           onLoadApplyPreview={skillLibrary.loadApplyPreview}
+          onPreferredProjectChange={onSelectProject}
           onSelectInstance={skillLibrary.selectInstance}
           onSelectVersion={skillLibrary.loadVersion}
           onSave={skillLibrary.save}
           onSwitchRuntime={skillLibrary.switchRuntime}
           onToggleVersionDisabled={skillLibrary.toggleVersionDisabled}
+          preferredProjectPath={selectedProjectId}
           preferredRuntime={skillLibrary.preferredRuntime}
+          projects={projects}
           selectedInstance={skillLibrary.selectedInstance}
           selectedVersion={skillLibrary.selectedVersion}
           versionMetadataByNumber={skillLibrary.versionMetadataByNumber}

@@ -26,6 +26,7 @@ import type {
   DashboardSkillFamily,
   DashboardSkillInstance,
   DashboardSkillVersionMetadata,
+  DashboardProject,
   SkillDomainRuntime,
 } from '@/types/dashboard'
 
@@ -43,12 +44,15 @@ interface SkillFamilyDetailProps {
   onApplyToFamily: () => void
   onDraftChange: (value: string) => void
   onLoadApplyPreview: () => void
+  onPreferredProjectChange: (projectPath: string) => void
   onSelectInstance: (instanceId: string) => void
   onSelectVersion: (version: number) => void
   onSave: () => void
   onSwitchRuntime: (runtime: SkillDomainRuntime) => void
   onToggleVersionDisabled: (version: number, disabled: boolean) => void
+  preferredProjectPath: string
   preferredRuntime: SkillDomainRuntime
+  projects: DashboardProject[]
   selectedInstance: DashboardSkillInstance | null
   selectedVersion: number | null
   versionMetadataByNumber: Record<number, DashboardSkillVersionMetadata>
@@ -68,12 +72,15 @@ export function SkillFamilyDetail({
   onApplyToFamily,
   onDraftChange,
   onLoadApplyPreview,
+  onPreferredProjectChange,
   onSelectInstance,
   onSelectVersion,
   onSave,
   onSwitchRuntime,
   onToggleVersionDisabled,
+  preferredProjectPath,
   preferredRuntime,
+  projects,
   selectedInstance,
   selectedVersion,
   versionMetadataByNumber,
@@ -85,6 +92,19 @@ export function SkillFamilyDetail({
   if (!family) {
     return (
       <Card className="border-border/70">
+        <CardHeader className="gap-4 border-b border-border/70">
+          <div className="flex w-full justify-end">
+            <DetailSelectors
+              onPreferredProjectChange={onPreferredProjectChange}
+              onSwitchRuntime={onSwitchRuntime}
+              preferredProjectPath={preferredProjectPath}
+              preferredRuntime={preferredRuntime}
+              projects={projects}
+              runtimeOptions={[preferredRuntime]}
+              selectedRuntime={preferredRuntime}
+            />
+          </div>
+        </CardHeader>
         <CardContent className="py-20 text-center text-sm text-muted-foreground">
           先从左侧选择一个 skill family。
         </CardContent>
@@ -112,22 +132,16 @@ export function SkillFamilyDetail({
               </div>
             </div>
 
-            <div className="flex w-full flex-col gap-3 xl:max-w-[280px]">
-              <Select
-                onValueChange={(value) => onSwitchRuntime(value as SkillDomainRuntime)}
-                value={selectedInstance?.runtime ?? preferredRuntime}
-              >
-                <SelectTrigger className="w-full rounded-xl">
-                  <SelectValue placeholder="切换 runtime" />
-                </SelectTrigger>
-                <SelectContent>
-                  {runtimeOptions.map((runtime) => (
-                    <SelectItem key={runtime} value={runtime}>
-                      {runtime}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="flex w-full flex-col gap-3 xl:max-w-[560px]">
+              <DetailSelectors
+                onPreferredProjectChange={onPreferredProjectChange}
+                onSwitchRuntime={onSwitchRuntime}
+                preferredProjectPath={preferredProjectPath}
+                preferredRuntime={preferredRuntime}
+                projects={projects}
+                runtimeOptions={runtimeOptions}
+                selectedRuntime={selectedInstance?.runtime ?? preferredRuntime}
+              />
               <div className="text-sm text-muted-foreground">
                 最近调用 {formatRelativeTime(family.usage.lastUsedAt ?? family.lastUsedAt)}
               </div>
@@ -303,6 +317,57 @@ export function SkillFamilyDetail({
           </CardContent>
         </Card>
       </div>
+    </div>
+  )
+}
+
+function DetailSelectors({
+  onPreferredProjectChange,
+  onSwitchRuntime,
+  preferredProjectPath,
+  preferredRuntime,
+  projects,
+  runtimeOptions,
+  selectedRuntime,
+}: {
+  onPreferredProjectChange: (projectPath: string) => void
+  onSwitchRuntime: (runtime: SkillDomainRuntime) => void
+  preferredProjectPath: string
+  preferredRuntime: SkillDomainRuntime
+  projects: DashboardProject[]
+  runtimeOptions: SkillDomainRuntime[]
+  selectedRuntime: SkillDomainRuntime
+}) {
+  return (
+    <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_200px]">
+      <Select onValueChange={onPreferredProjectChange} value={preferredProjectPath || undefined}>
+        <SelectTrigger className="w-full rounded-xl">
+          <SelectValue placeholder="选择优先项目" />
+        </SelectTrigger>
+        <SelectContent>
+          {projects.map((project) => (
+            <SelectItem key={project.path} value={project.path}>
+              {project.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      <Select
+        onValueChange={(value) => onSwitchRuntime(value as SkillDomainRuntime)}
+        value={selectedRuntime ?? preferredRuntime}
+      >
+        <SelectTrigger className="w-full rounded-xl">
+          <SelectValue placeholder="切换 runtime" />
+        </SelectTrigger>
+        <SelectContent>
+          {runtimeOptions.map((runtime) => (
+            <SelectItem key={runtime} value={runtime}>
+              {runtime}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   )
 }
