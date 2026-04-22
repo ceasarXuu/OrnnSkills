@@ -49,7 +49,6 @@ import {
 import {
   getDashboardV3DocumentResponse,
   isDashboardV3DocumentRequest,
-  resolveDashboardV3StaticAsset,
 } from './v3/assets.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -382,23 +381,6 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
           }
           res.end(document.body);
           return;
-        }
-
-        if (path.startsWith('/v3/') && (method === 'GET' || method === 'HEAD')) {
-          const asset = resolveDashboardV3StaticAsset(path);
-          if (asset) {
-            res.writeHead(200, {
-              'Content-Type': asset.contentType,
-              'Cache-Control': asset.cacheControl,
-              'X-Dashboard-Build': buildId,
-            });
-            if (method === 'HEAD') {
-              res.end();
-              return;
-            }
-            res.end(asset.body);
-            return;
-          }
         }
 
         if (

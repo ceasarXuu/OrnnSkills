@@ -1,5 +1,7 @@
 # V1 vs V3 Dashboard Gap Audit
 
+Status note: this audit targets the now-retired `frontend-v3/` React rewrite attempt. Current runtime `/v3` has already been pulled back to the real v1 dashboard shell for strict parity, so the findings below are historical evidence for why that rollback was necessary.
+
 Purpose: extract the real V1 dashboard contract from code, then compare it against the current V3 implementation.
 
 Scope of truth:
@@ -405,4 +407,3 @@ The next step should be:
 - change V3 route contract from `skills/projects/activity/config` to `skills/project/config`
 - add family/instance/revision types and API clients first
 - then rebuild the `skills` workspace from V1 behavior upward
-

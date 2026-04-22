@@ -5,10 +5,11 @@
 ### 2026-04-23
 
 - ✅ 将 `/v3` 收回到 v1 兼容壳：当前 `/v3/skills`、`/v3/project`、`/v3/config` 不再渲染 `frontend-v3` 的 React 页面，而是直接复用 v1 dashboard app shell 与同一套工作区模块；这样 v1 已有的主路径、交互模块、文案与 modal 行为不会再在 v3 丢失
-- ✅ 用 bootstrap 显式绑定 v3 路由到 v1 主标签：`/v3/skills -> skills`、`/v3/project|projects|activity|overview|cost|logs -> project`、`/v3/config -> config`；同时补了测试，锁死 `/v3` 必须输出真实 workspace shell，而不是 `frontend-v3` 的 `<div id="root">`
+- ✅ 用 bootstrap 显式绑定 v3 路由到 v1 主标签：`/v3/skills -> skills`、`/v3/project -> project`、`/v3/config -> config`；同时补了测试，锁死 `/v3` 必须输出真实 workspace shell，而不是 `frontend-v3` 的 `<div id="root">`
+- ✅ 继续收紧 v3 兼容面：`/v3/assets/*` 已完全退役并返回 `404`，根构建脚本也不再编译 `frontend-v3`；当前 `/v3` 只保留与 v1 一致的三条可见入口，不再保留独立前端产物链
 - 📝 记录回退经验：在功能契约尚未被 React 新壳完整承接之前，继续让 `/v3` 偏离 v1 只会持续制造“缺功能+多废话”的双重回归。先把 `/v3` 对齐到 v1 真正可工作的主壳，才能在后续重构里逐块抽离并保持 parity
 
-- ✅ 纠正 v3 顶层路由契约：`frontend-v3` 已从错误的 `skills / projects / activity / config` 收回到与 v1 对齐的 `skills / project / config`；旧 `/v3/projects`、`/v3/activity` 现在都由前端路由兼容回退到 `/v3/project`
+- ✅ 纠正 v3 顶层路由契约：`frontend-v3` 试验壳已经退出主运行链，当前运行中的 `/v3` 只保留与 v1 对齐的 `skills / project / config`；旧 `/v3/projects`、`/v3/activity` 等非 v1 入口现在直接 `404`
 - ✅ 重建 v3 的技能页主模型：`/v3/skills` 已不再消费 `selectedProject.snapshot.skills[]`，而是改走 `Skill Family -> Skill Instance -> Skill Revision` 数据链；v3 前端现已补齐 `/api/skills/families`、`/api/skills/families/:id/instances`、`/api/projects/:id/skills/:skillId`、版本读取/停用、apply preview、apply-to-family` 等 client 与状态层
 - ✅ 恢复技能页核心交互闭环：当前 skills 工作台已重新具备 family 列表、实例条、runtime 切换、正文编辑、版本历史、版本停用/恢复、传播预览与 apply-to-family；旧的 `skills-hero-band / skills-scope-sidebar / skills-insight-rail` 三块错误页面结构已从 v3 删除
 - ✅ 收回活动页到项目工作台：`activity` 不再作为 v3 顶层 tab 单独存在，当前活动流已并回 `project workbench`，和项目状态、项目内技能列表一起回到项目视角

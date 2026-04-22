@@ -1197,6 +1197,9 @@ describe('dashboard server sse bootstrap', () => {
       expect(html).toContain('"requestedMainTab":"skills"');
       expect(html).not.toContain('dashboard v3 routes');
 
+      const assetResponse = await fetch(`http://127.0.0.1:${port}/v3/assets/app.js`);
+      expect(assetResponse.status).toBe(404);
+
       const legacyAliasResponse = await fetch(`http://127.0.0.1:${port}/v3/activity`);
       expect(legacyAliasResponse.status).toBe(404);
     } finally {

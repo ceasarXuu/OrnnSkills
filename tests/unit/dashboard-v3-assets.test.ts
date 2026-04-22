@@ -60,9 +60,7 @@ describe('dashboard v3 asset helpers', () => {
     expect(document.body).toContain('id="workspaceTabs"');
     expect(document.body).toContain('"requestedMainTab":"project"');
     expect(document.body).not.toContain('dashboard v3');
-    expect(asset?.contentType).toBe('application/javascript; charset=utf-8');
-    expect(asset?.cacheControl).toContain('immutable');
-    expect(asset?.body.toString('utf-8')).toContain('console.log("v3")');
+    expect(asset).toBeNull();
     expect(isDashboardV3DocumentRequest('/v3/skills')).toBe(true);
     expect(isDashboardV3DocumentRequest('/v3/project')).toBe(true);
     expect(isDashboardV3DocumentRequest('/v3/config')).toBe(true);
@@ -71,13 +69,14 @@ describe('dashboard v3 asset helpers', () => {
     expect(isDashboardV3DocumentRequest('/v3/assets/app.js')).toBe(false);
   });
 
-  it('rejects v3 static asset traversal outside of the dist root', async () => {
+  it('does not expose any dedicated v3 static assets', async () => {
     const customRoot = mkdtempSync(join(tmpdir(), 'ornn-dashboard-v3-safety-'));
     cleanupPaths.push(customRoot);
     mkdirSync(join(customRoot, 'assets'), { recursive: true });
     process.env.ORNNSKILLS_DASHBOARD_V3_DIST_DIR = customRoot;
 
     const { resolveDashboardV3StaticAsset } = await import('../../src/dashboard/v3/assets.js');
+    expect(resolveDashboardV3StaticAsset('/v3/assets/app.js')).toBeNull();
     expect(resolveDashboardV3StaticAsset('/v3/../../etc/passwd')).toBeNull();
   });
 });
