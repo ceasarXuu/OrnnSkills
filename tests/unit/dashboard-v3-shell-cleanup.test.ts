@@ -2,10 +2,6 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 const sources = {
-  activityStream: readFileSync(
-    new URL('../../frontend-v3/src/components/activity-stream.tsx', import.meta.url),
-    'utf8',
-  ),
   configGovernancePanel: readFileSync(
     new URL('../../frontend-v3/src/components/config-governance-panel.tsx', import.meta.url),
     'utf8',
@@ -53,9 +49,7 @@ describe('dashboard v3 shell cleanup', () => {
     expect(sources.configWorkspace).not.toContain('ArrowReloadHorizontalIcon')
   })
 
-  it('adds stable rail scrolling and pagination to long-running lists', () => {
+  it('keeps stable rail scrolling in the remaining long-running navigation list', () => {
     expect(sources.projectRail).toContain('ScrollArea')
-    expect(sources.activityStream).toContain('PaginationPrevious')
-    expect(sources.activityStream).toContain('PaginationNext')
   })
 })

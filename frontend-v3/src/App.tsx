@@ -14,7 +14,6 @@ import type {
   DashboardProject,
   DashboardSkill,
   DashboardView,
-  ProjectSnapshot,
 } from '@/types/dashboard'
 
 const DASHBOARD_VIEWS: DashboardView[] = ['skills', 'project', 'config']
@@ -124,7 +123,6 @@ function DashboardWorkspacePage() {
                 query={query}
                 selectedProjectId={selectedProjectId}
                 selectedSkillKey={selectedSkillKey}
-                snapshot={selectedSnapshot}
               />
             </div>
           </div>
@@ -141,7 +139,6 @@ function DashboardWorkspacePage() {
               query={query}
               selectedProjectId={selectedProjectId}
               selectedSkillKey={selectedSkillKey}
-              snapshot={selectedSnapshot}
             />
           </div>
         )}
@@ -171,7 +168,6 @@ interface ViewContentProps {
   query: string
   selectedProjectId: string
   selectedSkillKey: string
-  snapshot: ProjectSnapshot | null
 }
 
 function ViewContent({
@@ -185,7 +181,6 @@ function ViewContent({
   query,
   selectedProjectId,
   selectedSkillKey,
-  snapshot,
 }: ViewContentProps) {
   return (
     <>
@@ -205,7 +200,6 @@ function ViewContent({
           query={query}
           selectedSkillKey={selectedSkillKey}
           skills={filteredSkills}
-          snapshot={snapshot}
         />
       ) : null}
 

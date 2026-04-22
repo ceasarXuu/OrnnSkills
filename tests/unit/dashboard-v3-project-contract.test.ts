@@ -19,6 +19,7 @@ describe('dashboard v3 project workspace contract', () => {
     expect(combinedSource).not.toContain('MetricGrid')
     expect(combinedSource).not.toContain('ProjectStatusPanel')
     expect(combinedSource).not.toContain('InsightStack')
+    expect(combinedSource).not.toContain('ActivityStream')
   })
 
   it('does not expose non-v1 project card titles', () => {
@@ -32,5 +33,7 @@ describe('dashboard v3 project workspace contract', () => {
     expect(combinedSource).not.toContain('当前优化状态')
     expect(combinedSource).not.toContain('待处理队列')
     expect(combinedSource).not.toContain('已处理 traces')
+    expect(combinedSource).not.toContain('Recent Traces')
+    expect(combinedSource).not.toContain('Decision Events')
   })
 })
