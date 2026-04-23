@@ -17,8 +17,8 @@ export function SkillsWorkspace({
   const skillLibrary = useDashboardV3SkillLibrary(selectedProjectId)
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[340px_minmax(0,1fr)] xl:items-start">
-      <aside className="xl:sticky xl:top-24 xl:self-start">
+    <div className="grid min-w-[1540px] grid-cols-[340px_minmax(0,1fr)] items-start gap-6">
+      <aside className="sticky top-24 self-start">
         <SkillFamilyList
           families={skillLibrary.families}
           isLoading={skillLibrary.isLoadingFamilies}

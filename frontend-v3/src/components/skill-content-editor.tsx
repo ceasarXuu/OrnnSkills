@@ -41,14 +41,14 @@ export function SkillContentEditor({
   return (
     <Card className="border-border/70 bg-card/92">
       <CardHeader className="gap-4 border-b border-border/70">
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-          <div className="space-y-1">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0 space-y-1">
             <CardTitle>正文</CardTitle>
-            <div className="text-sm text-muted-foreground">
+            <div className="truncate text-sm text-muted-foreground">
               {selectedInstance?.projectPath ?? '暂无实例'} · {selectedInstance?.runtime ?? preferredRuntime}
             </div>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex shrink-0 gap-2">
             <Button onClick={() => void onLoadApplyPreview()} size="sm" variant="outline">
               预览传播
             </Button>

@@ -111,7 +111,7 @@ export function SkillFamilyDetail({
     <div className="space-y-6">
       <Card className="border-border/70 bg-card/92">
         <CardHeader className="gap-4 border-b border-border/70">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div className="flex items-start justify-between gap-4">
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <HugeiconsIcon icon={Layers01Icon} size={18} strokeWidth={1.8} />
@@ -125,7 +125,7 @@ export function SkillFamilyDetail({
               </div>
             </div>
 
-            <div className="flex w-full flex-col gap-3 xl:max-w-[560px]">
+            <div className="flex w-[560px] shrink-0 flex-col gap-3">
               <DetailSelectors
                 onPreferredProjectChange={onPreferredProjectChange}
                 onSwitchRuntime={onSwitchRuntime}
@@ -143,7 +143,7 @@ export function SkillFamilyDetail({
         </CardHeader>
 
         <CardContent className="space-y-6 pt-6">
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-4 gap-3">
             <Metric label="Observed Calls" value={formatCompactNumber(family.usage.observedCalls)} />
             <Metric label="Analyzed Touches" value={formatCompactNumber(family.usage.analyzedTouches)} />
             <Metric label="Optimized" value={formatCompactNumber(family.usage.optimizedCount)} />
@@ -152,7 +152,7 @@ export function SkillFamilyDetail({
         </CardContent>
       </Card>
 
-      <div className="grid gap-6 2xl:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid grid-cols-[minmax(0,1fr)_340px] gap-6">
         <SkillContentEditor
           actionMessage={actionMessage}
           applyPreview={applyPreview}
@@ -199,7 +199,7 @@ function DetailSelectors({
   selectedRuntime: SkillDomainRuntime
 }) {
   return (
-    <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_200px]">
+    <div className="grid grid-cols-[minmax(0,1fr)_200px] gap-3">
       <Select onValueChange={onPreferredProjectChange} value={preferredProjectPath || undefined}>
         <SelectTrigger aria-label="选择优先项目" className="w-full rounded-xl">
           <SelectValue placeholder="选择优先项目" />
@@ -251,7 +251,7 @@ function SkillFamilyDetailSkeleton() {
           <Skeleton className="h-24 w-full" />
         </CardContent>
       </Card>
-      <div className="grid gap-6 2xl:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid grid-cols-[minmax(0,1fr)_340px] gap-6">
         <Skeleton className="h-[560px] w-full" />
         <Skeleton className="h-[560px] w-full" />
       </div>

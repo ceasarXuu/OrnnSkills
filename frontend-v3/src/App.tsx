@@ -96,7 +96,7 @@ function DashboardWorkspacePage() {
 
       <WorkspaceHeader currentView={currentView} />
 
-      <main className="mx-auto max-w-[1680px] space-y-8 px-4 py-8 xl:px-6">
+      <main className="mx-auto max-w-[1680px] space-y-8 overflow-x-auto px-4 py-8 xl:px-6">
         {loadError ? (
           <div className="rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             {loadError}
