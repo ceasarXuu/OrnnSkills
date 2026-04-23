@@ -7,6 +7,7 @@
 - ✅ 接入 v3 Storybook 组件工作台：`frontend-v3` 已新增 Storybook React+Vite 配置、根目录启动脚本和第一批 `ProjectRail / SkillFamilyList` stories，用于把列表壳层、搜索、loading/empty/default 状态从整页中拆出来单独校验
 - ✅ 扩展 v3 Storybook 覆盖面：Storybook 现已覆盖 `WorkspaceHeader / ProjectRail / SkillFamilyList / SkillFamilyDetail / ProjectWorkbench / SkillDetailDialog / ConfigProviderStack / ConfigGovernancePanel`，不再只停留在两个列表组件
 - ✅ 优化 v3 Storybook 组件粒度：新增统一 `DashboardStoryFrame`，并把 `SkillsTable / SkillContentEditor / SkillVersionHistory / ConfigProviderRow / ConfigPromptEditor` 拆成可独立预览的 story 单元；`SkillFamilyDetail`、`ConfigProviderStack`、`ConfigGovernancePanel` 现在更多承担组合职责
+- ✅ 删除重复 Storybook 入口：`ProjectWorkbench` 当前只是 `SkillsTable` 的路由 wrapper，没有独立可见结构；Storybook 已移除它的 story，避免和 `SkillsTable` 形成重复组件粒度
 - 📝 记录组件化经验：dashboard v3 的页面合同不能只靠整页预览纠偏；像项目列表、技能库这类反复被调整的组件，需要 Storybook stories 固化可见状态，先在隔离环境确认外壳、搜索、空态和选中态，再接回真实页面
 
 - ✅ 纠正 v3 顶层路由契约：`frontend-v3` 已从错误的 `skills / projects / activity / config` 收回到与 v1 对齐的 `skills / project / config`；旧 `/v3/projects`、`/v3/activity` 现在都由前端路由兼容回退到 `/v3/project`

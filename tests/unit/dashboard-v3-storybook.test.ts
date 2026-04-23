@@ -51,7 +51,6 @@ describe('dashboard v3 Storybook setup', () => {
       'frontend-v3/src/components/project-rail.stories.tsx',
       'frontend-v3/src/components/skill-family-list.stories.tsx',
       'frontend-v3/src/components/skill-family-detail.stories.tsx',
-      'frontend-v3/src/components/project-workbench.stories.tsx',
       'frontend-v3/src/components/skill-detail-dialog.stories.tsx',
       'frontend-v3/src/components/config-provider-stack.stories.tsx',
       'frontend-v3/src/components/config-governance-panel.stories.tsx',
@@ -71,7 +70,6 @@ describe('dashboard v3 Storybook setup', () => {
       'frontend-v3/src/components/skill-family-list.stories.tsx',
       'frontend-v3/src/components/skill-family-detail.stories.tsx',
       'frontend-v3/src/components/skills-table.stories.tsx',
-      'frontend-v3/src/components/project-workbench.stories.tsx',
       'frontend-v3/src/components/skill-detail-dialog.stories.tsx',
       'frontend-v3/src/components/skill-content-editor.stories.tsx',
       'frontend-v3/src/components/skill-version-history.stories.tsx',
@@ -84,5 +82,11 @@ describe('dashboard v3 Storybook setup', () => {
     for (const storyFile of storyFiles) {
       expect(existsSync(new URL(storyFile, root)), storyFile).toBe(true)
     }
+  })
+
+  it('does not publish duplicate stories for pass-through route wrappers', () => {
+    expect(existsSync(new URL('frontend-v3/src/components/project-workbench.stories.tsx', root))).toBe(
+      false,
+    )
   })
 })
