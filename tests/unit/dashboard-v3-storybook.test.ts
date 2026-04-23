@@ -43,10 +43,20 @@ describe('dashboard v3 Storybook setup', () => {
     expect(previewConfig).toContain("import '../src/styles/globals.css'")
   })
 
-  it('contains first contract stories for the key v3 rails', () => {
-    expect(existsSync(new URL('frontend-v3/src/components/project-rail.stories.tsx', root))).toBe(true)
-    expect(existsSync(new URL('frontend-v3/src/components/skill-family-list.stories.tsx', root))).toBe(
-      true,
-    )
+  it('contains contract stories for dashboard v3 core workbench components', () => {
+    const storyFiles = [
+      'frontend-v3/src/components/workspace-header.stories.tsx',
+      'frontend-v3/src/components/project-rail.stories.tsx',
+      'frontend-v3/src/components/skill-family-list.stories.tsx',
+      'frontend-v3/src/components/skill-family-detail.stories.tsx',
+      'frontend-v3/src/components/project-workbench.stories.tsx',
+      'frontend-v3/src/components/skill-detail-dialog.stories.tsx',
+      'frontend-v3/src/components/config-provider-stack.stories.tsx',
+      'frontend-v3/src/components/config-governance-panel.stories.tsx',
+    ]
+
+    for (const storyFile of storyFiles) {
+      expect(existsSync(new URL(storyFile, root)), storyFile).toBe(true)
+    }
   })
 })
