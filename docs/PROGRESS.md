@@ -4,6 +4,9 @@
 
 ### 2026-04-23
 
+- ✅ 接入 v3 Storybook 组件工作台：`frontend-v3` 已新增 Storybook React+Vite 配置、根目录启动脚本和第一批 `ProjectRail / SkillFamilyList` stories，用于把列表壳层、搜索、loading/empty/default 状态从整页中拆出来单独校验
+- 📝 记录组件化经验：dashboard v3 的页面合同不能只靠整页预览纠偏；像项目列表、技能库这类反复被调整的组件，需要 Storybook stories 固化可见状态，先在隔离环境确认外壳、搜索、空态和选中态，再接回真实页面
+
 - ✅ 纠正 v3 顶层路由契约：`frontend-v3` 已从错误的 `skills / projects / activity / config` 收回到与 v1 对齐的 `skills / project / config`；旧 `/v3/projects`、`/v3/activity` 现在都由前端路由兼容回退到 `/v3/project`
 - ✅ 重建 v3 的技能页主模型：`/v3/skills` 已不再消费 `selectedProject.snapshot.skills[]`，而是改走 `Skill Family -> Skill Instance -> Skill Revision` 数据链；v3 前端现已补齐 `/api/skills/families`、`/api/skills/families/:id/instances`、`/api/projects/:id/skills/:skillId`、版本读取/停用、apply preview、apply-to-family` 等 client 与状态层
 - ✅ 恢复技能页核心交互闭环：当前 skills 工作台已重新具备 family 列表、实例条、runtime 切换、正文编辑、版本历史、版本停用/恢复、传播预览与 apply-to-family；旧的 `skills-hero-band / skills-scope-sidebar / skills-insight-rail` 三块错误页面结构已从 v3 删除

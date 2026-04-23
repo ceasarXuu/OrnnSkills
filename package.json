@@ -23,6 +23,8 @@
     "dev": "tsx watch src/cli/index.ts",
     "dev:dashboard-v2": "npm --prefix frontend run dev",
     "dev:dashboard-v3": "npm --prefix frontend-v3 run dev",
+    "storybook:dashboard-v3": "npm --prefix frontend-v3 run storybook",
+    "build:storybook:dashboard-v3": "npm --prefix frontend-v3 run build-storybook",
     "start": "node dist/cli/index.js",
     "ensure:cli-exec": "sh -c 'if [ -f dist/cli/index.js ]; then chmod +x dist/cli/index.js; fi'",
     "prepack": "npm run build",
