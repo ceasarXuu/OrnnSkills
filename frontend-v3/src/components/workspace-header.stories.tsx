@@ -1,23 +1,16 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
-import { MemoryRouter } from 'react-router-dom'
 import { WorkspaceHeader } from '@/components/workspace-header'
-import { DashboardStoryFrame } from '@/stories/dashboard-story-frame'
+import { dashboardStoryParameters } from '@/stories/dashboard-storybook'
 
 const meta = {
-  title: 'Dashboard V3/WorkspaceHeader',
+  title: 'Dashboard V3/Shell/WorkspaceHeader',
   component: WorkspaceHeader,
-  parameters: {
+  tags: ['stable', 'pattern'],
+  parameters: dashboardStoryParameters({
+    initialEntries: ['/skills'],
     layout: 'fullscreen',
-  },
-  decorators: [
-    (Story) => (
-      <MemoryRouter initialEntries={['/skills']}>
-        <DashboardStoryFrame width="100vw">
-          <Story />
-        </DashboardStoryFrame>
-      </MemoryRouter>
-    ),
-  ],
+    width: '100vw',
+  }),
 } satisfies Meta<typeof WorkspaceHeader>
 
 export default meta

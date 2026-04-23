@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
+import { fn } from 'storybook/test'
 import { ConfigProviderRow } from '@/components/config-provider-row'
-import { DashboardStoryFrame } from '@/stories/dashboard-story-frame'
+import { dashboardStoryParameters } from '@/stories/dashboard-storybook'
 import {
   storyConnectivityResults,
   storyDashboardConfig,
@@ -10,18 +11,19 @@ import {
 const provider = storyDashboardConfig.providers[0]
 
 const meta = {
-  title: 'Dashboard V3/ConfigProviderRow',
+  title: 'Dashboard V3/Config/ConfigProviderRow',
   component: ConfigProviderRow,
-  parameters: {
-    layout: 'padded',
+  tags: ['stable', 'primitive'],
+  parameters: dashboardStoryParameters({
+    width: '1280px',
+  }),
+  args: {
+    onCheckConnectivity: fn(),
+    onRemove: fn(),
+    onSetDefaultProvider: fn(),
+    onToggleApiKeyVisibility: fn(),
+    onUpdate: fn(),
   },
-  decorators: [
-    (Story) => (
-      <DashboardStoryFrame width="1280px">
-        <Story />
-      </DashboardStoryFrame>
-    ),
-  ],
 } satisfies Meta<typeof ConfigProviderRow>
 
 export default meta
@@ -33,11 +35,6 @@ export const Default: Story = {
     index: 0,
     isApiKeyVisible: false,
     isCheckingConnectivity: false,
-    onCheckConnectivity: () => undefined,
-    onRemove: () => undefined,
-    onSetDefaultProvider: () => undefined,
-    onToggleApiKeyVisibility: () => undefined,
-    onUpdate: () => undefined,
     provider,
     providerCatalog: storyProviderCatalog,
     result: storyConnectivityResults[0],

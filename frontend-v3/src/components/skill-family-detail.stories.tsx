@@ -1,7 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
-import { useState } from 'react'
+import { useMemo, useState, type ComponentProps } from 'react'
+import { fn } from 'storybook/test'
 import { SkillFamilyDetail } from '@/components/skill-family-detail'
-import { DashboardStoryFrame } from '@/stories/dashboard-story-frame'
+import { dashboardStoryParameters } from '@/stories/dashboard-storybook'
 import {
   storyApplyPreview,
   storyProjects,
@@ -12,67 +13,62 @@ import {
 } from '@/stories/dashboard-v3-fixtures'
 import type { SkillDomainRuntime } from '@/types/dashboard'
 
-function InteractiveSkillFamilyDetail() {
-  const [draftContent, setDraftContent] = useState(storySkillDetail.content)
-  const [preferredProjectPath, setPreferredProjectPath] = useState(storyProjects[0].path)
-  const [preferredRuntime, setPreferredRuntime] = useState<SkillDomainRuntime>('claude')
-  const [selectedInstanceId, setSelectedInstanceId] = useState(storySkillInstances[0].instanceId)
-  const [selectedVersion, setSelectedVersion] = useState<number | null>(6)
-  const selectedInstance =
-    storySkillInstances.find((instance) => instance.instanceId === selectedInstanceId) ??
-    storySkillInstances[0]
+type SkillFamilyDetailStoryArgs = ComponentProps<typeof SkillFamilyDetail>
+
+function InteractiveSkillFamilyDetail(args: SkillFamilyDetailStoryArgs) {
+  const [draftContent, setDraftContent] = useState(args.draftContent)
+  const [preferredProjectPath, setPreferredProjectPath] = useState(args.preferredProjectPath)
+  const [preferredRuntime, setPreferredRuntime] = useState<SkillDomainRuntime>(args.preferredRuntime)
+  const [selectedInstanceId, setSelectedInstanceId] = useState(args.selectedInstance?.instanceId ?? '')
+  const [selectedVersion, setSelectedVersion] = useState<number | null>(args.selectedVersion)
+
+  const selectedInstance = useMemo(() => {
+    if (!selectedInstanceId) {
+      return null
+    }
+
+    return args.instances.find((instance) => instance.instanceId === selectedInstanceId) ?? null
+  }, [args.instances, selectedInstanceId])
 
   return (
     <SkillFamilyDetail
-      actionMessage="已自动保存草稿。"
-      applyPreview={storyApplyPreview}
-      detail={storySkillDetail}
-      detailError={null}
+      {...args}
       draftContent={draftContent}
-      family={storySkillFamilies[0]}
-      instances={storySkillInstances}
-      isApplying={false}
-      isLoading={false}
-      isSaving={false}
-      onApplyToFamily={() => undefined}
-      onDraftChange={setDraftContent}
-      onLoadApplyPreview={() => undefined}
-      onPreferredProjectChange={setPreferredProjectPath}
-      onSave={() => undefined}
-      onSelectInstance={setSelectedInstanceId}
-      onSelectVersion={setSelectedVersion}
-      onSwitchRuntime={setPreferredRuntime}
-      onToggleVersionDisabled={() => undefined}
+      onDraftChange={(value) => {
+        setDraftContent(value)
+        args.onDraftChange(value)
+      }}
+      onPreferredProjectChange={(projectPath) => {
+        setPreferredProjectPath(projectPath)
+        args.onPreferredProjectChange(projectPath)
+      }}
+      onSelectInstance={(instanceId) => {
+        setSelectedInstanceId(instanceId)
+        args.onSelectInstance(instanceId)
+      }}
+      onSelectVersion={(version) => {
+        setSelectedVersion(version)
+        args.onSelectVersion(version)
+      }}
+      onSwitchRuntime={(runtime) => {
+        setPreferredRuntime(runtime)
+        args.onSwitchRuntime(runtime)
+      }}
       preferredProjectPath={preferredProjectPath}
       preferredRuntime={preferredRuntime}
-      projects={storyProjects}
       selectedInstance={selectedInstance}
       selectedVersion={selectedVersion}
-      versionMetadataByNumber={storySkillVersions}
     />
   )
 }
 
 const meta = {
-  title: 'Dashboard V3/SkillFamilyDetail',
+  title: 'Dashboard V3/Skills/SkillFamilyDetail',
   component: SkillFamilyDetail,
-  parameters: {
-    layout: 'padded',
-  },
-  decorators: [
-    (Story) => (
-      <DashboardStoryFrame width="1280px">
-        <Story />
-      </DashboardStoryFrame>
-    ),
-  ],
-} satisfies Meta<typeof SkillFamilyDetail>
-
-export default meta
-
-type Story = StoryObj<typeof meta>
-
-export const Default: Story = {
+  tags: ['stable', 'screen'],
+  parameters: dashboardStoryParameters({
+    width: '1280px',
+  }),
   args: {
     actionMessage: null,
     applyPreview: storyApplyPreview,
@@ -84,15 +80,15 @@ export const Default: Story = {
     isApplying: false,
     isLoading: false,
     isSaving: false,
-    onApplyToFamily: () => undefined,
-    onDraftChange: () => undefined,
-    onLoadApplyPreview: () => undefined,
-    onPreferredProjectChange: () => undefined,
-    onSave: () => undefined,
-    onSelectInstance: () => undefined,
-    onSelectVersion: () => undefined,
-    onSwitchRuntime: () => undefined,
-    onToggleVersionDisabled: () => undefined,
+    onApplyToFamily: fn(),
+    onDraftChange: fn(),
+    onLoadApplyPreview: fn(),
+    onPreferredProjectChange: fn(),
+    onSave: fn(),
+    onSelectInstance: fn(),
+    onSelectVersion: fn(),
+    onSwitchRuntime: fn(),
+    onToggleVersionDisabled: fn(),
     preferredProjectPath: storyProjects[0].path,
     preferredRuntime: 'claude',
     projects: storyProjects,
@@ -100,7 +96,14 @@ export const Default: Story = {
     selectedVersion: 6,
     versionMetadataByNumber: storySkillVersions,
   },
-  render: () => <InteractiveSkillFamilyDetail />,
+} satisfies Meta<typeof SkillFamilyDetail>
+
+export default meta
+
+type Story = StoryObj<typeof meta>
+
+export const Default: Story = {
+  render: (args) => <InteractiveSkillFamilyDetail {...args} />,
 }
 
 export const EmptySelection: Story = {
@@ -112,30 +115,26 @@ export const EmptySelection: Story = {
     draftContent: '',
     family: null,
     instances: [],
-    isApplying: false,
-    isLoading: false,
-    isSaving: false,
-    onApplyToFamily: () => undefined,
-    onDraftChange: () => undefined,
-    onLoadApplyPreview: () => undefined,
-    onPreferredProjectChange: () => undefined,
-    onSave: () => undefined,
-    onSelectInstance: () => undefined,
-    onSelectVersion: () => undefined,
-    onSwitchRuntime: () => undefined,
-    onToggleVersionDisabled: () => undefined,
     preferredProjectPath: storyProjects[0].path,
-    preferredRuntime: 'claude',
     projects: storyProjects,
     selectedInstance: null,
     selectedVersion: null,
     versionMetadataByNumber: {},
   },
+  render: (args) => <InteractiveSkillFamilyDetail {...args} />,
 }
 
 export const Loading: Story = {
   args: {
-    ...EmptySelection.args,
+    applyPreview: null,
+    detail: null,
+    draftContent: '',
+    family: null,
+    instances: [],
     isLoading: true,
+    selectedInstance: null,
+    selectedVersion: null,
+    versionMetadataByNumber: {},
   },
+  render: (args) => <InteractiveSkillFamilyDetail {...args} />,
 }

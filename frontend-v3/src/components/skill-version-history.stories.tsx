@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
+import { fn } from 'storybook/test'
 import { SkillVersionHistory } from '@/components/skill-version-history'
-import { DashboardStoryFrame } from '@/stories/dashboard-story-frame'
+import { dashboardStoryParameters } from '@/stories/dashboard-storybook'
 import {
   storySkillDetail,
   storySkillInstances,
@@ -8,18 +9,16 @@ import {
 } from '@/stories/dashboard-v3-fixtures'
 
 const meta = {
-  title: 'Dashboard V3/SkillVersionHistory',
+  title: 'Dashboard V3/Skills/SkillVersionHistory',
   component: SkillVersionHistory,
-  parameters: {
-    layout: 'padded',
+  tags: ['stable', 'pattern'],
+  parameters: dashboardStoryParameters({
+    width: '420px',
+  }),
+  args: {
+    onSelectVersion: fn(),
+    onToggleVersionDisabled: fn(),
   },
-  decorators: [
-    (Story) => (
-      <DashboardStoryFrame width="420px">
-        <Story />
-      </DashboardStoryFrame>
-    ),
-  ],
 } satisfies Meta<typeof SkillVersionHistory>
 
 export default meta
@@ -29,8 +28,6 @@ type Story = StoryObj<typeof meta>
 export const Default: Story = {
   args: {
     detail: storySkillDetail,
-    onSelectVersion: () => undefined,
-    onToggleVersionDisabled: () => undefined,
     selectedInstance: storySkillInstances[0],
     selectedVersion: 6,
     versionMetadataByNumber: storySkillVersions,
@@ -43,8 +40,6 @@ export const Empty: Story = {
       ...storySkillDetail,
       versions: [],
     },
-    onSelectVersion: () => undefined,
-    onToggleVersionDisabled: () => undefined,
     selectedInstance: storySkillInstances[0],
     selectedVersion: null,
     versionMetadataByNumber: {},

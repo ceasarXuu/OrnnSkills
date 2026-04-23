@@ -31,19 +31,28 @@ describe('dashboard v3 Storybook setup', () => {
   it('uses the React Vite Storybook framework', () => {
     expect(frontendPackage.devDependencies?.storybook).toBeTruthy()
     expect(frontendPackage.devDependencies?.['@storybook/react-vite']).toBeTruthy()
+    expect(frontendPackage.devDependencies?.['@storybook/addon-a11y']).toBeTruthy()
 
     const mainConfig = readWorkspaceFile('frontend-v3/.storybook/main.ts')
     expect(mainConfig).toContain("framework: {")
     expect(mainConfig).toContain("name: '@storybook/react-vite'")
     expect(mainConfig).toContain("../src/**/*.stories.@(ts|tsx)")
+    expect(mainConfig).toContain("'@storybook/addon-a11y'")
   })
 
-  it('loads the dashboard v3 theme styles in previews', () => {
-    const previewConfig = readWorkspaceFile('frontend-v3/.storybook/preview.ts')
+  it('loads the dashboard v3 theme styles and global story policies in previews', () => {
+    const previewConfig = readWorkspaceFile('frontend-v3/.storybook/preview.tsx')
     expect(previewConfig).toContain("import '../src/styles/globals.css'")
+    expect(previewConfig).toContain("import { MemoryRouter } from 'react-router-dom'")
+    expect(previewConfig).toContain("import { DashboardStoryFrame } from '../src/stories/dashboard-story-frame'")
+    expect(previewConfig).toContain("tags: ['autodocs']")
+    expect(previewConfig).toContain("a11y: { test: 'error' }")
+    expect(previewConfig).toContain("actions: { argTypesRegex: '^on[A-Z].*' }")
+    expect(previewConfig).toContain('controls: {')
+    expect(previewConfig).toContain('expanded: true')
   })
 
-  it('uses a shared dashboard story frame instead of per-story page chrome', () => {
+  it('uses preview-level decorators and shared story frame instead of per-story page chrome', () => {
     expect(existsSync(new URL('frontend-v3/src/stories/dashboard-story-frame.tsx', root))).toBe(true)
 
     const storySources = [
@@ -58,7 +67,7 @@ describe('dashboard v3 Storybook setup', () => {
 
     for (const storySourcePath of storySources) {
       const storySource = readWorkspaceFile(storySourcePath)
-      expect(storySource).toContain('DashboardStoryFrame')
+      expect(storySource).not.toContain('DashboardStoryFrame')
       expect(storySource).not.toContain('dark min-h-screen')
     }
   })
@@ -87,6 +96,23 @@ describe('dashboard v3 Storybook setup', () => {
   it('does not publish duplicate stories for pass-through route wrappers', () => {
     expect(existsSync(new URL('frontend-v3/src/components/project-workbench.stories.tsx', root))).toBe(
       false,
+    )
+  })
+
+  it('documents the dashboard v3 story map and quality gates', () => {
+    expect(existsSync(new URL('docs/dashboard-v3-storybook.md', root))).toBe(true)
+  })
+
+  it('adds interaction coverage to critical pattern stories', () => {
+    expect(readWorkspaceFile('frontend-v3/src/components/project-rail.stories.tsx')).toContain('play:')
+    expect(readWorkspaceFile('frontend-v3/src/components/skill-family-list.stories.tsx')).toContain(
+      'play:',
+    )
+    expect(readWorkspaceFile('frontend-v3/src/components/skills-table.stories.tsx')).toContain(
+      'play:',
+    )
+    expect(readWorkspaceFile('frontend-v3/src/components/config-prompt-editor.stories.tsx')).toContain(
+      'play:',
     )
   })
 })

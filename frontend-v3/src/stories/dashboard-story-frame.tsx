@@ -7,7 +7,7 @@ interface DashboardStoryFrameProps {
 
 export function DashboardStoryFrame({
   children,
-  width = '360px',
+  width = '1120px',
 }: DashboardStoryFrameProps) {
   return (
     <div

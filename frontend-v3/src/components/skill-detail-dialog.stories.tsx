@@ -1,21 +1,20 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
+import { fn } from 'storybook/test'
 import { SkillDetailDialog } from '@/components/skill-detail-dialog'
-import { DashboardStoryFrame } from '@/stories/dashboard-story-frame'
+import { dashboardStoryParameters } from '@/stories/dashboard-storybook'
 import { storyProjectSkills } from '@/stories/dashboard-v3-fixtures'
 
 const meta = {
-  title: 'Dashboard V3/SkillDetailDialog',
+  title: 'Dashboard V3/Overlay/SkillDetailDialog',
   component: SkillDetailDialog,
-  parameters: {
+  tags: ['stable', 'pattern'],
+  parameters: dashboardStoryParameters({
     layout: 'centered',
+    width: '720px',
+  }),
+  args: {
+    onOpenChange: fn(),
   },
-  decorators: [
-    (Story) => (
-      <DashboardStoryFrame width="720px">
-        <Story />
-      </DashboardStoryFrame>
-    ),
-  ],
 } satisfies Meta<typeof SkillDetailDialog>
 
 export default meta
@@ -24,7 +23,6 @@ type Story = StoryObj<typeof meta>
 
 export const Open: Story = {
   args: {
-    onOpenChange: () => undefined,
     open: true,
     skill: storyProjectSkills[0],
   },
@@ -32,7 +30,6 @@ export const Open: Story = {
 
 export const Empty: Story = {
   args: {
-    onOpenChange: () => undefined,
     open: true,
     skill: null,
   },

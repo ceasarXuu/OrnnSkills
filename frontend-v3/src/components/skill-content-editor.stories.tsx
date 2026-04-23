@@ -1,32 +1,38 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
+import { useState, type ComponentProps } from 'react'
+import { fn } from 'storybook/test'
 import { SkillContentEditor } from '@/components/skill-content-editor'
-import { DashboardStoryFrame } from '@/stories/dashboard-story-frame'
+import { dashboardStoryParameters } from '@/stories/dashboard-storybook'
 import {
   storyApplyPreview,
   storySkillDetail,
   storySkillInstances,
 } from '@/stories/dashboard-v3-fixtures'
 
+type SkillContentEditorStoryArgs = ComponentProps<typeof SkillContentEditor>
+
+function InteractiveSkillContentEditor(args: SkillContentEditorStoryArgs) {
+  const [draftContent, setDraftContent] = useState(args.draftContent)
+
+  return (
+    <SkillContentEditor
+      {...args}
+      draftContent={draftContent}
+      onDraftChange={(value) => {
+        setDraftContent(value)
+        args.onDraftChange(value)
+      }}
+    />
+  )
+}
+
 const meta = {
-  title: 'Dashboard V3/SkillContentEditor',
+  title: 'Dashboard V3/Skills/SkillContentEditor',
   component: SkillContentEditor,
-  parameters: {
-    layout: 'padded',
-  },
-  decorators: [
-    (Story) => (
-      <DashboardStoryFrame width="840px">
-        <Story />
-      </DashboardStoryFrame>
-    ),
-  ],
-} satisfies Meta<typeof SkillContentEditor>
-
-export default meta
-
-type Story = StoryObj<typeof meta>
-
-export const Default: Story = {
+  tags: ['stable', 'pattern'],
+  parameters: dashboardStoryParameters({
+    width: '840px',
+  }),
   args: {
     actionMessage: null,
     applyPreview: null,
@@ -34,26 +40,34 @@ export const Default: Story = {
     draftContent: storySkillDetail.content,
     isApplying: false,
     isSaving: false,
-    onApplyToFamily: () => undefined,
-    onDraftChange: () => undefined,
-    onLoadApplyPreview: () => undefined,
-    onSave: () => undefined,
+    onApplyToFamily: fn(),
+    onDraftChange: fn(),
+    onLoadApplyPreview: fn(),
+    onSave: fn(),
     preferredRuntime: 'claude',
     selectedInstance: storySkillInstances[0],
   },
+} satisfies Meta<typeof SkillContentEditor>
+
+export default meta
+
+type Story = StoryObj<typeof meta>
+
+export const Default: Story = {
+  render: (args) => <InteractiveSkillContentEditor {...args} />,
 }
 
 export const WithApplyPreview: Story = {
   args: {
-    ...Default.args,
     actionMessage: '已自动保存草稿。',
     applyPreview: storyApplyPreview,
   },
+  render: (args) => <InteractiveSkillContentEditor {...args} />,
 }
 
 export const Error: Story = {
   args: {
-    ...Default.args,
     detailError: '正文读取失败，请稍后重试。',
   },
+  render: (args) => <InteractiveSkillContentEditor {...args} />,
 }

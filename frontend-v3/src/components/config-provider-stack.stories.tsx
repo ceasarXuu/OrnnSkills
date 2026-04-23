@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
+import { fn } from 'storybook/test'
 import { ConfigProviderStack } from '@/components/config-provider-stack'
-import { DashboardStoryFrame } from '@/stories/dashboard-story-frame'
+import { dashboardStoryParameters } from '@/stories/dashboard-storybook'
 import {
   storyConnectivityResults,
   storyDashboardConfig,
@@ -8,18 +9,21 @@ import {
 } from '@/stories/dashboard-v3-fixtures'
 
 const meta = {
-  title: 'Dashboard V3/ConfigProviderStack',
+  title: 'Dashboard V3/Config/ConfigProviderStack',
   component: ConfigProviderStack,
-  parameters: {
-    layout: 'padded',
+  tags: ['stable', 'pattern'],
+  parameters: dashboardStoryParameters({
+    width: '1280px',
+  }),
+  args: {
+    onAddProvider: fn(),
+    onCheckConnectivity: fn(),
+    onRemoveProvider: fn(),
+    onSetDefaultProvider: fn(),
+    onSetSafetyField: fn(),
+    onToggleApiKeyVisibility: fn(),
+    onUpdateProvider: fn(),
   },
-  decorators: [
-    (Story) => (
-      <DashboardStoryFrame width="1280px">
-        <Story />
-      </DashboardStoryFrame>
-    ),
-  ],
 } satisfies Meta<typeof ConfigProviderStack>
 
 export default meta
@@ -33,13 +37,6 @@ export const Default: Story = {
     connectivityResults: storyConnectivityResults,
     isCatalogLoading: false,
     isCheckingConnectivity: false,
-    onAddProvider: () => undefined,
-    onCheckConnectivity: () => undefined,
-    onRemoveProvider: () => undefined,
-    onSetDefaultProvider: () => undefined,
-    onSetSafetyField: () => undefined,
-    onToggleApiKeyVisibility: () => undefined,
-    onUpdateProvider: () => undefined,
     providerCatalog: storyProviderCatalog,
   },
 }

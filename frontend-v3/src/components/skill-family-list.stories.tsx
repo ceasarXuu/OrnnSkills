@@ -1,19 +1,33 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
-import { useState } from 'react'
+import { useMemo, useState, type ComponentProps } from 'react'
+import { expect, fn } from 'storybook/test'
 import { SkillFamilyList } from '@/components/skill-family-list'
-import { DashboardStoryFrame } from '@/stories/dashboard-story-frame'
+import { filterSkillFamilies, sortSkillFamilies } from '@/lib/skill-library'
+import { dashboardStoryParameters } from '@/stories/dashboard-storybook'
 import { storySkillFamilies } from '@/stories/dashboard-v3-fixtures'
 
-function InteractiveSkillFamilyList() {
-  const [query, setQuery] = useState('')
-  const [selectedFamilyId, setSelectedFamilyId] = useState(storySkillFamilies[0]?.familyId ?? '')
+type SkillFamilyListStoryArgs = ComponentProps<typeof SkillFamilyList>
+
+function InteractiveSkillFamilyList(args: SkillFamilyListStoryArgs) {
+  const [query, setQuery] = useState(args.query)
+  const [selectedFamilyId, setSelectedFamilyId] = useState(args.selectedFamilyId)
+  const visibleFamilies = useMemo(
+    () => sortSkillFamilies(filterSkillFamilies(args.families, query)),
+    [args.families, query],
+  )
 
   return (
     <SkillFamilyList
-      families={storySkillFamilies}
-      isLoading={false}
-      onQueryChange={setQuery}
-      onSelectFamily={setSelectedFamilyId}
+      {...args}
+      families={visibleFamilies}
+      onQueryChange={(value) => {
+        setQuery(value)
+        args.onQueryChange(value)
+      }}
+      onSelectFamily={(familyId) => {
+        setSelectedFamilyId(familyId)
+        args.onSelectFamily(familyId)
+      }}
       query={query}
       selectedFamilyId={selectedFamilyId}
     />
@@ -21,18 +35,20 @@ function InteractiveSkillFamilyList() {
 }
 
 const meta = {
-  title: 'Dashboard V3/SkillFamilyList',
+  title: 'Dashboard V3/Skills/SkillFamilyList',
   component: SkillFamilyList,
-  parameters: {
-    layout: 'padded',
+  tags: ['stable', 'pattern'],
+  parameters: dashboardStoryParameters({
+    width: '360px',
+  }),
+  args: {
+    families: storySkillFamilies,
+    isLoading: false,
+    onQueryChange: fn(),
+    onSelectFamily: fn(),
+    query: '',
+    selectedFamilyId: storySkillFamilies[0]?.familyId ?? '',
   },
-  decorators: [
-    (Story) => (
-      <DashboardStoryFrame width="360px">
-        <Story />
-      </DashboardStoryFrame>
-    ),
-  ],
 } satisfies Meta<typeof SkillFamilyList>
 
 export default meta
@@ -40,23 +56,32 @@ export default meta
 type Story = StoryObj<typeof meta>
 
 export const Default: Story = {
-  args: {
-    families: storySkillFamilies,
-    isLoading: false,
-    onQueryChange: () => undefined,
-    onSelectFamily: () => undefined,
-    query: '',
-    selectedFamilyId: storySkillFamilies[0]?.familyId ?? '',
+  render: (args) => <InteractiveSkillFamilyList {...args} />,
+}
+
+export const SearchAndSelect: Story = {
+  render: (args) => <InteractiveSkillFamilyList {...args} />,
+  play: async ({ args, canvas, userEvent }) => {
+    const search = canvas.getByPlaceholderText('搜索 family / runtime / status')
+    await userEvent.clear(search)
+    await userEvent.type(search, 'systematic')
+    await expect(args.onQueryChange).toHaveBeenCalled()
+
+    const familyCard = canvas.getByText('systematic-debugging').closest('button')
+    expect(familyCard).not.toBeNull()
+    if (!familyCard) {
+      return
+    }
+
+    await userEvent.click(familyCard)
+    await expect(args.onSelectFamily).toHaveBeenCalledWith('family_453475360991ce06')
   },
-  render: () => <InteractiveSkillFamilyList />,
 }
 
 export const Loading: Story = {
   args: {
     families: [],
     isLoading: true,
-    onQueryChange: () => undefined,
-    onSelectFamily: () => undefined,
     query: '',
     selectedFamilyId: '',
   },
@@ -65,9 +90,6 @@ export const Loading: Story = {
 export const Empty: Story = {
   args: {
     families: [],
-    isLoading: false,
-    onQueryChange: () => undefined,
-    onSelectFamily: () => undefined,
     query: '',
     selectedFamilyId: '',
   },

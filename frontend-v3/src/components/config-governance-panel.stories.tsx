@@ -1,21 +1,20 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
+import { fn } from 'storybook/test'
 import { ConfigGovernancePanel } from '@/components/config-governance-panel'
-import { DashboardStoryFrame } from '@/stories/dashboard-story-frame'
+import { dashboardStoryParameters } from '@/stories/dashboard-storybook'
 import { storyDashboardConfig } from '@/stories/dashboard-v3-fixtures'
 
 const meta = {
-  title: 'Dashboard V3/ConfigGovernancePanel',
+  title: 'Dashboard V3/Config/ConfigGovernancePanel',
   component: ConfigGovernancePanel,
-  parameters: {
-    layout: 'padded',
+  tags: ['stable', 'pattern'],
+  parameters: dashboardStoryParameters({
+    width: '1120px',
+  }),
+  args: {
+    onSetPromptOverride: fn(),
+    onSetPromptSource: fn(),
   },
-  decorators: [
-    (Story) => (
-      <DashboardStoryFrame width="1120px">
-        <Story />
-      </DashboardStoryFrame>
-    ),
-  ],
 } satisfies Meta<typeof ConfigGovernancePanel>
 
 export default meta
@@ -25,8 +24,6 @@ type Story = StoryObj<typeof meta>
 export const Default: Story = {
   args: {
     config: storyDashboardConfig,
-    onSetPromptOverride: () => undefined,
-    onSetPromptSource: () => undefined,
   },
 }
 
