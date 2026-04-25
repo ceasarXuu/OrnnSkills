@@ -533,6 +533,8 @@
 - ✅ Dashboard V3 将成本从顶层 tab 收回项目工作台，项目页右侧统一使用二级 `技能 / 成本` Tabs，成本继续复用当前项目上下文和左侧 project rail
 - ✅ Dashboard V3 skills 正文加载优化：详情接口返回后立即落屏正文，版本历史 metadata 改为后台补齐，并按 `instanceId` 缓存详情，避免版本 fan-out 阻塞编辑区
 - 📝 前端经验：正文编辑区属于主路径，版本历史、统计补充、预览类数据都不能阻塞正文首屏；需要用日志事件标记 `content_ready`，再异步补齐次级信息
+- ✅ Dashboard V3 config 选择控件统一 shadcn 化：provider 默认启用与 LLM 安全闸门改为 `Switch`，提示词来源二选一改为 `RadioGroup`，配置页不再混入原生 radio/checkbox 视觉
+- 📝 前端经验：配置页所有二值/单选控件必须优先使用 shadcn/radix 组件，并在 Storybook play 中覆盖点击路径；不要用原生 input 临时代替成熟组件
 
 ---
 

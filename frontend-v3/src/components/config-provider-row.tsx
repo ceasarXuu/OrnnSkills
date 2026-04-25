@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import {
   getConfigText,
   getConnectivityProviders,
@@ -175,12 +176,14 @@ export function ConfigProviderRow({
         </div>
 
         <div className="flex flex-wrap items-center gap-3 xl:justify-end">
-          <label className="flex items-center gap-2 text-sm text-foreground">
-            <input
+          <label className="flex items-center gap-2 rounded-md border border-border/70 bg-background/60 px-3 py-2 text-sm text-foreground">
+            <Switch
+              aria-label={configText.providerActiveLabel}
               checked={isSelectedDefault}
-              name="cfg_provider_active"
-              onChange={() => onSetDefaultProvider(provider.provider)}
-              type="radio"
+              disabled={provider.provider.trim().length === 0}
+              id={`cfg_provider_active_${index}`}
+              onCheckedChange={(checked) => onSetDefaultProvider(checked ? provider.provider : '')}
+              size="sm"
             />
             <span>{configText.providerActiveLabel}</span>
           </label>

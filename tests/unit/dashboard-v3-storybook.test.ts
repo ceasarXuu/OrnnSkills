@@ -135,6 +135,25 @@ describe('dashboard v3 Storybook setup', () => {
     expect(readWorkspaceFile('frontend-v3/src/components/config-prompt-editor.stories.tsx')).toContain(
       'play:',
     )
+    expect(readWorkspaceFile('frontend-v3/src/components/config-provider-row.stories.tsx')).toContain(
+      'play:',
+    )
+    expect(readWorkspaceFile('frontend-v3/src/components/config-provider-stack.stories.tsx')).toContain(
+      'play:',
+    )
+  })
+
+  it('keeps dashboard v3 config choices on shadcn controls instead of native inputs', () => {
+    const providerRow = readWorkspaceFile('frontend-v3/src/components/config-provider-row.tsx')
+    const providerStack = readWorkspaceFile('frontend-v3/src/components/config-provider-stack.tsx')
+    const promptEditor = readWorkspaceFile('frontend-v3/src/components/config-prompt-editor.tsx')
+
+    expect(providerRow).toContain("import { Switch } from '@/components/ui/switch'")
+    expect(providerStack).toContain("import { Switch } from '@/components/ui/switch'")
+    expect(promptEditor).toContain("import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'")
+    expect(providerRow).not.toContain('type="radio"')
+    expect(providerStack).not.toContain('type="checkbox"')
+    expect(promptEditor).not.toContain('type="radio"')
   })
 
   it('configures Storybook tests to run stable stories in Vitest browser mode', () => {

@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
-import { fn } from 'storybook/test'
+import { expect, fn } from 'storybook/test'
 import { ConfigProviderRow } from '@/components/config-provider-row'
+import { CONFIG_TEXT } from '@/lib/config-workspace'
 import { dashboardStoryParameters } from '@/stories/dashboard-storybook'
 import {
   storyConnectivityResults,
@@ -40,6 +41,11 @@ export const Default: Story = {
     result: storyConnectivityResults[0],
     selectedDefaultProvider: provider.provider,
   },
+  play: async ({ args, canvas, userEvent }) => {
+    await userEvent.click(canvas.getByRole('switch', { name: CONFIG_TEXT.providerActiveLabel }))
+
+    await expect(args.onSetDefaultProvider).toHaveBeenCalledWith('')
+  },
 }
 
 export const ApiKeyVisible: Story = {
@@ -57,5 +63,17 @@ export const Checking: Story = {
   args: {
     ...Default.args,
     isCheckingConnectivity: true,
+  },
+}
+
+export const Inactive: Story = {
+  args: {
+    ...Default.args,
+    selectedDefaultProvider: 'openai',
+  },
+  play: async ({ args, canvas, userEvent }) => {
+    await userEvent.click(canvas.getByRole('switch', { name: CONFIG_TEXT.providerActiveLabel }))
+
+    await expect(args.onSetDefaultProvider).toHaveBeenCalledWith(provider.provider)
   },
 }

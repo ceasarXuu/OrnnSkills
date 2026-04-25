@@ -1,6 +1,7 @@
 import { ConfigProviderRow } from '@/components/config-provider-row'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Switch } from '@/components/ui/switch'
 import { getConfigText } from '@/lib/config-workspace'
 import { useI18n } from '@/lib/i18n'
 import type {
@@ -117,14 +118,14 @@ export function ConfigProviderStack({
         </div>
 
         <div className="grid gap-4 rounded-lg border border-border/70 bg-muted/20 p-4 md:grid-cols-2 xl:grid-cols-5">
-          <label className="flex items-start gap-3 rounded-md border border-border/60 bg-background/50 px-3 py-2 text-sm">
-            <input
-              checked={config.llmSafety.enabled}
-              className="mt-1"
-              onChange={(event) => onSetSafetyField('enabled', event.target.checked)}
-              type="checkbox"
-            />
+          <label className="flex min-h-16 items-center justify-between gap-4 rounded-md border border-border/60 bg-background/50 px-3 py-2 text-sm">
             <span>{configText.llmSafetyEnabled}</span>
+            <Switch
+              aria-label={configText.llmSafetyEnabled}
+              checked={config.llmSafety.enabled}
+              id="cfg_llm_safety_enabled"
+              onCheckedChange={(checked) => onSetSafetyField('enabled', checked)}
+            />
           </label>
 
           <NumericField

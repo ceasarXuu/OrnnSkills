@@ -1,3 +1,4 @@
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Textarea } from '@/components/ui/textarea'
 import { getConfigText } from '@/lib/config-workspace'
 import { useI18n } from '@/lib/i18n'
@@ -31,14 +32,18 @@ export function ConfigPromptEditor({
     <div className="space-y-3 rounded-lg border border-border/70 bg-card/70 p-4">
       <p className="text-sm font-medium text-foreground">{label}</p>
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      <RadioGroup
+        className="grid gap-4 xl:grid-cols-2"
+        onValueChange={(nextSource) =>
+          onSetPromptSource(promptKey, nextSource === 'custom' ? 'custom' : 'built_in')
+        }
+        value={source === 'custom' ? 'custom' : 'built_in'}
+      >
         <label className="space-y-2">
           <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-            <input
-              checked={source !== 'custom'}
-              name={`${promptKey}_source`}
-              onChange={() => onSetPromptSource(promptKey, 'built_in')}
-              type="radio"
+            <RadioGroupItem
+              id={`cfg_prompt_${promptKey}_source_built_in`}
+              value="built_in"
             />
             <span>{configText.builtInPrompt}</span>
           </div>
@@ -53,11 +58,9 @@ export function ConfigPromptEditor({
 
         <label className="space-y-2">
           <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-            <input
-              checked={source === 'custom'}
-              name={`${promptKey}_source`}
-              onChange={() => onSetPromptSource(promptKey, 'custom')}
-              type="radio"
+            <RadioGroupItem
+              id={`cfg_prompt_${promptKey}_source_custom`}
+              value="custom"
             />
             <span>{configText.customPrompt}</span>
           </div>
@@ -70,7 +73,7 @@ export function ConfigPromptEditor({
             value={value}
           />
         </label>
-      </div>
+      </RadioGroup>
     </div>
   )
 }

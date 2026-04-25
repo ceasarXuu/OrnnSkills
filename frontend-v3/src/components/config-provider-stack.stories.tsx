@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
-import { fn } from 'storybook/test'
+import { expect, fn } from 'storybook/test'
 import { ConfigProviderStack } from '@/components/config-provider-stack'
+import { CONFIG_TEXT } from '@/lib/config-workspace'
 import { dashboardStoryParameters } from '@/stories/dashboard-storybook'
 import {
   storyConnectivityResults,
@@ -38,6 +39,11 @@ export const Default: Story = {
     isCatalogLoading: false,
     isCheckingConnectivity: false,
     providerCatalog: storyProviderCatalog,
+  },
+  play: async ({ args, canvas, userEvent }) => {
+    await userEvent.click(canvas.getByRole('switch', { name: CONFIG_TEXT.llmSafetyEnabled }))
+
+    await expect(args.onSetSafetyField).toHaveBeenCalledWith('enabled', false)
   },
 }
 
