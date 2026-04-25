@@ -531,6 +531,8 @@
 - ✅ Dashboard V3 恢复成本 tab：复用 project snapshot 的 `agentUsage` 与 LiteLLM catalog，新增成本估算、模型拆分、scope/skill token 拆分，并补齐 Storybook 状态矩阵
 - 📝 前端经验：Storybook a11y 会检查 shadcn Table 的横向滚动容器；可滚动表格容器需要键盘可聚焦，否则 `scrollable-region-focusable` 会阻断组件验收
 - ✅ Dashboard V3 将成本从顶层 tab 收回项目工作台，项目页右侧统一使用二级 `技能 / 成本` Tabs，成本继续复用当前项目上下文和左侧 project rail
+- ✅ Dashboard V3 skills 正文加载优化：详情接口返回后立即落屏正文，版本历史 metadata 改为后台补齐，并按 `instanceId` 缓存详情，避免版本 fan-out 阻塞编辑区
+- 📝 前端经验：正文编辑区属于主路径，版本历史、统计补充、预览类数据都不能阻塞正文首屏；需要用日志事件标记 `content_ready`，再异步补齐次级信息
 
 ---
 
@@ -545,5 +547,5 @@
 
 ---
 
-_最后更新：2026-04-25_
+_最后更新：2026-04-26_
 _更新人：OrnnSkills Team_
