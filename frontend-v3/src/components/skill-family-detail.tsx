@@ -145,14 +145,6 @@ export function SkillFamilyDetail({
           </div>
         </CardHeader>
 
-        <CardContent className="space-y-6 pt-6">
-          <div className="grid grid-cols-4 gap-3">
-            <Metric label={t('observedCalls')} value={formatCompactNumberForLocale(family.usage.observedCalls, locale)} />
-            <Metric label={t('analyzedTouches')} value={formatCompactNumberForLocale(family.usage.analyzedTouches, locale)} />
-            <Metric label={t('optimized')} value={formatCompactNumberForLocale(family.usage.optimizedCount, locale)} />
-            <Metric label={t('divergedContent')} value={family.hasDivergedContent ? t('yes') : t('no')} />
-          </div>
-        </CardContent>
       </Card>
 
       <div className="grid grid-cols-[minmax(0,1fr)_340px] gap-6">
@@ -233,15 +225,6 @@ function DetailSelectors({
           ))}
         </SelectContent>
       </Select>
-    </div>
-  )
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-border/70 bg-background/40 px-4 py-4">
-      <div className="text-xs uppercase tracking-[0.24em] text-muted-foreground">{label}</div>
-      <div className="mt-2 text-xl font-semibold">{value}</div>
     </div>
   )
 }

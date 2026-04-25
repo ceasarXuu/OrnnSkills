@@ -52,7 +52,11 @@ describe('dashboard v3 skills layout contract', () => {
     expect(skillFamilyListSource).toContain('h-[calc(100vh-7rem)]')
     expect(skillFamilyListSource).toContain('ScrollArea className="h-full"')
 
-    expect(skillFamilyDetailSource).toContain('grid-cols-4')
+    expect(skillFamilyDetailSource).not.toContain('grid-cols-4')
+    expect(skillFamilyDetailSource).not.toContain("t('observedCalls')")
+    expect(skillFamilyDetailSource).not.toContain("t('analyzedTouches')")
+    expect(skillFamilyDetailSource).not.toContain("t('optimized')")
+    expect(skillFamilyDetailSource).not.toContain("t('divergedContent')")
     expect(skillFamilyDetailSource).toContain('grid-cols-[minmax(0,1fr)_340px]')
     expect(skillFamilyDetailSource).not.toContain('2xl:grid-cols-[minmax(0,1fr)_340px]')
 

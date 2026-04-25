@@ -28,7 +28,6 @@ type TranslationKey =
   | 'customProviderPlaceholder'
   | 'deactivate'
   | 'disabled'
-  | 'analyzedTouches'
   | 'calls'
   | 'effective'
   | 'effectiveVersion'
@@ -57,8 +56,6 @@ type TranslationKey =
   | 'noSkillFamilySelected'
   | 'noSkillInstance'
   | 'noVersions'
-  | 'observedCalls'
-  | 'optimized'
   | 'previewPropagation'
   | 'project'
   | 'projectCount'
@@ -88,7 +85,6 @@ type TranslationKey =
   | 'searchSkillFamilies'
   | 'searchSkills'
   | 'selectPreferredProject'
-  | 'divergedContent'
   | 'skill'
   | 'skillContent'
   | 'skillContentAria'
@@ -134,7 +130,6 @@ const TRANSLATIONS: Record<DashboardLanguage, Record<TranslationKey, string>> = 
     customProviderPlaceholder: '自定义模型服务 ID（例如：xai）',
     deactivate: '停用',
     disabled: 'disabled',
-    analyzedTouches: '分析触达',
     calls: '次调用',
     effective: 'effective',
     effectiveVersion: '生效版本',
@@ -163,8 +158,6 @@ const TRANSLATIONS: Record<DashboardLanguage, Record<TranslationKey, string>> = 
     noSkillFamilySelected: '先从左侧选择一个 skill family。',
     noSkillInstance: '暂无实例',
     noVersions: '当前没有版本记录。',
-    observedCalls: '观测调用',
-    optimized: '已优化',
     previewPropagation: '预览传播',
     project: '项目',
     projectCount: '个项目',
@@ -194,7 +187,6 @@ const TRANSLATIONS: Record<DashboardLanguage, Record<TranslationKey, string>> = 
     searchSkillFamilies: '搜索 family / runtime / status',
     searchSkills: '搜索 skill id / runtime / status',
     selectPreferredProject: '选择优先项目',
-    divergedContent: '正文分歧',
     skill: '技能',
     skillContent: '正文',
     skillContentAria: 'Skill 正文',
@@ -239,7 +231,6 @@ const TRANSLATIONS: Record<DashboardLanguage, Record<TranslationKey, string>> = 
     customProviderPlaceholder: 'Custom provider ID, for example xai',
     deactivate: 'Disable',
     disabled: 'disabled',
-    analyzedTouches: 'Analyzed touches',
     calls: 'calls',
     effective: 'effective',
     effectiveVersion: 'Effective version',
@@ -268,8 +259,6 @@ const TRANSLATIONS: Record<DashboardLanguage, Record<TranslationKey, string>> = 
     noSkillFamilySelected: 'Select a skill family from the left rail.',
     noSkillInstance: 'No instance',
     noVersions: 'No version records yet.',
-    observedCalls: 'Observed calls',
-    optimized: 'Optimized',
     previewPropagation: 'Preview propagation',
     project: 'Project',
     projectCount: 'projects',
@@ -299,7 +288,6 @@ const TRANSLATIONS: Record<DashboardLanguage, Record<TranslationKey, string>> = 
     searchSkillFamilies: 'Search family / runtime / status',
     searchSkills: 'Search skill id / runtime / status',
     selectPreferredProject: 'Select preferred project',
-    divergedContent: 'Diverged content',
     skill: 'Skill',
     skillContent: 'Content',
     skillContentAria: 'Skill content',

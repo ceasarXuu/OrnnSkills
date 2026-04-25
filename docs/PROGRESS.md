@@ -527,6 +527,7 @@
 - 📝 前端经验：shadcn `Select` 在 Storybook 交互测试里默认通过 portal 渲染到 `document.body`；写 `play` 时不要只在 canvas 范围内找 `option`
 - ✅ Dashboard V3 project 页左侧项目 rail 对齐 skills 页固定纵向结构，页面横向收窄时保持结构锁定
 - ✅ project rail 右上角新增项目选择入口，复用 `/api/projects/pick` 原生 Finder 流程，并在 Storybook 中锁定按钮回调契约
+- ✅ Dashboard V3 skills 详情头部移除暂不使用的四项 usage 指标条，保留正文编辑与版本历史主工作区
 
 ---
 
