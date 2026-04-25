@@ -27,5 +27,7 @@ describe('dashboard v3 i18n contract', () => {
     expect(getTranslations('zh').skillFamilyLibrary).toBe('技能库')
     expect(getTranslations('en').skillFamilyLibrary).toBe('Skill library')
     expect(getTranslations('en').configLoading).toBe('Loading config...')
+    expect(getTranslations('zh').cost).toBe('成本')
+    expect(getTranslations('en').cost).toBe('Cost')
   })
 })

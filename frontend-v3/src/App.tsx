@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom'
 import { ConfigWorkspace } from '@/components/config-workspace'
+import { CostWorkspace } from '@/components/cost-workspace'
 import { ProjectRail } from '@/components/project-rail'
 import { ProjectWorkbench } from '@/components/project-workbench'
 import { SkillDetailDialog } from '@/components/skill-detail-dialog'
 import { SkillsWorkspace } from '@/components/skills-workspace'
 import { WorkspaceHeader } from '@/components/workspace-header'
 import { useDashboardV3Workspace } from '@/features/dashboard/use-dashboard-v3-workspace'
+import { useDashboardV3Cost } from '@/features/dashboard/use-dashboard-v3-cost'
 import { logDashboardV3Event } from '@/lib/dashboard-api'
 import { sortSkills } from '@/lib/format'
 import { I18nProvider } from '@/lib/i18n'
@@ -17,7 +19,7 @@ import type {
   DashboardView,
 } from '@/types/dashboard'
 
-const DASHBOARD_VIEWS: DashboardView[] = ['skills', 'project', 'config']
+const DASHBOARD_VIEWS: DashboardView[] = ['skills', 'project', 'cost', 'config']
 
 function normalizeDashboardView(view?: string): DashboardView {
   if (view && DASHBOARD_VIEWS.includes(view as DashboardView)) {
@@ -57,9 +59,11 @@ function DashboardWorkspacePage() {
     pickProject,
     projects,
     selectProject,
+    selectedProject,
     selectedProjectId,
     selectedSnapshot,
   } = useDashboardV3Workspace()
+  const cost = useDashboardV3Cost(currentView === 'cost')
 
   useEffect(() => {
     if (view !== currentView) {
@@ -123,12 +127,15 @@ function DashboardWorkspacePage() {
                 currentView={currentView}
                 filteredSkills={filteredSkills}
                 isLoadingSnapshot={isLoadingSnapshot}
+                cost={cost}
                 onQueryChange={setQuery}
                 onSelectProject={selectProject}
                 onSelectSkill={setSelectedSkill}
                 projects={projects}
                 query={query}
+                selectedProject={selectedProject}
                 selectedProjectId={selectedProjectId}
+                selectedSnapshot={selectedSnapshot}
                 selectedSkillKey={selectedSkillKey}
               />
             </div>
@@ -139,12 +146,15 @@ function DashboardWorkspacePage() {
               currentView={currentView}
               filteredSkills={filteredSkills}
               isLoadingSnapshot={isLoadingSnapshot}
+              cost={cost}
               onQueryChange={setQuery}
               onSelectProject={selectProject}
               onSelectSkill={setSelectedSkill}
               projects={projects}
               query={query}
+              selectedProject={selectedProject}
               selectedProjectId={selectedProjectId}
+              selectedSnapshot={selectedSnapshot}
               selectedSkillKey={selectedSkillKey}
             />
           </div>
@@ -165,6 +175,7 @@ function DashboardWorkspacePage() {
 }
 
 interface ViewContentProps {
+  cost: ReturnType<typeof useDashboardV3Cost>
   currentView: DashboardView
   filteredSkills: DashboardSkill[]
   isLoadingSnapshot: boolean
@@ -173,11 +184,14 @@ interface ViewContentProps {
   onSelectSkill: (skill: DashboardSkill) => void
   projects: DashboardProject[]
   query: string
+  selectedProject: DashboardProject | null
   selectedProjectId: string
+  selectedSnapshot: ReturnType<typeof useDashboardV3Workspace>['selectedSnapshot']
   selectedSkillKey: string
 }
 
 function ViewContent({
+  cost,
   currentView,
   filteredSkills,
   isLoadingSnapshot,
@@ -186,7 +200,9 @@ function ViewContent({
   onSelectSkill,
   projects,
   query,
+  selectedProject,
   selectedProjectId,
+  selectedSnapshot,
   selectedSkillKey,
 }: ViewContentProps) {
   return (
@@ -207,6 +223,18 @@ function ViewContent({
           query={query}
           selectedSkillKey={selectedSkillKey}
           skills={filteredSkills}
+        />
+      ) : null}
+
+      {currentView === 'cost' ? (
+        <CostWorkspace
+          agentUsage={selectedSnapshot?.agentUsage}
+          catalogError={cost.catalogError}
+          isCatalogLoading={cost.isCatalogLoading}
+          isSnapshotLoading={isLoadingSnapshot}
+          projectName={selectedProject?.name}
+          projectPath={selectedProjectId}
+          providerCatalog={cost.providerCatalog}
         />
       ) : null}
 

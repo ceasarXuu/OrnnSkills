@@ -1,6 +1,6 @@
 export type MonitoringState = 'active' | 'paused'
 export type ConnectionState = 'connecting' | 'connected' | 'reconnecting' | 'error'
-export type DashboardView = 'skills' | 'project' | 'config'
+export type DashboardView = 'skills' | 'project' | 'cost' | 'config'
 export type SkillDomainRuntime = 'codex' | 'claude' | 'opencode'
 export type SkillUsageStatus = 'active' | 'idle' | 'unused' | 'partial'
 

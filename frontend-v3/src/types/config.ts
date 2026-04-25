@@ -56,6 +56,7 @@ export interface DashboardProviderCatalogModel {
   maxOutputTokens?: number | null
   inputCostPerToken?: number | null
   outputCostPerToken?: number | null
+  outputCostPerReasoningToken?: number | null
   supportsReasoning?: boolean
   supportsFunctionCalling?: boolean
   supportsPromptCaching?: boolean

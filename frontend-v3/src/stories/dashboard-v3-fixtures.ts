@@ -1,5 +1,6 @@
 import type { DashboardConfig, DashboardProviderCatalogEntry, DashboardProviderHealthResult } from '@/types/config'
 import type {
+  DashboardAgentUsage,
   DashboardProject,
   DashboardSkill,
   DashboardSkillApplyPreview,
@@ -240,6 +241,29 @@ export const storyProviderCatalog: DashboardProviderCatalogEntry[] = [
     apiKeyEnvVar: 'DEEPSEEK_API_KEY',
     defaultModel: 'deepseek-chat',
     id: 'deepseek',
+    modelDetails: [
+      {
+        id: 'deepseek/deepseek-chat',
+        inputCostPerToken: 0.00000027,
+        maxInputTokens: 64000,
+        maxOutputTokens: 8000,
+        mode: 'chat',
+        outputCostPerToken: 0.0000011,
+        supportsFunctionCalling: true,
+        supportsPromptCaching: true,
+        supportsStructuredOutput: true,
+      },
+      {
+        id: 'deepseek/deepseek-reasoner',
+        inputCostPerToken: 0.00000055,
+        maxInputTokens: 64000,
+        maxOutputTokens: 8000,
+        mode: 'chat',
+        outputCostPerReasoningToken: 0.00000219,
+        outputCostPerToken: 0.00000219,
+        supportsReasoning: true,
+      },
+    ],
     models: ['deepseek-chat', 'deepseek-reasoner'],
     name: 'DeepSeek',
   },
@@ -247,10 +271,79 @@ export const storyProviderCatalog: DashboardProviderCatalogEntry[] = [
     apiKeyEnvVar: 'OPENAI_API_KEY',
     defaultModel: 'gpt-5.4',
     id: 'openai',
+    modelDetails: [
+      {
+        id: 'openai/gpt-5.4',
+        inputCostPerToken: 0.00000125,
+        maxInputTokens: 128000,
+        maxOutputTokens: 16000,
+        mode: 'chat',
+        outputCostPerToken: 0.00001,
+        supportsFunctionCalling: true,
+        supportsReasoning: true,
+        supportsStructuredOutput: true,
+      },
+    ],
     models: ['gpt-5.4', 'gpt-5.4-mini'],
     name: 'OpenAI',
   },
 ]
+
+export const storyAgentUsage: DashboardAgentUsage = {
+  avgDurationMs: 8420,
+  byModel: {
+    'deepseek/deepseek-chat': {
+      avgDurationMs: 6500,
+      callCount: 38,
+      completionTokens: 48200,
+      lastCallAt: '2026-04-23T06:30:00.000Z',
+      promptTokens: 182000,
+      totalTokens: 230200,
+    },
+    'openai/gpt-5.4': {
+      avgDurationMs: 12400,
+      callCount: 7,
+      completionTokens: 19100,
+      lastCallAt: '2026-04-23T04:10:00.000Z',
+      promptTokens: 72000,
+      totalTokens: 91100,
+    },
+  },
+  byScope: {
+    skill_call_analyzer: {
+      callCount: 29,
+      totalTokens: 171000,
+    },
+    decision_explainer: {
+      callCount: 12,
+      totalTokens: 98200,
+    },
+    readiness_probe: {
+      callCount: 4,
+      totalTokens: 52100,
+    },
+  },
+  bySkill: {
+    'test-driven-development': {
+      callCount: 13,
+      totalTokens: 98000,
+    },
+    'systematic-debugging': {
+      callCount: 9,
+      totalTokens: 70200,
+    },
+    'astartes-coding-custodes': {
+      callCount: 7,
+      totalTokens: 64100,
+    },
+  },
+  callCount: 45,
+  completionTokens: 67300,
+  durationMsTotal: 378900,
+  lastCallAt: '2026-04-23T06:30:00.000Z',
+  promptTokens: 254000,
+  totalTokens: 321300,
+}
 
 export const storyConnectivityResults: DashboardProviderHealthResult[] = [
   {

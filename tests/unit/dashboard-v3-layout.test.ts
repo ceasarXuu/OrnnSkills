@@ -19,6 +19,14 @@ describe('dashboard v3 view layout rules', () => {
     });
   });
 
+  it('keeps cost scoped by the project rail', () => {
+    expect(resolveDashboardViewLayout('cost')).toEqual({
+      showProjectRail: true,
+      showHero: false,
+      showMetrics: false,
+    });
+  });
+
   it('keeps config free of project chrome', () => {
     expect(resolveDashboardViewLayout('config')).toEqual({
       showProjectRail: false,

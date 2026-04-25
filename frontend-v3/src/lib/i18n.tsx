@@ -1,8 +1,9 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { COST_TRANSLATIONS, type CostTranslationKey } from './i18n-cost'
 
 export type DashboardLanguage = 'en' | 'zh'
 
-type TranslationKey =
+type TranslationKey = CostTranslationKey
   | 'addProject'
   | 'addProvider'
   | 'apiKeyHide'
@@ -105,6 +106,7 @@ type TranslationKey =
 
 const TRANSLATIONS: Record<DashboardLanguage, Record<TranslationKey, string>> = {
   zh: {
+    ...COST_TRANSLATIONS.zh,
     addProject: '添加项目',
     addProvider: '新增模型服务',
     apiKeyHide: '隐藏',
@@ -206,6 +208,7 @@ const TRANSLATIONS: Record<DashboardLanguage, Record<TranslationKey, string>> = 
     versionHistory: '版本历史',
   },
   en: {
+    ...COST_TRANSLATIONS.en,
     addProject: 'Add project',
     addProvider: 'Add provider',
     apiKeyHide: 'Hide',

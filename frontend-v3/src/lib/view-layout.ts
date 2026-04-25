@@ -20,6 +20,12 @@ export function resolveDashboardViewLayout(view: DashboardView): DashboardViewLa
         showHero: false,
         showMetrics: false,
       }
+    case 'cost':
+      return {
+        showProjectRail: true,
+        showHero: false,
+        showMetrics: false,
+      }
     case 'config':
       return {
         showProjectRail: false,
