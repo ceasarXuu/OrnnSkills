@@ -12,8 +12,11 @@ function readWorkspaceFile(path: string): string {
 
 describe('testing gates', () => {
   it('exposes smoke and regression scripts for routine changes', () => {
+    expect(packageJson.scripts?.['test:runtime']).toBe(
+      'npm run build:dashboard-v3 && tsx tests/runtime/dashboard-v3-runtime-smoke.ts'
+    );
     expect(packageJson.scripts?.['test:smoke']).toBe(
-      'npm run typecheck && npm --prefix frontend-v3 run typecheck && vitest run tests/unit/dashboard-v3-layout.test.ts tests/unit/dashboard-v3-skills-workspace.test.ts tests/unit/dashboard-v3-project-contract.test.ts tests/unit/dashboard-v3-config-contract.test.ts tests/unit/dashboard-v3-cost-contract.test.ts tests/unit/dashboard-v3-storybook.test.ts tests/unit/dashboard-skill-evaluation-count.test.ts && npm run test:storybook:dashboard-v3 && npm run benchmark:dashboard:smoke'
+      'npm run typecheck && npm --prefix frontend-v3 run typecheck && vitest run tests/unit/dashboard-v3-layout.test.ts tests/unit/dashboard-v3-skills-workspace.test.ts tests/unit/dashboard-v3-project-contract.test.ts tests/unit/dashboard-v3-config-contract.test.ts tests/unit/dashboard-v3-cost-contract.test.ts tests/unit/dashboard-v3-storybook.test.ts tests/unit/dashboard-skill-evaluation-count.test.ts && npm run test:runtime && npm run test:storybook:dashboard-v3 && npm run benchmark:dashboard:smoke'
     );
     expect(packageJson.scripts?.['test:regression']).toBe(
       'npm run test:smoke && npm test -- --run && npm run benchmark:check && npm run build'

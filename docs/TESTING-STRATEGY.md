@@ -69,6 +69,7 @@
 
 关键测试:
 
+- `tests/runtime/dashboard-v3-runtime-smoke.ts`
 - `tests/unit/dashboard-server.test.ts`
 - `tests/unit/dashboard-sse-hub.test.ts`
 - `tests/unit/dashboard-data-reader.test.ts`
@@ -78,6 +79,17 @@
 - `tests/unit/daemon-process-manager.test.ts`
 - `npm run benchmark:dashboard:smoke`
 - `npm run benchmark:check`
+
+`tests/runtime/dashboard-v3-runtime-smoke.ts` 会启动真实 dashboard server，并用临时 HOME / 临时项目夹覆盖以下运行时路径:
+
+- `/` 默认入口重定向到 `/v3/`
+- `/v3/project` 返回已构建的 dashboard v3 bundle
+- `/v3/assets/*` 静态资源可访问且非空
+- `/api/projects` 返回注册项目和 skill count
+- `/api/projects/:project/snapshot` 返回项目 snapshot
+- `/api/skills/families` 返回 skill family 聚合结果
+- `/events` 能打开 SSE 并收到首个 update
+- `/api/dashboard/client-errors` 能接收浏览器运行时错误
 
 ### Skill Lifecycle Core
 
@@ -117,6 +129,7 @@ npm run test:smoke
 npm run typecheck
 npm --prefix frontend-v3 run typecheck
 vitest run tests/unit/dashboard-v3-layout.test.ts tests/unit/dashboard-v3-skills-workspace.test.ts tests/unit/dashboard-v3-project-contract.test.ts tests/unit/dashboard-v3-config-contract.test.ts tests/unit/dashboard-v3-cost-contract.test.ts tests/unit/dashboard-v3-storybook.test.ts tests/unit/dashboard-skill-evaluation-count.test.ts
+npm run test:runtime
 npm run test:storybook:dashboard-v3
 npm run benchmark:dashboard:smoke
 ```
