@@ -1,5 +1,6 @@
 import { LinkCircle02Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
+import { SkillVersionDiffViewer } from '@/components/skill-version-diff-viewer'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Textarea } from '@/components/ui/textarea'
@@ -14,6 +15,8 @@ interface SkillContentEditorProps {
   actionMessage: string | null
   applyPreview: DashboardSkillApplyPreview | null
   detailError: string | null
+  diffContent: string | null
+  diffVersion: number | null
   draftContent: string
   isApplying: boolean
   isSaving: boolean
@@ -23,12 +26,15 @@ interface SkillContentEditorProps {
   onSave: () => void
   preferredRuntime: SkillDomainRuntime
   selectedInstance: DashboardSkillInstance | null
+  selectedVersion: number | null
 }
 
 export function SkillContentEditor({
   actionMessage,
   applyPreview,
   detailError,
+  diffContent,
+  diffVersion,
   draftContent,
   isApplying,
   isSaving,
@@ -38,8 +44,10 @@ export function SkillContentEditor({
   onSave,
   preferredRuntime,
   selectedInstance,
+  selectedVersion,
 }: SkillContentEditorProps) {
   const { locale, t } = useI18n()
+  const isDiffMode = diffVersion !== null && diffContent !== null
 
   return (
     <Card className="border-border/70 bg-card/92">
@@ -50,12 +58,17 @@ export function SkillContentEditor({
             <div className="truncate text-sm text-muted-foreground">
               {selectedInstance?.projectPath ?? t('noSkillInstance')} · {selectedInstance?.runtime ?? preferredRuntime}
             </div>
+            {isDiffMode ? (
+              <div className="text-xs text-muted-foreground">
+                {t('diffView')} v{diffVersion} {'->'} v{selectedVersion ?? '--'}
+              </div>
+            ) : null}
           </div>
           <div className="flex shrink-0 gap-2">
             <Button onClick={() => void onLoadApplyPreview()} size="sm" variant="outline">
               {t('previewPropagation')}
             </Button>
-            <Button disabled={isSaving} onClick={() => void onSave()} size="sm">
+            <Button disabled={isSaving || isDiffMode} onClick={() => void onSave()} size="sm">
               {isSaving ? t('saving') : t('saveSkillContent')}
             </Button>
           </div>
@@ -68,12 +81,21 @@ export function SkillContentEditor({
           </div>
         ) : null}
 
-        <Textarea
-          aria-label={t('skillContentAria')}
-          className="min-h-[420px] rounded-xl border-border/80 bg-background/60 font-mono text-sm"
-          onChange={(event) => onDraftChange(event.target.value)}
-          value={draftContent}
-        />
+        {isDiffMode ? (
+          <SkillVersionDiffViewer
+            newContent={draftContent}
+            newVersion={selectedVersion}
+            oldContent={diffContent}
+            oldVersion={diffVersion}
+          />
+        ) : (
+          <Textarea
+            aria-label={t('skillContentAria')}
+            className="min-h-[420px] rounded-xl border-border/80 bg-background/60 font-mono text-sm"
+            onChange={(event) => onDraftChange(event.target.value)}
+            value={draftContent}
+          />
+        )}
 
         {actionMessage ? (
           <div className="text-sm text-muted-foreground">

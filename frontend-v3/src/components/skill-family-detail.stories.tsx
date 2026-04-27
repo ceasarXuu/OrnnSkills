@@ -22,6 +22,7 @@ function InteractiveSkillFamilyDetail(args: SkillFamilyDetailStoryArgs) {
   const [draftContent, setDraftContent] = useState(args.draftContent)
   const [preferredProjectPath, setPreferredProjectPath] = useState(args.preferredProjectPath)
   const [preferredRuntime, setPreferredRuntime] = useState<SkillDomainRuntime>(args.preferredRuntime)
+  const [diffVersion, setDiffVersion] = useState<number | null>(args.diffVersion)
   const [selectedVersion, setSelectedVersion] = useState<number | null>(args.selectedVersion)
 
   const selectedInstance = useMemo(() => {
@@ -44,6 +45,10 @@ function InteractiveSkillFamilyDetail(args: SkillFamilyDetailStoryArgs) {
         setPreferredProjectPath(projectPath)
         args.onPreferredProjectChange(projectPath)
       }}
+      onSelectDiffVersion={(version) => {
+        setDiffVersion(version)
+        args.onSelectDiffVersion(version)
+      }}
       onSelectVersion={(version) => {
         setSelectedVersion(version)
         args.onSelectVersion(version)
@@ -54,6 +59,7 @@ function InteractiveSkillFamilyDetail(args: SkillFamilyDetailStoryArgs) {
       }}
       preferredProjectPath={preferredProjectPath}
       preferredRuntime={preferredRuntime}
+      diffVersion={diffVersion}
       selectedInstance={selectedInstance}
       selectedVersion={selectedVersion}
     />
@@ -72,6 +78,8 @@ const meta = {
     applyPreview: storyApplyPreview,
     detail: storySkillDetail,
     detailError: null,
+    diffContent: null,
+    diffVersion: null,
     draftContent: storySkillDetail.content,
     family: storySkillFamilies[0],
     instances: storySkillInstances,
@@ -83,6 +91,7 @@ const meta = {
     onLoadApplyPreview: fn(),
     onPreferredProjectChange: fn(),
     onSave: fn(),
+    onSelectDiffVersion: fn(),
     onSelectVersion: fn(),
     onSwitchRuntime: fn(),
     onToggleVersionDisabled: fn(),
@@ -120,12 +129,23 @@ export const FilteredBySelectors: Story = {
   },
 }
 
+export const VersionDiff: Story = {
+  args: {
+    diffContent:
+      '---\nname: astartes-coding-custodes\n---\n\n# Astartes Coding Custodes\n\nKeep implementation staged.',
+    diffVersion: 5,
+  },
+  render: (args) => <InteractiveSkillFamilyDetail {...args} />,
+}
+
 export const EmptySelection: Story = {
   args: {
     actionMessage: null,
     applyPreview: null,
     detail: null,
     detailError: null,
+    diffContent: null,
+    diffVersion: null,
     draftContent: '',
     family: null,
     instances: [],
@@ -142,6 +162,8 @@ export const Loading: Story = {
   args: {
     applyPreview: null,
     detail: null,
+    diffContent: null,
+    diffVersion: null,
     draftContent: '',
     family: null,
     instances: [],

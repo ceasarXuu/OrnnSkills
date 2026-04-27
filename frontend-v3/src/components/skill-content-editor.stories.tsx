@@ -37,6 +37,8 @@ const meta = {
     actionMessage: null,
     applyPreview: null,
     detailError: null,
+    diffContent: null,
+    diffVersion: null,
     draftContent: storySkillDetail.content,
     isApplying: false,
     isSaving: false,
@@ -46,6 +48,7 @@ const meta = {
     onSave: fn(),
     preferredRuntime: 'claude',
     selectedInstance: storySkillInstances[0],
+    selectedVersion: 6,
   },
 } satisfies Meta<typeof SkillContentEditor>
 
@@ -61,6 +64,15 @@ export const WithApplyPreview: Story = {
   args: {
     actionMessage: '已自动保存草稿。',
     applyPreview: storyApplyPreview,
+  },
+  render: (args) => <InteractiveSkillContentEditor {...args} />,
+}
+
+export const DiffMode: Story = {
+  args: {
+    diffContent:
+      '---\nname: astartes-coding-custodes\n---\n\n# Astartes Coding Custodes\n\nKeep implementation staged.',
+    diffVersion: 5,
   },
   render: (args) => <InteractiveSkillContentEditor {...args} />,
 }

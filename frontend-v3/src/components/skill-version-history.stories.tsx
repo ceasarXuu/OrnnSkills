@@ -16,6 +16,8 @@ const meta = {
     width: '420px',
   }),
   args: {
+    diffVersion: null,
+    onSelectDiffVersion: fn(),
     onSelectVersion: fn(),
     onToggleVersionDisabled: fn(),
   },
@@ -28,6 +30,16 @@ type Story = StoryObj<typeof meta>
 export const Default: Story = {
   args: {
     detail: storySkillDetail,
+    selectedInstance: storySkillInstances[0],
+    selectedVersion: 6,
+    versionMetadataByNumber: storySkillVersions,
+  },
+}
+
+export const Comparing: Story = {
+  args: {
+    detail: storySkillDetail,
+    diffVersion: 5,
     selectedInstance: storySkillInstances[0],
     selectedVersion: 6,
     versionMetadataByNumber: storySkillVersions,

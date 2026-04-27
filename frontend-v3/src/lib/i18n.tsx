@@ -29,6 +29,8 @@ type TranslationKey = CostTranslationKey
   | 'customProviderPlaceholder'
   | 'deactivate'
   | 'disabled'
+  | 'diffAgainst'
+  | 'diffView'
   | 'calls'
   | 'effective'
   | 'effectiveVersion'
@@ -56,6 +58,7 @@ type TranslationKey = CostTranslationKey
   | 'noProjects'
   | 'noProviders'
   | 'noReason'
+  | 'noDiff'
   | 'noSkillFamilySelected'
   | 'noSkillInstance'
   | 'noVersions'
@@ -88,6 +91,8 @@ type TranslationKey = CostTranslationKey
   | 'searchSkillFamilies'
   | 'searchSkills'
   | 'selectPreferredProject'
+  | 'selectVersionToDiff'
+  | 'selectVersionToView'
   | 'skill'
   | 'skillContent'
   | 'skillContentAria'
@@ -105,6 +110,7 @@ type TranslationKey = CostTranslationKey
   | 'no'
   | 'version'
   | 'versionHistory'
+  | 'viewVersion'
 
 const TRANSLATIONS: Record<DashboardLanguage, Record<TranslationKey, string>> = {
   zh: {
@@ -134,6 +140,8 @@ const TRANSLATIONS: Record<DashboardLanguage, Record<TranslationKey, string>> = 
     customProviderPlaceholder: '自定义模型服务 ID（例如：xai）',
     deactivate: '停用',
     disabled: 'disabled',
+    diffAgainst: '对比版本',
+    diffView: 'Diff 对比',
     calls: '次调用',
     effective: 'effective',
     effectiveVersion: '生效版本',
@@ -161,6 +169,7 @@ const TRANSLATIONS: Record<DashboardLanguage, Record<TranslationKey, string>> = 
     noProjects: '当前没有可用项目。',
     noProviders: '暂无模型服务，请点击下方按钮添加。',
     noReason: '无原因',
+    noDiff: '不对比',
     noSkillFamilySelected: '先从左侧选择一个 skill family。',
     noSkillInstance: '暂无实例',
     noVersions: '当前没有版本记录。',
@@ -193,6 +202,8 @@ const TRANSLATIONS: Record<DashboardLanguage, Record<TranslationKey, string>> = 
     searchSkillFamilies: '搜索 family / runtime / status',
     searchSkills: '搜索 skill id / status',
     selectPreferredProject: '选择优先项目',
+    selectVersionToDiff: '选择对比版本',
+    selectVersionToView: '选择查看版本',
     skill: '技能',
     skillContent: '正文',
     skillContentAria: 'Skill 正文',
@@ -210,6 +221,7 @@ const TRANSLATIONS: Record<DashboardLanguage, Record<TranslationKey, string>> = 
     no: '否',
     version: '版本',
     versionHistory: '版本历史',
+    viewVersion: '查看版本',
   },
   en: {
     ...COST_TRANSLATIONS.en,
@@ -238,6 +250,8 @@ const TRANSLATIONS: Record<DashboardLanguage, Record<TranslationKey, string>> = 
     customProviderPlaceholder: 'Custom provider ID, for example xai',
     deactivate: 'Disable',
     disabled: 'disabled',
+    diffAgainst: 'Compare with',
+    diffView: 'Diff view',
     calls: 'calls',
     effective: 'effective',
     effectiveVersion: 'Effective version',
@@ -265,6 +279,7 @@ const TRANSLATIONS: Record<DashboardLanguage, Record<TranslationKey, string>> = 
     noProjects: 'No projects available.',
     noProviders: 'No model providers yet. Add one below.',
     noReason: 'No reason',
+    noDiff: 'No diff',
     noSkillFamilySelected: 'Select a skill family from the left rail.',
     noSkillInstance: 'No instance',
     noVersions: 'No version records yet.',
@@ -297,6 +312,8 @@ const TRANSLATIONS: Record<DashboardLanguage, Record<TranslationKey, string>> = 
     searchSkillFamilies: 'Search family / runtime / status',
     searchSkills: 'Search skill id / status',
     selectPreferredProject: 'Select preferred project',
+    selectVersionToDiff: 'Select comparison version',
+    selectVersionToView: 'Select version to view',
     skill: 'Skill',
     skillContent: 'Content',
     skillContentAria: 'Skill content',
@@ -314,6 +331,7 @@ const TRANSLATIONS: Record<DashboardLanguage, Record<TranslationKey, string>> = 
     no: 'No',
     version: 'Version',
     versionHistory: 'Version history',
+    viewVersion: 'View version',
   },
 }
 

@@ -33,6 +33,8 @@ interface SkillFamilyDetailProps {
   applyPreview: DashboardSkillApplyPreview | null
   detail: DashboardSkillDetail | null
   detailError: string | null
+  diffContent: string | null
+  diffVersion: number | null
   draftContent: string
   family: DashboardSkillFamily | null
   isApplying: boolean
@@ -41,6 +43,7 @@ interface SkillFamilyDetailProps {
   onApplyToFamily: () => void
   onDraftChange: (value: string) => void
   onLoadApplyPreview: () => void
+  onSelectDiffVersion: (version: number | null) => void
   onPreferredProjectChange: (projectPath: string) => void
   onSelectVersion: (version: number) => void
   onSave: () => void
@@ -59,6 +62,8 @@ export function SkillFamilyDetail({
   applyPreview,
   detail,
   detailError,
+  diffContent,
+  diffVersion,
   draftContent,
   family,
   isApplying,
@@ -67,6 +72,7 @@ export function SkillFamilyDetail({
   onApplyToFamily,
   onDraftChange,
   onLoadApplyPreview,
+  onSelectDiffVersion,
   onPreferredProjectChange,
   onSelectVersion,
   onSave,
@@ -152,6 +158,8 @@ export function SkillFamilyDetail({
           actionMessage={actionMessage}
           applyPreview={applyPreview}
           detailError={detailError}
+          diffContent={diffContent}
+          diffVersion={diffVersion}
           draftContent={draftContent}
           isApplying={isApplying}
           isSaving={isSaving}
@@ -161,10 +169,13 @@ export function SkillFamilyDetail({
           onSave={onSave}
           preferredRuntime={preferredRuntime}
           selectedInstance={selectedInstance}
+          selectedVersion={selectedVersion}
         />
 
         <SkillVersionHistory
           detail={detail}
+          diffVersion={diffVersion}
+          onSelectDiffVersion={onSelectDiffVersion}
           onSelectVersion={onSelectVersion}
           onToggleVersionDisabled={onToggleVersionDisabled}
           selectedInstance={selectedInstance}

@@ -23,6 +23,7 @@ import {
   mergeCachedVersionMetadata,
   setCachedSkillDetail,
 } from '@/lib/skill-detail-cache'
+import { useSkillVersionCompare } from './use-skill-version-compare'
 import type {
   DashboardSkillApplyPreview,
   DashboardSkillDetail,
@@ -90,6 +91,15 @@ export function useDashboardV3SkillLibrary(preferredProjectPath: string) {
   const selectedInstance = useMemo(() => {
     return instances.find((instance) => instance.instanceId === selectedInstanceId) ?? null
   }, [instances, selectedInstanceId])
+  const versionCompare = useSkillVersionCompare({
+    baseVersion: selectedVersion,
+    onActionMessage: setActionMessage,
+    onMetadataLoaded: (version, metadata) => {
+      setVersionMetadataByNumber((current) => ({ ...current, [version]: metadata }))
+    },
+    selectedFamilyId,
+    selectedInstance,
+  })
   useEffect(() => {
     skillLibraryCache = {
       actionMessage,
@@ -455,6 +465,8 @@ export function useDashboardV3SkillLibrary(preferredProjectPath: string) {
     applyPreview,
     detail,
     detailError,
+    diffContent: versionCompare.compareContent,
+    diffVersion: versionCompare.compareVersion,
     draftContent,
     families: filteredFamilies,
     familiesError,
@@ -465,6 +477,7 @@ export function useDashboardV3SkillLibrary(preferredProjectPath: string) {
     isLoadingSkillDetail,
     isSaving,
     loadApplyPreview,
+    loadDiffVersion: versionCompare.selectCompareVersion,
     loadVersion,
     preferredRuntime,
     query,
