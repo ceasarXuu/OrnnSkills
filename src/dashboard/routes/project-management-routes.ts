@@ -1,3 +1,5 @@
+import { assertSafeProjectPath } from '../../utils/path.js';
+
 interface RouteLogger {
   debug(message: string, meta?: Record<string, unknown>): void;
   info(message: string, meta?: Record<string, unknown>): void;
@@ -106,7 +108,8 @@ export async function handleProjectManagementRoutes(
         return true;
       }
 
-      const onboarding = await onboardProjectForMonitoring(body.path, body.name);
+      const safePath = assertSafeProjectPath(body.path);
+      const onboarding = await onboardProjectForMonitoring(safePath, body.name);
       logger.debug('Initialized project dashboard language', {
         projectPath: onboarding.projectPath,
         source: 'api.projects.add',

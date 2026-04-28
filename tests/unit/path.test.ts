@@ -14,6 +14,7 @@ import {
   getSkillSnapshotsDir,
   join as pathJoin,
   validateProjectPath,
+  assertSafeProjectPath,
   validateSkillId,
   sanitizeSkillId,
   assertValidSkillId,
@@ -123,6 +124,44 @@ describe('Path Validation', () => {
 
     it('should throw for path traversal', () => {
       expect(() => validateProjectPath('../../../etc/passwd')).toThrow();
+    });
+  });
+
+  describe('assertSafeProjectPath', () => {
+    it('should accept valid absolute path to existing directory', () => {
+      const result = assertSafeProjectPath(testProjectPath);
+      expect(result).toBe(testProjectPath);
+    });
+
+    it('should reject empty string', () => {
+      expect(() => assertSafeProjectPath('')).toThrow('must not be empty');
+    });
+
+    it('should reject whitespace-only string', () => {
+      expect(() => assertSafeProjectPath('   ')).toThrow('must not be empty');
+    });
+
+    it('should reject NUL bytes', () => {
+      expect(() => assertSafeProjectPath('/tmp/test\0path')).toThrow('NUL bytes');
+    });
+
+    it('should reject path traversal with ..', () => {
+      expect(() => assertSafeProjectPath('../../../etc/passwd')).toThrow('Path traversal');
+    });
+
+    it('should reject non-existent path', () => {
+      expect(() => assertSafeProjectPath('/nonexistent/path/that/does/not/exist')).toThrow('does not exist');
+    });
+
+    it('should reject path that is a file, not a directory', () => {
+      const filePath = join(testProjectPath, 'test-file.txt');
+      writeFileSync(filePath, 'test');
+      expect(() => assertSafeProjectPath(filePath)).toThrow('not a directory');
+    });
+
+    it('should not restrict to cwd (unlike validateProjectPath)', () => {
+      const result = assertSafeProjectPath(tmpdir());
+      expect(result).toBe(tmpdir());
     });
   });
 

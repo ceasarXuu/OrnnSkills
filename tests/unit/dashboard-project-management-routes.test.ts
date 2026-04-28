@@ -1,4 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { mkdirSync, rmSync, existsSync } from 'node:fs';
 
 describe('dashboard project management routes', () => {
   const makeLogger = () => ({
@@ -172,5 +175,89 @@ describe('dashboard project management routes', () => {
 
     expect(handled).toBe(true);
     expect(json).toHaveBeenCalledWith({ lines });
+  });
+
+  describe('POST /api/projects path validation', () => {
+    const testDir = join(tmpdir(), 'ornn-route-test-' + Date.now());
+
+    beforeEach(() => {
+      mkdirSync(testDir, { recursive: true });
+    });
+
+    afterEach(() => {
+      if (existsSync(testDir)) {
+        rmSync(testDir, { recursive: true, force: true });
+      }
+    });
+
+    it('rejects path with NUL bytes', async () => {
+      const { handleProjectManagementRoutes } = await import('../../src/dashboard/routes/project-management-routes.js');
+      const json = vi.fn();
+
+      const handled = await handleProjectManagementRoutes({
+        path: '/api/projects',
+        method: 'POST',
+        json,
+        parseBody: vi.fn().mockResolvedValue({ path: '/tmp/test\0evil' }),
+        getProjectsWithStatus: vi.fn(),
+        onboardProjectForMonitoring: vi.fn(),
+        pickProjectDirectory: vi.fn(),
+        setProjectMonitoringState: vi.fn(),
+        readGlobalLogs: vi.fn(),
+        logger: makeLogger(),
+      });
+
+      expect(handled).toBe(true);
+      expect(json).toHaveBeenCalledWith(expect.objectContaining({ ok: false }), 400);
+    });
+
+    it('rejects path traversal', async () => {
+      const { handleProjectManagementRoutes } = await import('../../src/dashboard/routes/project-management-routes.js');
+      const json = vi.fn();
+
+      const handled = await handleProjectManagementRoutes({
+        path: '/api/projects',
+        method: 'POST',
+        json,
+        parseBody: vi.fn().mockResolvedValue({ path: '../../../etc/passwd' }),
+        getProjectsWithStatus: vi.fn(),
+        onboardProjectForMonitoring: vi.fn(),
+        pickProjectDirectory: vi.fn(),
+        setProjectMonitoringState: vi.fn(),
+        readGlobalLogs: vi.fn(),
+        logger: makeLogger(),
+      });
+
+      expect(handled).toBe(true);
+      expect(json).toHaveBeenCalledWith(expect.objectContaining({ ok: false }), 400);
+    });
+
+    it('passes validated path to onboardProjectForMonitoring', async () => {
+      const { handleProjectManagementRoutes } = await import('../../src/dashboard/routes/project-management-routes.js');
+      const json = vi.fn();
+      const onboardProjectForMonitoring = vi.fn().mockResolvedValue({
+        projectPath: testDir,
+        initialized: true,
+        daemonStarted: false,
+        daemonRunning: true,
+      });
+
+      const handled = await handleProjectManagementRoutes({
+        path: '/api/projects',
+        method: 'POST',
+        json,
+        parseBody: vi.fn().mockResolvedValue({ path: testDir }),
+        getProjectsWithStatus: vi.fn().mockReturnValue([]),
+        onboardProjectForMonitoring,
+        pickProjectDirectory: vi.fn(),
+        setProjectMonitoringState: vi.fn(),
+        readGlobalLogs: vi.fn(),
+        logger: makeLogger(),
+      });
+
+      expect(handled).toBe(true);
+      expect(onboardProjectForMonitoring).toHaveBeenCalledWith(testDir, undefined);
+      expect(json).toHaveBeenCalledWith(expect.objectContaining({ ok: true }));
+    });
   });
 });
