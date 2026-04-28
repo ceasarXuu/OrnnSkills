@@ -411,46 +411,46 @@ function inferDiagnostics(errorMessage: string): ErrorDiagnostics {
 
   if (message.includes('not found') || message.includes('not exist') || message.includes('does not exist')) {
     if (message.includes('skill')) {
-      return ERROR_DIAGNOSTICS['SKILL_NOT_FOUND'];
+      return ERROR_DIAGNOSTICS['SKILL_NOT_FOUND']!;
     }
     if (message.includes('.ornn') || message.includes('directory')) {
-      return ERROR_DIAGNOSTICS['PROJECT_NOT_INITIALIZED'];
+      return ERROR_DIAGNOSTICS['PROJECT_NOT_INITIALIZED']!;
     }
     if (message.includes('origin')) {
-      return ERROR_DIAGNOSTICS['ORIGIN_NOT_FOUND'];
+      return ERROR_DIAGNOSTICS['ORIGIN_NOT_FOUND']!;
     }
   }
 
   if (message.includes('invalid skill id') || message.includes('invalid characters')) {
-    return ERROR_DIAGNOSTICS['INVALID_SKILL_ID'];
+    return ERROR_DIAGNOSTICS['INVALID_SKILL_ID']!;
   }
 
   if (message.includes('revision')) {
-    return ERROR_DIAGNOSTICS['INVALID_REVISION'];
+    return ERROR_DIAGNOSTICS['INVALID_REVISION']!;
   }
 
   if (message.includes('snapshot')) {
-    return ERROR_DIAGNOSTICS['SNAPSHOT_NOT_FOUND'];
+    return ERROR_DIAGNOSTICS['SNAPSHOT_NOT_FOUND']!;
   }
 
   if (message.includes('path traversal') || message.includes('..')) {
-    return ERROR_DIAGNOSTICS['PATH_TRAVERSAL'];
+    return ERROR_DIAGNOSTICS['PATH_TRAVERSAL']!;
   }
 
   if (message.includes('daemon') && (message.includes('not running') || message.includes('not start'))) {
-    return ERROR_DIAGNOSTICS['DAEMON_NOT_RUNNING'];
+    return ERROR_DIAGNOSTICS['DAEMON_NOT_RUNNING']!;
   }
 
   if (message.includes('permission') || message.includes('denied')) {
-    return ERROR_DIAGNOSTICS['PERMISSION_DENIED'];
+    return ERROR_DIAGNOSTICS['PERMISSION_DENIED']!;
   }
 
   if (message.includes('api key') || message.includes('auth')) {
-    return ERROR_DIAGNOSTICS['API_KEY_INVALID'];
+    return ERROR_DIAGNOSTICS['API_KEY_INVALID']!;
   }
 
   if (message.includes('network') || message.includes('connection') || message.includes('timeout')) {
-    return ERROR_DIAGNOSTICS['NETWORK_ERROR'];
+    return ERROR_DIAGNOSTICS['NETWORK_ERROR']!;
   }
 
   return getGenericDiagnostics();

@@ -72,21 +72,21 @@ export class RewriteSectionStrategy extends BaseStrategy {
 
     // 否则查找包含 pattern 的段落
     for (let i = 0; i < lines.length; i++) {
-      if (lines[i].includes(pattern)) {
+      if (lines[i]!.includes(pattern)) {
         // 向上找到 section 开头
         let start = i;
-        while (start > 0 && !lines[start].trim().startsWith('##')) {
+        while (start > 0 && !lines[start]!.trim().startsWith('##')) {
           start--;
         }
 
         // 向下找到 section 结尾
         let end = start + 1;
-        while (end < lines.length && !lines[end].trim().startsWith('##')) {
+        while (end < lines.length && !lines[end]!.trim().startsWith('##')) {
           end++;
         }
 
         // 提取 section 名称
-        const sectionName = lines[start].trim().replace(/^##\s*/, '');
+        const sectionName = lines[start]!.trim().replace(/^##\s*/, '');
 
         return {
           found: true,
@@ -117,11 +117,11 @@ export class RewriteSectionStrategy extends BaseStrategy {
     const normalizedName = sectionName.toLowerCase().trim();
 
     for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim().toLowerCase();
+      const line = lines[i]!.trim().toLowerCase();
       if (line.startsWith('##') && line.includes(normalizedName)) {
         // 找到 section 结尾
         let j = i + 1;
-        while (j < lines.length && !lines[j].trim().startsWith('##')) {
+        while (j < lines.length && !lines[j]!.trim().startsWith('##')) {
           j++;
         }
 
@@ -130,7 +130,7 @@ export class RewriteSectionStrategy extends BaseStrategy {
           startIndex: i,
           endIndex: j,
           content: lines.slice(i, j),
-          sectionName: lines[i].trim().replace(/^##\s*/, ''),
+          sectionName: lines[i]!.trim().replace(/^##\s*/, ''),
         };
       }
     }
@@ -150,7 +150,7 @@ export class RewriteSectionStrategy extends BaseStrategy {
 
     // 保留 section 标题
     if (originalContent.length > 0) {
-      result.push(originalContent[0]); // ## Section Title
+      result.push(originalContent[0]!); // ## Section Title
     }
 
     // 添加改进说明
@@ -161,7 +161,7 @@ export class RewriteSectionStrategy extends BaseStrategy {
 
     // 处理原有内容
     for (let i = 1; i < originalContent.length; i++) {
-      const line = originalContent[i];
+      const line = originalContent[i]!;
 
       // 跳过包含问题模式的行
       if (line.includes(problemPattern)) {

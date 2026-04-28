@@ -27,8 +27,8 @@ export function parseShadowId(shadowId: string): ShadowIdParts | null {
   const scopedMatch = head.match(/^(codex|claude|opencode)::(.+)$/);
   if (scopedMatch) {
     return {
-      runtime: scopedMatch[1] as 'codex' | 'claude' | 'opencode',
-      skillId: scopedMatch[2],
+      runtime: scopedMatch[1]! as 'codex' | 'claude' | 'opencode',
+      skillId: scopedMatch[2]!,
       projectRoot: shadowId.slice(atIndex + 1),
     };
   }

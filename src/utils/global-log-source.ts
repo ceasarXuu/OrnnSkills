@@ -38,10 +38,10 @@ function tailTextFile(filePath: string, maxLines = 200): string[] {
       readSync(fd, buffer, 0, readSize, position);
       const chunk = buffer.toString('utf-8') + remainder;
       const parts = chunk.split('\n');
-      remainder = parts[0];
+      remainder = parts[0]!;
       for (let index = parts.length - 1; index >= 1; index -= 1) {
-        if (parts[index].trim()) {
-          lines.push(parts[index]);
+        if (parts[index]!.trim()) {
+          lines.push(parts[index]!);
         }
       }
     }
@@ -77,8 +77,8 @@ export function parseGlobalLogLine(raw: string): GlobalLogEntry {
   if (newFormatMatch) {
     return {
       raw,
-      timestamp: newFormatMatch[1],
-      level: newFormatMatch[2].toUpperCase(),
+      timestamp: newFormatMatch[1]!,
+      level: newFormatMatch[2]!.toUpperCase(),
       context: newFormatMatch[3] ?? '',
       message: newFormatMatch[4] ?? raw,
     };
@@ -88,8 +88,8 @@ export function parseGlobalLogLine(raw: string): GlobalLogEntry {
   if (oldFormatMatch) {
     return {
       raw,
-      timestamp: oldFormatMatch[1],
-      level: oldFormatMatch[2].toUpperCase(),
+      timestamp: oldFormatMatch[1]!,
+      level: oldFormatMatch[2]!.toUpperCase(),
       context: '',
       message: oldFormatMatch[3] ?? raw,
     };
@@ -216,7 +216,7 @@ export function readRotatingLogEntriesSince(
   const lines: GlobalLogEntry[] = [];
 
   for (let index = startIndex; index < candidates.length; index += 1) {
-    const filePath = candidates[index];
+    const filePath = candidates[index]!;
     const fileSize = statSync(filePath).size;
     let readOffset = 0;
 

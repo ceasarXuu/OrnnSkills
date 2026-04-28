@@ -77,7 +77,7 @@ function stripAnsiColorCodes(text: string): string {
       index += 2;
       while (index < text.length) {
         const next = text[index];
-        if ((next >= '0' && next <= '9') || next === ';') {
+        if (next !== undefined && ((next >= '0' && next <= '9') || next === ';')) {
           index += 1;
           continue;
         }

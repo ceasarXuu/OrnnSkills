@@ -75,16 +75,16 @@ export function createPreviewCommand(): Command {
         }
 
         const suggestions: string[] = [];
-        if (changeTypeCounts['append_context'] > 0) {
+        if ((changeTypeCounts['append_context'] ?? 0) > 0) {
           suggestions.push('   - APPEND_CONTEXT: Consider adding more project-specific context');
         }
-        if (changeTypeCounts['tighten_trigger'] > 0) {
+        if ((changeTypeCounts['tighten_trigger'] ?? 0) > 0) {
           suggestions.push('   - TIGHTEN_TRIGGER: Review trigger conditions for better precision');
         }
-        if (changeTypeCounts['add_fallback'] > 0) {
+        if ((changeTypeCounts['add_fallback'] ?? 0) > 0) {
           suggestions.push('   - ADD_FALLBACK: Ensure common error cases have fallbacks');
         }
-        if (changeTypeCounts['prune_noise'] > 0) {
+        if ((changeTypeCounts['prune_noise'] ?? 0) > 0) {
           suggestions.push('   - PRUNE_NOISE: Remove low-value content periodically');
         }
 
