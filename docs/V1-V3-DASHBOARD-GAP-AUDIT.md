@@ -1,5 +1,10 @@
 # V1 vs V3 Dashboard Gap Audit
 
+> **状态：历史审计（2026-03 完成）**
+>
+> 本审计用于驱动 V3 dashboard 收敛工作，相关 gap 已在后续 V3 迭代中按 [PROGRESS.md](PROGRESS.md) 推进。
+> V1 dashboard 已于 commit `3a29ab3` 整体下线，本文档保留作为对照背景。
+
 Purpose: extract the real V1 dashboard contract from code, then compare it against the current V3 implementation.
 
 Scope of truth:

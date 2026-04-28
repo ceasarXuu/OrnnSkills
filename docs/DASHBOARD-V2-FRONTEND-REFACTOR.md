@@ -1,5 +1,11 @@
 # Dashboard V2 Frontend Refactor
 
+> **状态：历史文档（2026-04 起归档）**
+>
+> Dashboard 已统一收敛到 V3 (`frontend-v3/` + `/v3` 路由)，V2 前端代码已于 commit `3a29ab3` 移除。
+> 本文件保留以追溯当时的设计推演与决策上下文，**不再代表当前实现**。
+> 当前 dashboard 进展请参考 [PROGRESS.md](PROGRESS.md) 和 [PRD.md](PRD.md)。
+
 ## 0. Status Update
 
 - 原计划里的 `v2` 隔离层已经证明“入口隔离”不等于“表示层隔离”
