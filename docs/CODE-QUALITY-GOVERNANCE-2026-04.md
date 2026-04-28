@@ -62,17 +62,18 @@
 - P0-2 路径校验接入后，`validateProjectPath` 要求路径在 `cwd` 下（`path.ts:87`），但 dashboard onboarding 场景用户可能添加任意磁盘路径；需确认此约束是否需要放宽为"任意存在的绝对路径"
 - `exec` → `spawn` 改造涉及两处独立实现（`dashboard-launcher.ts` 和 `dashboard.ts`），需保持行为一致
 - LiteLLM schema 校验若引入 Zod 会新增运行时依赖，需评估 bundle size 影响
+- `noUncheckedIndexedAccess` 实测引出 135 个编译错误 / 45 个文件（超出预期），已修复 11 文件 / 59 错误，剩余需单独 PR 处理
 
 ## 7. 进度追踪
 
 | # | 状态 | commit |
 |---|---|---|
-| 1 | TODO | |
-| 2 | TODO | |
-| 3 | TODO | |
-| 4 | TODO | |
+| 1 | DONE | `5f1dff9` |
+| 2 | DONE | `8f0347f` |
+| 3 | DONE | `e4b2dae` |
+| 4 | DONE | `1e0002b` |
 | 5 | TODO | |
-| 6 | TODO | |
+| 6 | WIP | `b881bb3`（11 文件已修复，剩余 ~76 错误 / 35 文件 → 单独 PR） |
 | 7 | TODO | |
 | 8 | TODO | |
 | 9 | TODO | |
