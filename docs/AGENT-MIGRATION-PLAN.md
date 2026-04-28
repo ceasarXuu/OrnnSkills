@@ -685,7 +685,7 @@ model_name = "deepseek-chat"      # 执行用轻量模型
 
 ### 9.2 参考文档
 
-- [测试报告 V2](../test/LLM-SKILL-ANALYSIS-REPORT-V2.md)
+- [测试报告 V2](research/legacy-tests/LLM-SKILL-ANALYSIS-REPORT-V2.md)
 - [架构约束](../docs/ARCHITECTURE_CONSTRAINTS.md)
 - [LangChain JS](https://js.langchain.com/)
 - [LiteLLM](https://docs.litellm.ai/)

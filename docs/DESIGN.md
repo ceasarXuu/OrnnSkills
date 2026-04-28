@@ -429,7 +429,7 @@ user_confirm = false
 - [LiteLLM 集成调研](./LITELLM-RESEARCH.md)
 - [Agent 迁移计划](./AGENT-MIGRATION-PLAN.md)
 - [架构约束](./ARCHITECTURE_CONSTRAINTS.md)
-- [测试报告](../test/TEST-REPORT.md)
+- [测试报告](research/legacy-tests/TEST-REPORT.md)
 
 ---
 
