@@ -14,6 +14,7 @@ import {
   LLMRequestGuard,
   type LLMRequestGuardTicket,
 } from './request-guard.js';
+import { assertLiteLLMResponse, LiteLLMResponseShapeError } from './litellm-response-guard.js';
 
 const logger = createChildLogger('litellm-client');
 
@@ -326,7 +327,20 @@ export class LiteLLMClient implements LLMInstance {
         );
       }
 
-      const data = (await response.json()) as LiteLLMResponse;
+      const data = (await response.json()) as unknown;
+      try {
+        assertLiteLLMResponse(data);
+      } catch (error) {
+        if (error instanceof LiteLLMResponseShapeError) {
+          logger.error('LiteLLM response failed shape validation', {
+            provider: this.provider,
+            modelName: this.modelName,
+            path: error.path,
+            received: error.received,
+          });
+        }
+        throw error;
+      }
 
       // Track token usage
       if (data.usage) {
