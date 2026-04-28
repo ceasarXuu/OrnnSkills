@@ -201,7 +201,11 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
           isRunning: monitoringState === 'paused' ? false : daemon.isRunning,
           skillCount: readSkillCount(p.path),
         };
-      } catch {
+      } catch (error) {
+        logger.debug('Failed to read daemon status for project, defaulting to inactive', {
+          projectPath: p.path,
+          error: String(error),
+        });
         return {
           ...p,
           monitoringState,

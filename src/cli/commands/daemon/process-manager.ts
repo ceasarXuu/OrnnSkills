@@ -1,3 +1,7 @@
+import { createChildLogger } from '../../../utils/logger.js';
+
+const logger = createChildLogger('process-manager');
+
 export interface StopDaemonProcessOptions {
   isProcessRunning?: (pid: number) => boolean;
   sendSignal?: (pid: number, signal: NodeJS.Signals) => void;
@@ -51,7 +55,8 @@ export async function stopDaemonProcess(
         clearInterval(interval);
         try {
           sendSignal(pid, 'SIGKILL');
-        } catch {
+        } catch (error) {
+          logger.warn('Failed to send SIGKILL to daemon process', { pid, error: String(error) });
           resolve({ stopped: false, forced: true });
           return;
         }

@@ -288,7 +288,11 @@ export class Daemon {
   private lookupProjectRegistration(projectRoot: string) {
     try {
       return projectsRegistry.getProjectRegistration(projectRoot);
-    } catch {
+    } catch (error) {
+      logger.debug('Failed to look up project registration', {
+        projectRoot,
+        error: String(error),
+      });
       return null;
     }
   }

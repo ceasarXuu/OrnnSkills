@@ -66,7 +66,11 @@ export function createDashboardSseHub(dependencies: SseHubDependencies) {
     for (const project of projects) {
       try {
         client.projectSnapshotVersions.set(project.path, readProjectSnapshotVersion(project.path));
-      } catch {
+      } catch (error) {
+        logger.warn('Failed to read project snapshot version', {
+          projectPath: project.path,
+          error: String(error),
+        });
         client.projectSnapshotVersions.delete(project.path);
       }
     }

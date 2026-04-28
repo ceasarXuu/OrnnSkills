@@ -2,6 +2,9 @@ import { dirname, join, resolve, win32, posix } from 'node:path';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync } from 'node:fs';
 import type { Language } from '../../dashboard/i18n.js';
 import { readRecentRotatingLogEntries } from '../../utils/global-log-source.js';
+import { createChildLogger } from '../../utils/logger.js';
+
+const logger = createChildLogger('daemon-helpers');
 
 export const GLOBAL_ORNN_DIR = join(process.env.HOME || '', '.ornn');
 export const PID_FILE = join(GLOBAL_ORNN_DIR, 'daemon.pid');
@@ -18,7 +21,8 @@ export function readPidFile(projectRoot?: string): number | null {
   try {
     const pid = parseInt(readFileSync(pidFile, 'utf-8').trim(), 10);
     return isNaN(pid) ? null : pid;
-  } catch {
+  } catch (error) {
+    logger.warn('Failed to read daemon PID file', { pidFile, error: String(error) });
     return null;
   }
 }
@@ -93,7 +97,8 @@ export function getLogStats(now: Date | string = new Date()): { errorCount: numb
     const errorCount = recentEntries.filter((entry) => entry.level === 'ERROR').length;
     const warningCount = recentEntries.filter((entry) => entry.level === 'WARN').length;
     return { errorCount, warningCount };
-  } catch {
+  } catch (error) {
+    logger.warn('Failed to parse log statistics', { error: String(error) });
     return { errorCount: 0, warningCount: 0 };
   }
 }

@@ -93,7 +93,8 @@ function listTraceNdjsonPaths(tracesDir: string): string[] {
       .filter((name) => name !== 'decision-events.ndjson' && name !== 'agent-usage.ndjson')
       .sort()
       .map((name) => join(tracesDir, name));
-  } catch {
+  } catch (error) {
+    logger.warn('Failed to list trace ndjson files', { tracesDir, error: String(error) });
     return [];
   }
 }
