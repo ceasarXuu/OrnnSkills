@@ -72,9 +72,23 @@
 | 2 | DONE | `8f0347f` |
 | 3 | DONE | `e4b2dae` |
 | 4 | DONE | `1e0002b` |
-| 5 | TODO | |
+| 5 | DONE | （已存：`daemon-dashboard-launcher.test.ts`、`project-onboarding.test.ts`、`codex-observer*.test.ts` 等覆盖） |
 | 6 | WIP | `b881bb3`（11 文件已修复，剩余 ~76 错误 / 35 文件 → 单独 PR） |
-| 7 | TODO | |
-| 8 | TODO | |
-| 9 | TODO | |
-| 10 | TODO | |
+| 7 | DONE | `f4ed198` |
+| 8 | DONE | `fc117bf` |
+| 9 | **DEFERRED** | ESLint 8→9 / `@typescript-eslint` 5→8 跨主版本升级；且仓库现存 146 个 lint 问题（57 errors）已超出本计划范围。降级为下季度独立 PR。 |
+| 10 | DONE | `a8b41f2` |
+
+## 8. 收尾验收
+
+- 2026-04-29：`npm run typecheck` ✅、`npx vitest run`（129 文件 / 804 测试）✅、`npm run lint` ❌ 146 个**预存**问题（与本治理无新增）
+- pre-commit (husky) 仅跑 `npm test`，全部新提交均通过
+- benchmark:dashboard:check 未在本计划范围内回归（无 dashboard 性能相关变更）
+
+## 9. 后续 backlog
+
+- ESLint Flat Config 升级 + 修复现存 146 lint 问题（独立 PR）
+- `noUncheckedIndexedAccess` 剩余 35 文件（独立 PR）
+- observer/daemon/CLI 完整覆盖率提升（下季度计划）
+- vitest exclude 列表回收
+- LiteLLM 客户端整体重构与 `extractContent` 拆分

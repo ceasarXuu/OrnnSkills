@@ -18,24 +18,9 @@ import { assertLiteLLMResponse, LiteLLMResponseShapeError } from './litellm-resp
 
 const logger = createChildLogger('litellm-client');
 
-// LiteLLM response types
-interface LiteLLMResponse {
-  choices: Array<{
-    message: {
-      content: string;
-      role: string;
-      reasoning_content?: string;
-    };
-    finish_reason: string;
-    index: number;
-  }>;
-  usage?: {
-    prompt_tokens: number;
-    completion_tokens: number;
-    total_tokens: number;
-  };
-  model: string;
-}
+// LiteLLM response types — shared with runtime guard so the validated shape
+// flows through to the rest of the client without further casts.
+type LiteLLMResponse = import('./litellm-response-guard.js').ValidatedLiteLLMResponse;
 
 interface LiteLLMError {
   error: {
@@ -264,11 +249,12 @@ export class LiteLLMClient implements LLMInstance {
     if (!raw.choices || raw.choices.length === 0) {
       throw new Error('No choices in LLM response');
     }
-    const message = raw.choices[0].message;
+    const firstChoice = raw.choices[0]!;
+    const message = firstChoice.message;
     return {
       hasContent: Boolean(message.content),
       hasReasoningContent: Boolean(message.reasoning_content),
-      finishReason: raw.choices[0].finish_reason,
+      finishReason: firstChoice.finish_reason ?? 'unknown',
     };
   }
 
