@@ -29,7 +29,7 @@ describe('project onboarding', () => {
     mocks.readPidFile.mockReset();
     mocks.isProcessRunning.mockReset();
     mocks.spawn.mockReset();
-    mocks.spawn.mockReturnValue({ unref: vi.fn() });
+    mocks.spawn.mockReturnValue({ on: vi.fn(), unref: vi.fn() });
   });
 
   afterEach(() => {
