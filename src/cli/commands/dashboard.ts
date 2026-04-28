@@ -8,7 +8,7 @@
  */
 
 import { Command } from 'commander';
-import { exec } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { createDashboardServer } from '../../dashboard/server.js';
 import { cliInfo } from '../../utils/cli-output.js';
 import type { Language } from '../../dashboard/i18n.js';
@@ -21,15 +21,18 @@ const MAX_PORT_ATTEMPTS = 10;
 
 function openBrowser(url: string): void {
   const platform = process.platform;
-  const cmd =
-    platform === 'darwin' ? `open "${url}"` :
-    platform === 'win32'  ? `start "" "${url}"` :
-                            `xdg-open "${url}"`;
-  exec(cmd, (err) => {
-    if (err) {
-      cliInfo(`Could not open browser automatically. Visit: ${url}`);
-    }
+  const command = platform === 'darwin' ? 'open'
+    : platform === 'win32' ? 'cmd'
+    : 'xdg-open';
+  const args = platform === 'win32'
+    ? ['/c', 'start', '', url]
+    : [url];
+
+  const child = spawn(command, args, { detached: true, stdio: 'ignore' });
+  child.on('error', () => {
+    cliInfo(`Could not open browser automatically. Visit: ${url}`);
   });
+  child.unref();
 }
 
 /**

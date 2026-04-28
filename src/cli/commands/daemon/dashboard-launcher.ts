@@ -1,4 +1,4 @@
-import { exec } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { createDashboardServer } from '../../../dashboard/server.js';
 import { cliInfo } from '../../../utils/cli-output.js';
 
@@ -14,18 +14,18 @@ export interface StartDashboardServerOptions {
 
 export function openBrowser(url: string): void {
   const platform = process.platform;
-  const cmd =
-    platform === 'darwin'
-      ? `open "${url}"`
-      : platform === 'win32'
-        ? `start "" "${url}"`
-        : `xdg-open "${url}"`;
+  const command = platform === 'darwin' ? 'open'
+    : platform === 'win32' ? 'cmd'
+    : 'xdg-open';
+  const args = platform === 'win32'
+    ? ['/c', 'start', '', url]
+    : [url];
 
-  exec(cmd, (err) => {
-    if (err) {
-      cliInfo(`Could not open browser automatically. Visit: ${url}`);
-    }
+  const child = spawn(command, args, { detached: true, stdio: 'ignore' });
+  child.on('error', () => {
+    cliInfo(`Could not open browser automatically. Visit: ${url}`);
   });
+  child.unref();
 }
 
 export async function startDashboardServerOnAvailablePort(
