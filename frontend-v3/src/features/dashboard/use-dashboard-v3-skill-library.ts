@@ -24,6 +24,10 @@ import {
   setCachedSkillDetail,
 } from '@/lib/skill-detail-cache'
 import { useSkillVersionCompare } from './use-skill-version-compare'
+import {
+  getInitialSkillLibraryState,
+  setSkillLibraryCache,
+} from './use-dashboard-v3-skill-library-cache'
 import type {
   DashboardSkillApplyPreview,
   DashboardSkillDetail,
@@ -32,34 +36,14 @@ import type {
   DashboardSkillVersionMetadata,
   SkillDomainRuntime,
 } from '@/types/dashboard'
-interface SkillLibraryCacheState {
-  actionMessage: string | null
-  applyPreview: DashboardSkillApplyPreview | null
-  detail: DashboardSkillDetail | null
-  detailError: string | null
-  draftContent: string
-  families: DashboardSkillFamily[]
-  familiesError: string | null
-  instances: DashboardSkillInstance[]
-  preferredProjectPath: string
-  preferredRuntime: SkillDomainRuntime
-  query: string
-  selectedFamily: DashboardSkillFamily | null
-  selectedFamilyId: string
-  selectedInstanceId: string
-  selectedVersion: number | null
-  versionMetadataByNumber: Record<number, DashboardSkillVersionMetadata>
-}
-let skillLibraryCache: SkillLibraryCacheState | null = null
+
 function getErrorMessage(error: unknown, fallback: string) {
   if (error instanceof Error && error.message.trim()) {
     return error.message
   }
   return fallback
 }
-function getInitialSkillLibraryState(preferredProjectPath: string) {
-  return skillLibraryCache?.preferredProjectPath === preferredProjectPath ? skillLibraryCache : null
-}
+
 export function useDashboardV3SkillLibrary(preferredProjectPath: string) {
   const initialState = getInitialSkillLibraryState(preferredProjectPath)
   const hasInitialCacheRef = useRef(Boolean(initialState))
@@ -101,7 +85,7 @@ export function useDashboardV3SkillLibrary(preferredProjectPath: string) {
     selectedInstance,
   })
   useEffect(() => {
-    skillLibraryCache = {
+    setSkillLibraryCache({
       actionMessage,
       applyPreview,
       detail,

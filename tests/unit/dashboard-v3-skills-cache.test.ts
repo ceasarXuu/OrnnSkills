@@ -6,9 +6,18 @@ const skillLibraryHookSource = readFileSync(
   'utf8',
 )
 
+const skillLibraryCacheSource = readFileSync(
+  new URL(
+    '../../frontend-v3/src/features/dashboard/use-dashboard-v3-skill-library-cache.ts',
+    import.meta.url,
+  ),
+  'utf8',
+)
+
 describe('dashboard v3 skills cache contract', () => {
   it('hydrates the skills workspace from a module cache before running background refreshes', () => {
-    expect(skillLibraryHookSource).toContain('let skillLibraryCache')
+    expect(skillLibraryCacheSource).toContain('let skillLibraryCache')
+    expect(skillLibraryCacheSource).toContain('export function getInitialSkillLibraryState')
     expect(skillLibraryHookSource).toContain('getInitialSkillLibraryState')
     expect(skillLibraryHookSource).toContain('useRef(Boolean(initialState))')
     expect(skillLibraryHookSource).toContain('const [isLoadingFamilies, setIsLoadingFamilies] = useState(!hasInitialCache)')
