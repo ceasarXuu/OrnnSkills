@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   buildProviderDraft,
-  DEFAULT_DASHBOARD_CONFIG,
   normalizeDashboardConfig,
   normalizeProviderHealthSummary,
 } from '@/lib/dashboard-config'
@@ -28,19 +27,19 @@ import type {
   DashboardProviderHealthResult,
   DashboardProviderHealthSummary,
 } from '@/types/config'
+import {
+  __primeDashboardV3ConfigCacheForTests,
+  __resetDashboardV3ConfigCacheForTests,
+  getDashboardV3ConfigCache,
+  getInitialDashboardV3ConfigState,
+  setDashboardV3ConfigCache,
+} from './use-dashboard-v3-config-cache'
 
-interface DashboardV3ConfigCacheSnapshot {
-  config: DashboardConfig
-  providerCatalog: DashboardProviderCatalogEntry[]
-  providerHealth: DashboardProviderHealthSummary
-  savedSnapshot: string
+export {
+  __primeDashboardV3ConfigCacheForTests,
+  __resetDashboardV3ConfigCacheForTests,
+  getInitialDashboardV3ConfigState,
 }
-
-interface DashboardV3ConfigInitialState extends DashboardV3ConfigCacheSnapshot {
-  isLoading: boolean
-}
-
-let dashboardV3ConfigCache: DashboardV3ConfigCacheSnapshot | null = null
 
 function getErrorMessage(error: unknown, fallback: string) {
   if (error instanceof Error && error.message.trim().length > 0) {
@@ -48,31 +47,6 @@ function getErrorMessage(error: unknown, fallback: string) {
   }
 
   return fallback
-}
-
-export function getInitialDashboardV3ConfigState(): DashboardV3ConfigInitialState {
-  if (dashboardV3ConfigCache) {
-    return {
-      ...dashboardV3ConfigCache,
-      isLoading: false,
-    }
-  }
-
-  return {
-    config: DEFAULT_DASHBOARD_CONFIG,
-    providerCatalog: [],
-    providerHealth: normalizeProviderHealthSummary(null),
-    savedSnapshot: JSON.stringify(DEFAULT_DASHBOARD_CONFIG),
-    isLoading: true,
-  }
-}
-
-export function __resetDashboardV3ConfigCacheForTests() {
-  dashboardV3ConfigCache = null
-}
-
-export function __primeDashboardV3ConfigCacheForTests(cache: DashboardV3ConfigCacheSnapshot) {
-  dashboardV3ConfigCache = cache
 }
 
 export function useDashboardV3Config() {
@@ -105,12 +79,12 @@ export function useDashboardV3Config() {
   }, [config])
 
   useEffect(() => {
-    dashboardV3ConfigCache = {
+    setDashboardV3ConfigCache({
       config,
       providerCatalog,
       providerHealth,
       savedSnapshot,
-    }
+    })
   }, [config, providerCatalog, providerHealth, savedSnapshot])
 
   const runRefresh = useCallback(async (options?: { showLoading?: boolean }) => {
@@ -163,7 +137,7 @@ export function useDashboardV3Config() {
   }, [runRefresh])
 
   useEffect(() => {
-    void runRefresh({ showLoading: dashboardV3ConfigCache === null })
+    void runRefresh({ showLoading: getDashboardV3ConfigCache() === null })
   }, [runRefresh])
 
   const patchConfig = useCallback((updater: (current: DashboardConfig) => DashboardConfig) => {
