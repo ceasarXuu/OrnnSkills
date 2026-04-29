@@ -79,7 +79,7 @@
 | 8 | DONE | `fc117bf` |
 | 9 | **DEFERRED** | ESLint 8→9 / `@typescript-eslint` 5→8 跨主版本升级；且仓库现存 146 个 lint 问题（57 errors）已超出本计划范围。降级为下季度独立 PR。 |
 | 10 | DONE | `a8b41f2` |
-| 11 | WIP | 2026-04-29 追加；按文件逐 commit |
+| 11 | DONE | 2026-04-29；8 文件全部 ≤500 行：`b981474` i18n(1240→421)、`8840b5c` shadow-registry(650→497)、`734f972` claude-observer(599→402)、`d1fbf0b` server(593→462)、`d8ee8ba` litellm-client(561→467)、`79b5c89` completion(547→152)、(config/dashboard-config 510→460)、(use-dashboard-v3-config 501→475)；typecheck + 804 单测全绿 |
 
 ## 8. 收尾验收
 
