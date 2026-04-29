@@ -34,6 +34,7 @@
 | 8 | P2 | 文档版本标注与归档 | DASHBOARD-V2-FRONTEND-REFACTOR 等过时文档加 deprecation 头；docs/ 增 VERSIONING.md（可选并入本文件） | 所有 docs/ 文件首行可识别版本归属 |
 | 9 | P2 | 后端升级到 ESLint Flat Config | `.eslintrc.json` → `eslint.config.js`，与前端配置形态对齐 | `npm run lint` 通过 |
 | 10 | P2 | CLI 输出点规范化 | 代码库 logger 调用 479 处 vs console 调用仅 10 处，整体日志基础设施已成熟；需治理的是 `dashboard-launcher.ts` 等处的 `cliInfo()`（封装 console.log）在错误路径上应改用 `logger.*`；`global-config-routes` 等路由层确认日志覆盖 | 错误/异常路径用 logger.* 而非 console.* |
+| 11 | P1 | 超大型源文件拆分（AGENTS.md §4.1 ≤500 行红线） | 8 个红线文件：`i18n.ts`(1240)、`shadow-registry/index.ts`(650)、`claude-observer.ts`(599)、`dashboard/server.ts`(593)、`litellm-client.ts`(561)、`cli/commands/completion.ts`(547)、`config/dashboard-config.ts`(510)、`use-dashboard-v3-config.ts`(501)。机械拆分为主，不改行为 | 每个文件 ≤500 行；typecheck/test 全过；外部 import 路径不破坏 |
 
 ## 4. 显式排除
 
@@ -78,6 +79,7 @@
 | 8 | DONE | `fc117bf` |
 | 9 | **DEFERRED** | ESLint 8→9 / `@typescript-eslint` 5→8 跨主版本升级；且仓库现存 146 个 lint 问题（57 errors）已超出本计划范围。降级为下季度独立 PR。 |
 | 10 | DONE | `a8b41f2` |
+| 11 | WIP | 2026-04-29 追加；按文件逐 commit |
 
 ## 8. 收尾验收
 
