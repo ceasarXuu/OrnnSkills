@@ -5,45 +5,26 @@
  * Shadow 技能是优化中的临时版本，不会直接部署到运行时。
  */
 
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  writeFileSync,
-  unlinkSync,
-  readdirSync,
-  renameSync,
-} from 'fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync } from 'fs';
 import { join } from 'path';
 import { createChildLogger } from '../../utils/logger.js';
 import type { RuntimeType } from '../../types/index.js';
+import type { ShadowEntry, ShadowRegistryOptions } from './types.js';
+import {
+  loadShadowIndex,
+  migrateLegacyFlatShadowFiles,
+  saveShadowIndex,
+} from './serialization.js';
+import {
+  computeShadowStats,
+  selectExpiredShadowKeys,
+  type ShadowRegistryStats,
+} from './stats.js';
 
 const logger = createChildLogger('shadow-registry');
 
-export interface ShadowEntry {
-  skillId: string;
-  runtime?: RuntimeType;
-  version: string;
-  content: string;
-  status: 'pending' | 'analyzing' | 'optimized' | 'deployed' | 'discarded' | 'frozen' | 'active';
-  createdAt: string;
-  updatedAt: string;
-  traceCount: number;
-  analysisResult?: {
-    summary: string;
-    confidence: number;
-    suggestions: string[];
-  };
-  // Backward compatibility aliases (snake_case)
-  skill_id?: string;
-  created_at?: string;
-  last_optimized_at?: string;
-  current_revision?: number;
-}
-
-export interface ShadowRegistryOptions {
-  projectPath: string;
-}
+export type { ShadowEntry, ShadowRegistryOptions } from './types.js';
+export type { ShadowRegistryStats } from './stats.js';
 
 /**
  * Shadow Registry
@@ -111,102 +92,18 @@ export class ShadowRegistry {
     }
 
     // Load index if exists
-    this.loadIndex();
-    this.migrateLegacyFlatShadowFiles();
+    this.index = loadShadowIndex(this.indexPath);
+    migrateLegacyFlatShadowFiles(this.shadowsDir);
 
     this.initialized = true;
     logger.debug('Shadow Registry initialized');
   }
 
   /**
-   * 迁移旧版平铺 shadow 文件结构：
-   * .ornn/shadows/<skill>.md -> .ornn/shadows/codex/<skill>.md
-   */
-  private migrateLegacyFlatShadowFiles(): void {
-    let moved = 0;
-    let skipped = 0;
-
-    try {
-      const entries = readdirSync(this.shadowsDir, { withFileTypes: true });
-      const codexDir = join(this.shadowsDir, 'codex');
-      mkdirSync(codexDir, { recursive: true });
-
-      for (const entry of entries) {
-        if (!entry.isFile()) continue;
-        if (!entry.name.endsWith('.md')) continue;
-
-        const oldPath = join(this.shadowsDir, entry.name);
-        const newPath = join(codexDir, entry.name);
-
-        if (existsSync(newPath)) {
-          skipped++;
-          continue;
-        }
-
-        renameSync(oldPath, newPath);
-        moved++;
-      }
-    } catch (error) {
-      logger.warn('Legacy shadow file migration failed', { error });
-      return;
-    }
-
-    if (moved > 0 || skipped > 0) {
-      logger.info('Legacy shadow file migration completed', { moved, skipped });
-    }
-  }
-
-  /**
-   * Load index from disk
-   */
-  private loadIndex(): void {
-    if (!existsSync(this.indexPath)) {
-      this.index = new Map();
-      return;
-    }
-
-    try {
-      const data = readFileSync(this.indexPath, 'utf-8');
-      const entries = JSON.parse(data) as Array<Partial<ShadowEntry>>;
-      const mappedEntries: Array<[string, ShadowEntry]> = [];
-      for (const e of entries) {
-        if (!e.skillId) continue;
-        mappedEntries.push([
-          this.buildScopedKey(e.skillId, this.normalizeRuntime(e.runtime)),
-          {
-            skillId: e.skillId,
-            runtime: this.normalizeRuntime(e.runtime),
-            version: e.version ?? '',
-            content: e.content ?? '',
-            status: e.status ?? 'pending',
-            createdAt: e.createdAt ?? new Date().toISOString(),
-            updatedAt: e.updatedAt ?? new Date().toISOString(),
-            traceCount: e.traceCount ?? 0,
-            analysisResult: e.analysisResult,
-          },
-        ]);
-      }
-      this.index = new Map(mappedEntries);
-      logger.debug(`Loaded ${entries.length} shadow entries from index`);
-    } catch (error) {
-      logger.error('Failed to load shadow index:', error);
-      this.index = new Map();
-    }
-  }
-
-  /**
    * Save index to disk
    */
   private saveIndex(): void {
-    try {
-      // 索引只保存元数据，正文始终从磁盘 shadow 文件按需读取
-      const entries = Array.from(this.index.values()).map(({ content: _content, ...meta }) => meta);
-      writeFileSync(this.indexPath, JSON.stringify(entries, null, 2), 'utf-8');
-      logger.debug(`Saved ${entries.length} shadow entries to index`);
-    } catch (error) {
-      logger.error('Failed to save shadow index:', error);
-      throw error;
-    }
+    saveShadowIndex(this.indexPath, this.index);
   }
 
   /**
@@ -519,40 +416,9 @@ export class ShadowRegistry {
   /**
    * Get shadow statistics
    */
-  getStats(): {
-    total: number;
-    byStatus: Record<'pending' | 'analyzing' | 'optimized' | 'deployed' | 'discarded', number>;
-    totalTraces: number;
-  } {
+  getStats(): ShadowRegistryStats {
     this.ensureInitialized();
-
-    const entries = Array.from(this.index.values());
-    const byStatus: Record<
-      'pending' | 'analyzing' | 'optimized' | 'deployed' | 'discarded',
-      number
-    > = {
-      pending: 0,
-      analyzing: 0,
-      optimized: 0,
-      deployed: 0,
-      discarded: 0,
-    };
-
-    let totalTraces = 0;
-
-    for (const entry of entries) {
-      // Map 'frozen' and 'active' to valid status for stats
-      const status =
-        entry.status === 'frozen' || entry.status === 'active' ? 'pending' : entry.status;
-      byStatus[status]++;
-      totalTraces += entry.traceCount;
-    }
-
-    return {
-      total: entries.length,
-      byStatus,
-      totalTraces,
-    };
+    return computeShadowStats(this.index);
   }
 
   /**
@@ -570,22 +436,9 @@ export class ShadowRegistry {
   cleanup(maxAgeDays: number = 7): number {
     this.ensureInitialized();
 
-    const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - maxAgeDays);
-
+    const expired = selectExpiredShadowKeys(this.index, maxAgeDays);
     let deletedCount = 0;
-    const entriesToDelete: string[] = [];
-
-    for (const [key, entry] of this.index.entries()) {
-      if (entry.status === 'discarded' || entry.status === 'deployed') {
-        const updatedAt = new Date(entry.updatedAt);
-        if (updatedAt < cutoffDate) {
-          entriesToDelete.push(key);
-        }
-      }
-    }
-
-    for (const scopedKey of entriesToDelete) {
+    for (const scopedKey of expired) {
       const parts = scopedKey.split('::');
       if (parts.length !== 2) continue;
       this.delete(parts[1], parts[0] as RuntimeType);
@@ -615,23 +468,17 @@ export class ShadowRegistry {
     return this.get(skillId, runtime)?.content;
   }
 
-  /**
-   * Write shadow content - backward compatibility
-   */
+  /** Write shadow content - backward compatibility */
   writeContent(skillId: string, content: string, runtime?: RuntimeType): void {
     this.updateContent(skillId, content, runtime);
   }
 
-  /**
-   * List all shadows - backward compatibility
-   */
+  /** List all shadows - backward compatibility */
   list(): ShadowEntry[] {
     return this.getAll();
   }
 
-  /**
-   * Close registry - clears in-memory caches to free resources.
-   */
+  /** Close registry - clears in-memory caches to free resources. */
   close(): void {
     this.contentCache.clear();
     logger.debug('Shadow registry closed');
