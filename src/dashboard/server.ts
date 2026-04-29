@@ -8,7 +8,6 @@
  */
 
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { createHash } from 'node:crypto';
 import {
   listProjects,
   setProjectMonitoringState,
@@ -25,10 +24,6 @@ import {
 } from './data-reader.js';
 import { normalizeLanguage, type Language } from './i18n.js';
 import { createChildLogger } from '../utils/logger.js';
-import {
-  checkProvidersConnectivity,
-  readDashboardConfig,
-} from '../config/manager.js';
 import { pickProjectDirectory } from './native-project-picker.js';
 import { handleGlobalConfigRoutes } from './routes/global-config-routes.js';
 import { handleProjectConfigRoutes } from './routes/project-config-routes.js';
@@ -45,6 +40,16 @@ import {
   isDashboardV3DocumentRequest,
   resolveDashboardV3StaticAsset,
 } from './v3/assets.js';
+import {
+  jsonResponse,
+  jsonWithEtag,
+  notFoundResponse,
+  parseBody,
+  respondNotModified,
+} from './server-http-utils.js';
+import {
+  getProviderHealthSummary,
+} from './server-provider-health.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -68,14 +73,6 @@ interface DashboardClientErrorEvent {
   buildId?: string;
 }
 
-interface ProviderHealthSummary {
-  level: 'ok' | 'warn';
-  code: 'ok' | 'provider_not_configured' | 'provider_connectivity_failed';
-  message: string;
-  checkedAt: string;
-  results: Awaited<ReturnType<typeof checkProvidersConnectivity>>;
-}
-
 const logger = createChildLogger('dashboard');
 
 // ─── Server ───────────────────────────────────────────────────────────────────
@@ -96,96 +93,9 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
 
   // ── Helpers ──────────────────────────────────────────────────────────────
 
-  function json(res: ServerResponse, data: unknown, status = 200) {
-    const body = JSON.stringify(data);
-    res.writeHead(status, {
-      'Content-Type': 'application/json',
-      'Cache-Control': 'no-cache',
-      'Access-Control-Allow-Origin': '*',
-    });
-    res.end(body);
-  }
-
-  function normalizeEtag(value: string): string {
-    const hash = createHash('sha1').update(value, 'utf-8').digest('hex');
-    return `"${hash}"`;
-  }
-
-  function matchesIfNoneMatch(headerValue: string | string[] | undefined, etag: string): boolean {
-    if (!headerValue) return false;
-    const normalizedHeader = Array.isArray(headerValue) ? headerValue.join(',') : headerValue;
-    return normalizedHeader
-      .split(',')
-      .map((part) => part.trim())
-      .some((candidate) => candidate === '*' || candidate === etag);
-  }
-
-  function respondNotModified(
-    req: IncomingMessage,
-    res: ServerResponse,
-    etagValue: string
-  ): boolean {
-    const etag = normalizeEtag(etagValue);
-    if (!matchesIfNoneMatch(req.headers['if-none-match'], etag)) {
-      return false;
-    }
-
-    res.writeHead(304, {
-      ETag: etag,
-      'Cache-Control': 'no-cache',
-      'Access-Control-Allow-Origin': '*',
-    });
-    res.end();
-    return true;
-  }
-
-  function jsonWithEtag(
-    req: IncomingMessage,
-    res: ServerResponse,
-    data: unknown,
-    etagValue: string,
-    status = 200
-  ) {
-    if (respondNotModified(req, res, etagValue)) {
-      return;
-    }
-
-    const etag = normalizeEtag(etagValue);
-    const body = JSON.stringify(data);
-    res.writeHead(status, {
-      'Content-Type': 'application/json',
-      'Cache-Control': 'no-cache',
-      'Access-Control-Allow-Origin': '*',
-      ETag: etag,
-    });
-    res.end(body);
-  }
-
-  function notFound(res: ServerResponse) {
-    json(res, { error: 'not found' }, 404);
-  }
-
-  function parseBody(req: IncomingMessage): Promise<unknown> {
-    return new Promise((resolve, reject) => {
-      let body = '';
-      req.on('data', (chunk) => {
-        body += chunk;
-        if (body.length > 1e6) {
-          // 1MB limit
-          reject(new Error('Request body too large'));
-          req.destroy();
-        }
-      });
-      req.on('end', () => {
-        try {
-          resolve(body ? JSON.parse(body) : {});
-        } catch {
-          reject(new Error('Invalid JSON'));
-        }
-      });
-      req.on('error', reject);
-    });
-  }
+  const json = (res: ServerResponse, data: unknown, status = 200) =>
+    jsonResponse(res, data, status);
+  const notFound = (res: ServerResponse) => notFoundResponse(res);
 
   function getProjectsWithStatus(): ProjectWithStatus[] {
     return listProjects().map((p) => {
@@ -216,47 +126,6 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
         };
       }
     });
-  }
-
-  async function getProviderHealthSummary(projectPath?: string): Promise<ProviderHealthSummary> {
-    const checkedAt = new Date().toISOString();
-    const config = await readDashboardConfig(projectPath);
-    const providers = config.providers ?? [];
-
-    if (providers.length === 0) {
-      logger.warn('Provider health check warning: provider not configured', { projectPath });
-      return {
-        level: 'warn',
-        code: 'provider_not_configured',
-        message: 'No provider configured',
-        checkedAt,
-        results: [],
-      };
-    }
-
-    const results = await checkProvidersConnectivity(projectPath, providers);
-    const failed = results.filter((item) => !item.ok);
-    if (failed.length > 0) {
-      logger.warn('Provider health check warning: provider connectivity failed', {
-        projectPath,
-        failedProviders: failed.map((item) => `${item.provider}/${item.modelName}`),
-      });
-      return {
-        level: 'warn',
-        code: 'provider_connectivity_failed',
-        message: `${failed.length}/${results.length} provider(s) connectivity check failed`,
-        checkedAt,
-        results,
-      };
-    }
-
-    return {
-      level: 'ok',
-      code: 'ok',
-      message: 'All providers are healthy',
-      checkedAt,
-      results,
-    };
   }
 
   const onboardProjectForMonitoring = (projectPath: string, name?: string) =>
