@@ -3,42 +3,15 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join, basename, dirname } from 'node:path';
 import { BaseObserver } from './base-observer.js';
 import { createChildLogger } from '../../utils/logger.js';
-import type { Trace, TraceStatus, PreprocessedTrace } from '../../types/index.js';
+import type { Trace, PreprocessedTrace } from '../../types/index.js';
+import type { ClaudeRawEvent, FilePosition } from './claude-observer-types.js';
+import {
+  convertToStandardTrace,
+  preprocessAssistantEvent,
+  preprocessUserEvent,
+} from './claude-observer-preprocess.js';
 
 const logger = createChildLogger('claude-observer');
-
-/**
- * Claude Code 原始事件类型
- */
-interface ClaudeRawEvent {
-  type: string;
-  timestamp: string;
-  sessionId: string;
-  uuid?: string;
-  parentUuid?: string | null;
-  cwd?: string;
-  gitBranch?: string;
-  version?: string;
-  message?: {
-    role: string;
-    content: string | Array<{ type: string; text?: string }>;
-  };
-  error?: string;
-  isApiErrorMessage?: boolean;
-  summary?: string;
-  leafUuid?: string;
-  operation?: string;
-  [key: string]: unknown;
-}
-
-/**
- * 文件读取位置跟踪
- */
-interface FilePosition {
-  path: string;
-  lastPosition: number;
-  lastModified: number;
-}
 
 /**
  * Claude Observer
@@ -247,10 +220,10 @@ export class ClaudeObserver extends BaseObserver {
 
     switch (event.type) {
       case 'user':
-        return this.preprocessUserEvent(sessionId, turnId, timestamp, event);
+        return preprocessUserEvent(sessionId, turnId, timestamp, event);
 
       case 'assistant':
-        return this.preprocessAssistantEvent(sessionId, turnId, timestamp, event);
+        return preprocessAssistantEvent(sessionId, turnId, timestamp, event);
 
       case 'summary':
         // 摘要事件，保留完整信息
@@ -302,129 +275,6 @@ export class ClaudeObserver extends BaseObserver {
   }
 
   /**
-   * 预处理用户输入事件
-   */
-  private preprocessUserEvent(
-    sessionId: string,
-    turnId: string,
-    timestamp: string,
-    event: ClaudeRawEvent
-  ): PreprocessedTrace | null {
-    const content = this.extractMessageContent(event.message?.content);
-    const skillRefs = this.extractSkillReferences(content);
-
-    return {
-      sessionId,
-      turnId,
-      timestamp,
-      eventType: 'user_input',
-      content,
-      projectContext: {
-        cwd: event.cwd ?? '',
-        gitBranch: event.gitBranch,
-      },
-      skillRefs,
-      metadata: {
-        uuid: event.uuid,
-        version: event.version,
-      },
-    };
-  }
-
-  /**
-   * 预处理助手输出事件
-   */
-  private preprocessAssistantEvent(
-    sessionId: string,
-    turnId: string,
-    timestamp: string,
-    event: ClaudeRawEvent
-  ): PreprocessedTrace | null {
-    const content = this.extractMessageContent(event.message?.content);
-    const skillRefs = this.extractSkillReferences(content);
-
-    return {
-      sessionId,
-      turnId,
-      timestamp,
-      eventType: 'assistant_output',
-      content,
-      projectContext: {
-        cwd: event.cwd ?? '',
-        gitBranch: event.gitBranch,
-      },
-      skillRefs,
-      metadata: {
-        uuid: event.uuid,
-        parentUuid: event.parentUuid,
-        error: event.error,
-        isApiErrorMessage: event.isApiErrorMessage,
-        version: event.version,
-      },
-    };
-  }
-
-  /**
-   * 提取消息内容
-   */
-  private extractMessageContent(content: unknown): string {
-    if (typeof content === 'string') {
-      return content;
-    }
-
-    if (Array.isArray(content)) {
-      // 处理 Claude 的内容数组格式
-      const textParts: string[] = [];
-      for (const part of content as Array<string | { type?: string; text?: unknown }>) {
-        if (typeof part === 'string') {
-          textParts.push(part);
-        } else if (part?.type === 'text' && typeof part.text === 'string') {
-          textParts.push(part.text);
-        }
-      }
-      return textParts.join('\n');
-    }
-
-    return JSON.stringify(content);
-  }
-
-  /**
-   * 提取 skill 引用
-   * 格式: [$skillname] 或 @skillname
-   */
-  private extractSkillReferences(text: string): string[] {
-    const refs: string[] = [];
-
-    // 匹配 [$skillname] 格式
-    const bracketMatches = text.match(/\[\$([^\]]+)\]/g);
-    if (bracketMatches) {
-      refs.push(...bracketMatches.map((match) => match.slice(2, -1)));
-    }
-
-    // 匹配 @skillname 格式（Claude 可能使用的格式）
-    // 支持连字符，如 @business-opportunity-assessment
-    // 注意：过滤掉代码中的装饰器（如 @dataclass, @prisma 等）
-    const atMatches = text.match(/@([\w-]+)/g);
-    if (atMatches) {
-      const codeKeywords = [
-        'dataclass',
-        'prisma',
-        'staticmethod',
-        'classmethod',
-        'property',
-        'app',
-        'tool',
-      ];
-      const filteredMatches = atMatches
-        .map((match) => match.slice(1))
-        .filter((match) => !codeKeywords.includes(match.toLowerCase()) && match.length > 2);
-      refs.push(...filteredMatches);
-    }
-
-    return [...new Set(refs)]; // 去重
-  }
-
-  /**
    * 发射预处理后的 traces
    */
   private emitPreprocessedTraces(sessionId: string, traces: PreprocessedTrace[]): void {
@@ -458,58 +308,11 @@ export class ClaudeObserver extends BaseObserver {
   /**
    * 转换为标准 Trace 格式
    */
+  /**
+   * 转换为标准 Trace 结构
+   */
   private convertToStandardTrace(preprocessed: PreprocessedTrace): Trace {
-    const base = {
-      trace_id: `${preprocessed.sessionId}_${preprocessed.turnId}`,
-      runtime: 'claude' as const,
-      session_id: preprocessed.sessionId,
-      turn_id: preprocessed.turnId,
-      event_type: preprocessed.eventType,
-      timestamp: preprocessed.timestamp,
-      skill_refs: preprocessed.skillRefs, // 添加 skill_refs
-      status: 'success' as TraceStatus,
-    };
-
-    switch (preprocessed.eventType) {
-      case 'user_input':
-        return {
-          ...base,
-          user_input: preprocessed.content as string,
-        };
-
-      case 'assistant_output':
-        return {
-          ...base,
-          assistant_output: preprocessed.content as string,
-        };
-
-      case 'tool_call': {
-        const toolContent = preprocessed.content as { tool: string; args: Record<string, unknown> };
-        return {
-          ...base,
-          tool_name: toolContent.tool,
-          tool_args: toolContent.args,
-        };
-      }
-
-      case 'tool_result': {
-        const resultContent = preprocessed.content as { output: Record<string, unknown> };
-        return {
-          ...base,
-          tool_result: resultContent.output,
-        };
-      }
-
-      case 'file_change':
-        return {
-          ...base,
-          files_changed: preprocessed.content as string[],
-        };
-
-      case 'status':
-      default:
-        return base;
-    }
+    return convertToStandardTrace(preprocessed);
   }
 
   /**
