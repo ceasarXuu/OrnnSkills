@@ -1,5 +1,4 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { COST_TRANSLATIONS, type CostTranslationKey } from './i18n-cost'
 import { TRANSLATIONS, type TranslationKey } from './i18n-translations'
 
 export type DashboardLanguage = 'en' | 'zh'

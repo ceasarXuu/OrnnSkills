@@ -102,7 +102,7 @@ export function useDashboardV3SkillLibrary(preferredProjectPath: string) {
       selectedInstanceId,
       selectedVersion,
       versionMetadataByNumber,
-    }
+    })
   }, [
     actionMessage,
     applyPreview,
