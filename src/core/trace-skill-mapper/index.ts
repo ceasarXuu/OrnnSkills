@@ -2,6 +2,12 @@ import { createChildLogger } from '../../utils/logger.js';
 import { createSQLiteStorage } from '../../storage/sqlite.js';
 import { join } from '../../utils/path.js';
 import type { Trace, ProjectSkillShadow, OriginSkill } from '../../types/index.js';
+import {
+  extractSkillIdFromPath,
+  inferSkillFromInput,
+  inferSkillFromOutput,
+  inferSkillFromToolCall,
+} from './inference.js';
 
 const logger = createChildLogger('trace-skill-mapper');
 
@@ -91,7 +97,7 @@ export class TraceSkillMapper {
     if (trace.event_type === 'tool_call' && trace.tool_name === 'read_file') {
       const filePath = trace.tool_args?.path as string;
       if (filePath) {
-        const skillId = this.extractSkillIdFromPath(filePath);
+        const skillId = extractSkillIdFromPath(filePath);
         if (skillId && this.knownSkills.has(skillId)) {
           const shadow = this.getRuntimeShadow(skillId, trace.runtime);
           return {
@@ -107,7 +113,7 @@ export class TraceSkillMapper {
 
     // 策略 2: 检测 tool_call 中执行 skill 相关操作
     if (trace.event_type === 'tool_call') {
-      const skillId = this.inferSkillFromToolCall(trace);
+      const skillId = inferSkillFromToolCall(trace, this.knownSkills);
       if (skillId) {
         const shadow = this.getRuntimeShadow(skillId, trace.runtime);
         return {
@@ -123,7 +129,7 @@ export class TraceSkillMapper {
     // 策略 3: 检测 file_change 中修改 skill 文件
     if (trace.event_type === 'file_change' && trace.files_changed) {
       for (const filePath of trace.files_changed) {
-        const skillId = this.extractSkillIdFromPath(filePath);
+        const skillId = extractSkillIdFromPath(filePath);
         if (skillId && this.knownSkills.has(skillId)) {
           const shadow = this.getRuntimeShadow(skillId, trace.runtime);
           return {
@@ -154,7 +160,7 @@ export class TraceSkillMapper {
 
     // 策略 5: 从 assistant_output 推断 skill 引用
     if (trace.event_type === 'assistant_output' && trace.assistant_output) {
-      const skillId = this.inferSkillFromOutput(trace.assistant_output);
+      const skillId = inferSkillFromOutput(trace.assistant_output, this.knownSkills);
       if (skillId) {
         const shadow = this.getRuntimeShadow(skillId, trace.runtime);
         return {
@@ -169,7 +175,7 @@ export class TraceSkillMapper {
 
     // 策略 6: 从 user_input 推断 skill 请求
     if (trace.event_type === 'user_input' && trace.user_input) {
-      const skillId = this.inferSkillFromInput(trace.user_input);
+      const skillId = inferSkillFromInput(trace.user_input, this.knownSkills);
       if (skillId) {
         const shadow = this.getRuntimeShadow(skillId, trace.runtime);
         return {
@@ -271,156 +277,6 @@ export class TraceSkillMapper {
     );
 
     return traceIds.map((id: string) => ({ trace_id: id } as unknown as Trace));
-  }
-
-  /**
-   * 从文件路径提取 skill ID
-   */
-  private extractSkillIdFromPath(filePath: string): string | null {
-    // 匹配 patterns:
-    // ~/.skills/A/current.md -> A
-    // ~/.claude/skills/B/skill.md -> B
-    // .ornn/skills/C/current.md -> C
-    const patterns = [
-      /\.skills\/([^/]+)\//,
-      /\.claude\/skills\/([^/]+)\//,
-      /\.opencode\/skills\/([^/]+)\//,
-      /\.ornn\/skills\/([^/]+)\//,
-    ];
-
-    for (const pattern of patterns) {
-      const match = filePath.match(pattern);
-      if (match && match[1]) {
-        return match[1];
-      }
-    }
-
-    return null;
-  }
-
-  /**
-   * 从 tool_call 推断 skill
-   */
-  private inferSkillFromToolCall(trace: Trace): string | null {
-    let normalizedArgs: Record<string, unknown> = {};
-    if (trace.tool_args && typeof trace.tool_args === 'string') {
-      try {
-        normalizedArgs = JSON.parse(trace.tool_args) as Record<string, unknown>;
-      } catch {
-        normalizedArgs = {};
-      }
-    } else if (trace.tool_args && typeof trace.tool_args === 'object') {
-      normalizedArgs = trace.tool_args;
-    }
-
-    // 检查 tool_args 中是否包含 skill 相关信息
-    if (normalizedArgs.skill_id) {
-      return normalizedArgs.skill_id as string;
-    }
-
-    // 检查特定工具的使用模式
-    if (
-      trace.tool_name === 'execute_command' ||
-      trace.tool_name === 'exec_command' ||
-      trace.tool_name === 'functions.exec_command'
-    ) {
-      const command = (normalizedArgs.command as string) ?? (normalizedArgs.cmd as string);
-      if (command) {
-        // 检测 skill 相关命令
-        const skillId = this.extractSkillFromCommand(command);
-        if (skillId) return skillId;
-      }
-    }
-
-    return null;
-  }
-
-  /**
-   * 从命令中提取 skill
-   */
-  private extractSkillFromCommand(command: string): string | null {
-    // 检测常见 skill 命令模式
-    for (const [skillId] of this.knownSkills) {
-      if (command.toLowerCase().includes(skillId.toLowerCase())) {
-        return skillId;
-      }
-    }
-    return null;
-  }
-
-  /**
-   * 从 assistant output 推断 skill 引用（优化性能）
-   */
-  private inferSkillFromOutput(output: string): string | null {
-    // 限制输入长度，防止 ReDoS 攻击
-    const MAX_OUTPUT_LENGTH = 5000;
-    if (output.length > MAX_OUTPUT_LENGTH) {
-      return null;
-    }
-
-    // 预处理：转换为小写
-    const lowerOutput = output.toLowerCase();
-
-    // 检测 output 中是否引用了已知 skill
-    for (const [skillId] of this.knownSkills) {
-      const lowerSkillId = skillId.toLowerCase();
-      
-      // 使用 indexOf 替代 includes，性能更好
-      if (lowerOutput.indexOf(lowerSkillId) !== -1) {
-        return skillId;
-      }
-      
-      // 检查常见的 skill 引用模式（使用 indexOf）
-      const skillPatterns = [
-        `skill: ${lowerSkillId}`,
-        `skill:${lowerSkillId}`,
-        `according to ${lowerSkillId}`,
-        `using ${lowerSkillId}`,
-      ];
-      
-      for (const pattern of skillPatterns) {
-        if (lowerOutput.indexOf(pattern) !== -1) {
-          return skillId;
-        }
-      }
-    }
-    return null;
-  }
-
-  /**
-   * 从 user input 推断 skill 请求（优化性能）
-   */
-  private inferSkillFromInput(input: string): string | null {
-    // 限制输入长度，防止 ReDoS 攻击
-    const MAX_INPUT_LENGTH = 5000;
-    if (input.length > MAX_INPUT_LENGTH) {
-      return null;
-    }
-
-    // 预处理：转换为小写
-    const lowerInput = input.toLowerCase();
-
-    // 检测用户是否明确请求某个 skill
-    for (const [skillId] of this.knownSkills) {
-      const lowerSkillId = skillId.toLowerCase();
-      
-      // 检查常见的 skill 请求模式（使用 indexOf）
-      const requestPatterns = [
-        `use ${lowerSkillId}`,
-        `run ${lowerSkillId}`,
-        `apply ${lowerSkillId}`,
-        `execute ${lowerSkillId}`,
-        `with ${lowerSkillId}`,
-        `using ${lowerSkillId}`,
-      ];
-      
-      for (const pattern of requestPatterns) {
-        if (lowerInput.indexOf(pattern) !== -1) {
-          return skillId;
-        }
-      }
-    }
-    return null;
   }
 
   /**
