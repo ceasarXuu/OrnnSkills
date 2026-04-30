@@ -35,7 +35,7 @@ export class ShadowManualOptimizeService {
   ) {}
 
   async triggerOptimize(shadowId: string): Promise<TriggerOptimizeResult> {
-    const skillId = skillIdFromShadowId(shadowId) ?? shadowId.split('@')[0]!;
+    const skillId = skillIdFromShadowId(shadowId) ?? shadowId.split('@')[0];
     const scope = await this.resolveManualOptimizationScope(shadowId);
     const eventContext = scope?.context ?? this.buildFallbackManualContext(shadowId);
 
@@ -81,7 +81,7 @@ export class ShadowManualOptimizeService {
     shadowId: string
   ): Promise<ManualOptimizationScope | null> {
     const runtime = (runtimeFromShadowId(shadowId) ?? 'codex') as RuntimeType;
-    const skillId = skillIdFromShadowId(shadowId) ?? shadowId.split('@')[0]!;
+    const skillId = skillIdFromShadowId(shadowId) ?? shadowId.split('@')[0];
     const episode = this.findLatestEpisodeForSkill(skillId, runtime);
 
     if (episode) {
@@ -102,7 +102,7 @@ export class ShadowManualOptimizeService {
             context: buildActivityEventContext({
               episodeId: episode.episodeId,
               shadowId,
-              trace: traces[traces.length - 1]!,
+              trace: traces[traces.length - 1],
               traces,
             }),
             episodeId: episode.episodeId,
@@ -115,7 +115,7 @@ export class ShadowManualOptimizeService {
       MANUAL_OPTIMIZE_RECENT_TRACE_LIMIT
     );
     for (let index = recentTraces.length - 1; index >= 0; index -= 1) {
-      const trace = recentTraces[index]!;
+      const trace = recentTraces[index];
       const mapping = this.options.traceSkillMapper.mapTrace(trace);
       if (!this.matchesManualShadowTarget(trace, mapping, skillId, runtime)) {
         continue;
@@ -171,7 +171,7 @@ export class ShadowManualOptimizeService {
 
   private buildFallbackManualContext(shadowId: string): ActivityEventContext {
     const runtime = (runtimeFromShadowId(shadowId) ?? 'codex') as RuntimeType;
-    const skillId = skillIdFromShadowId(shadowId) ?? shadowId.split('@')[0]!;
+    const skillId = skillIdFromShadowId(shadowId) ?? shadowId.split('@')[0];
     const fallbackTrace: Trace = {
       trace_id: `manual-optimize:${Date.now()}`,
       session_id: `manual-optimize:${Date.now()}`,

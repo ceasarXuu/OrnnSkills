@@ -37,36 +37,40 @@ export interface ManualOptimizationScope {
   episodeId: string | null;
 }
 
-export interface ShadowRegistryLike
-  extends Pick<ShadowRegistry, 'get' | 'readContent' | 'writeContent' | 'incrementTraceCount'> {}
+export type ShadowRegistryLike = Pick<
+  ShadowRegistry,
+  'get' | 'readContent' | 'writeContent' | 'incrementTraceCount'
+>;
 
-export interface JournalManagerLike
-  extends Pick<Journal, 'getLatestRevision' | 'createSnapshot' | 'record'> {}
+export type JournalManagerLike = Pick<Journal, 'getLatestRevision' | 'createSnapshot' | 'record'>;
 
-export interface TraceManagerLike
-  extends Pick<TraceManager, 'recordTrace' | 'getSessionTraces' | 'getRecentTraces' | 'cleanupOldTraces'> {}
+export type TraceManagerLike = Pick<
+  TraceManager,
+  'recordTrace' | 'getSessionTraces' | 'getRecentTraces' | 'cleanupOldTraces'
+>;
 
-export interface TraceSkillMapperLike extends Pick<TraceSkillMapper, 'mapTrace'> {}
+export type TraceSkillMapperLike = Pick<TraceSkillMapper, 'mapTrace'>;
 
-export interface TaskEpisodeStoreLike
-  extends Pick<
-    TaskEpisodeStore,
-    | 'recordTrace'
-    | 'recordContextTrace'
-    | 'shouldTriggerProbe'
-    | 'applyNeedMoreContextHint'
-    | 'markAnalysisState'
-    | 'listEpisodes'
-  > {}
+export type TaskEpisodeStoreLike = Pick<
+  TaskEpisodeStore,
+  | 'recordTrace'
+  | 'recordContextTrace'
+  | 'shouldTriggerProbe'
+  | 'applyNeedMoreContextHint'
+  | 'markAnalysisState'
+  | 'listEpisodes'
+>;
 
-export interface DecisionEventsLike extends Pick<DecisionEventRecorder, 'record'> {}
+export type DecisionEventsLike = Pick<DecisionEventRecorder, 'record'>;
 
-export interface DaemonStatusLike
-  extends Pick<DaemonStatusStore, 'setIdle' | 'setAnalyzing' | 'setOptimizing' | 'setError'> {}
+export type DaemonStatusLike = Pick<
+  DaemonStatusStore,
+  'setIdle' | 'setAnalyzing' | 'setOptimizing' | 'setError'
+>;
 
-export interface SkillCallAnalyzerLike extends Pick<SkillCallAnalyzer, 'analyzeWindow'> {}
+export type SkillCallAnalyzerLike = Pick<SkillCallAnalyzer, 'analyzeWindow'>;
 
-export interface SkillVersionManagerLike extends Pick<SkillVersionManager, 'createVersion'> {}
+export type SkillVersionManagerLike = Pick<SkillVersionManager, 'createVersion'>;
 
 export type CreateSkillVersionManagerLike = (
   options: VersionManagerOptions

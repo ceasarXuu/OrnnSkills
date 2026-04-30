@@ -283,7 +283,7 @@ export function createDashboardServer(port: number, defaultLang: Language = 'en'
           return;
         }
 
-        if (await handleSkillFamilyRoutes({
+        if (handleSkillFamilyRoutes({
           path,
           method,
           json: (data, status = 200) => json(res, data, status),

@@ -204,7 +204,7 @@ export function getAllProviders(): ProviderConfig[] {
 export function getProviderByModel(modelName: string): ProviderConfig | undefined {
   // Handle provider/model format
   if (modelName.includes('/')) {
-    const providerId = modelName.split('/')[0]!;
+    const providerId = modelName.split('/')[0];
     return getProviderConfig(providerId);
   }
   

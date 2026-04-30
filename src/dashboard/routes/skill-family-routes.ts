@@ -20,7 +20,7 @@ function listProjectPaths(): string[] {
   return listProjects().map((project) => project.path);
 }
 
-export async function handleSkillFamilyRoutes(context: SkillFamilyRouteContext): Promise<boolean> {
+export function handleSkillFamilyRoutes(context: SkillFamilyRouteContext): boolean {
   const { path, method, json, jsonWithEtag, respondNotModified, notFound } = context;
 
   function sendJsonWithOptionalEtag(data: unknown, etag: string) {

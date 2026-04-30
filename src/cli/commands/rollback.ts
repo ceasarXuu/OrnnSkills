@@ -68,7 +68,7 @@ export function createRollbackCommand(): Command {
             cliInfo(`\nTip: run "ornn skills log ${skillId}" to see available revisions.`);
             return;
           }
-          const latest = snapshots[snapshots.length - 1]!;
+          const latest = snapshots[snapshots.length - 1];
           targetRevision = latest.revision;
           rollbackDescription = `latest snapshot (${formatRevision(targetRevision)})`;
         } else if (options.to) {
@@ -120,7 +120,7 @@ export function createRollbackCommand(): Command {
 
         if (options.snapshot) {
           const snapshots = journalManager.getSnapshots(shadowId);
-          const latest = snapshots[snapshots.length - 1]!;
+          const latest = snapshots[snapshots.length - 1];
           journalManager.rollbackToSnapshot(shadowId, latest.file_path);
         } else {
           journalManager.rollback(shadowId, targetRevision);

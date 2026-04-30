@@ -474,13 +474,11 @@ export class ShadowEpisodeProbeService {
     window: SkillCallWindow,
     skillContent: string
   ) => Promise<SkillCallAnalysisResult> {
-    const analyzeWindow = this.options.skillCallAnalyzer?.analyzeWindow;
-    if (!analyzeWindow) {
-      return async () => {
-        throw new Error('Skill call analyzer is not configured');
-      };
+    const analyzer = this.options.skillCallAnalyzer;
+    if (!analyzer) {
+      return () => Promise.reject(new Error('Skill call analyzer is not configured'));
     }
 
-    return analyzeWindow.bind(this.options.skillCallAnalyzer);
+    return analyzer.analyzeWindow.bind(analyzer);
   }
 }

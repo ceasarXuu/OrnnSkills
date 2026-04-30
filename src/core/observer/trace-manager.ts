@@ -253,7 +253,7 @@ export class TraceManager {
   /**
    * 获取最近的 traces
    */
-  async getRecentTraces(count: number): Promise<Trace[]> {
+  getRecentTraces(count: number): Promise<Trace[]> {
     if (!this.recentTraceBufferHydrated) {
       this.recentTraceBuffer = mergeUniqueRecentTraces(
         this.recentTraceBuffer.concat(
@@ -264,7 +264,7 @@ export class TraceManager {
       this.recentTraceBufferHydrated = true;
     }
 
-    return this.recentTraceBuffer.slice(-count);
+    return Promise.resolve(this.recentTraceBuffer.slice(-count));
   }
 
   /**

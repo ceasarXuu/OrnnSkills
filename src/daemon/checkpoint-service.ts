@@ -26,7 +26,7 @@ export class DaemonCheckpointService {
     }
   }
 
-  async saveForRuntime(runtime: ProjectRuntime): Promise<void> {
+  saveForRuntime(runtime: ProjectRuntime): Promise<void> {
     try {
       const lastCheckpointAt = new Date().toISOString();
       const monitoring = this.options.getMonitoringState(runtime.projectRoot);
@@ -75,6 +75,7 @@ export class DaemonCheckpointService {
         error,
       });
     }
+    return Promise.resolve();
   }
 
   schedule(runtime: ProjectRuntime, delayMs = 250): void {

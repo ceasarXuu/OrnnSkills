@@ -1,13 +1,13 @@
 export function extractJsonObject(raw: string): string | null {
   const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
   if (fenced) {
-    const candidate = fenced[1]!.trim();
+    const candidate = fenced[1].trim();
     if (isValidJsonObject(candidate)) return candidate;
   }
 
   const exact = raw.match(/^\s*(\{[\s\S]*\})\s*$/);
-  if (exact && isValidJsonObject(exact[1]!)) {
-    return exact[1]!;
+  if (exact && isValidJsonObject(exact[1])) {
+    return exact[1];
   }
 
   const candidates = collectBalancedJsonObjects(raw);

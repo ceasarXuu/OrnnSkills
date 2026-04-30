@@ -168,9 +168,10 @@ export class Daemon {
   }
 
   getState(projectRoot?: string): DaemonState {
+    const fallbackRuntime = Array.from(this.projectRuntimeRegistry.values())[0] ?? null;
     const runtime =
       (projectRoot ? this.projectRuntimeRegistry.get(projectRoot) : null) ??
-      this.projectRuntimeRegistry.values().next().value ??
+      fallbackRuntime ??
       null;
     const monitoring = this.projectRuntimeRegistry.getProjectMonitoringState(
       projectRoot ?? runtime?.projectRoot ?? this.launchContext
@@ -193,9 +194,10 @@ export class Daemon {
   }
 
   getShadowManager(projectRoot?: string): ShadowManager | null {
+    const fallbackRuntime = Array.from(this.projectRuntimeRegistry.values())[0] ?? null;
     const runtime =
       (projectRoot ? this.projectRuntimeRegistry.get(projectRoot) : null) ??
-      this.projectRuntimeRegistry.values().next().value ??
+      fallbackRuntime ??
       null;
     return (runtime?.shadowManager as ShadowManager | undefined) ?? null;
   }

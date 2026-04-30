@@ -231,7 +231,7 @@ export class LiteLLMClient implements LLMInstance {
     if (!raw.choices || raw.choices.length === 0) {
       throw new Error('No choices in LLM response');
     }
-    const firstChoice = raw.choices[0]!;
+    const firstChoice = raw.choices[0];
     const message = firstChoice.message;
     return {
       hasContent: Boolean(message.content),
@@ -295,7 +295,7 @@ export class LiteLLMClient implements LLMInstance {
         );
       }
 
-      const data = (await response.json()) as unknown;
+      const data = (await response.json());
       try {
         assertLiteLLMResponse(data);
       } catch (error) {

@@ -50,7 +50,7 @@ export function inferSkillFromToolCall(
       normalizedArgs = {};
     }
   } else if (trace.tool_args && typeof trace.tool_args === 'object') {
-    normalizedArgs = trace.tool_args as Record<string, unknown>;
+    normalizedArgs = trace.tool_args;
   }
 
   if (normalizedArgs.skill_id) {
