@@ -109,10 +109,28 @@ export function getLogStats(now: Date | string = new Date()): { errorCount: numb
  */
 export function resolveCliEntryPath(currentFile: string): string {
   if (currentFile.includes('\\')) {
-    return win32.resolve(win32.dirname(currentFile), '..', 'index.js');
+    const currentDir = win32.dirname(currentFile);
+    const commandsMarker = '\\commands\\';
+    const markerIndex = currentDir.indexOf(commandsMarker);
+    if (markerIndex >= 0) {
+      return win32.resolve(currentDir.slice(0, markerIndex), 'index.js');
+    }
+    if (currentDir.endsWith('\\commands')) {
+      return win32.resolve(currentDir.slice(0, -'\\commands'.length), 'index.js');
+    }
+    return win32.resolve(currentDir, '..', 'index.js');
   }
   if (currentFile.includes('/')) {
-    return posix.resolve(posix.dirname(currentFile), '..', 'index.js');
+    const currentDir = posix.dirname(currentFile);
+    const commandsMarker = '/commands/';
+    const markerIndex = currentDir.indexOf(commandsMarker);
+    if (markerIndex >= 0) {
+      return posix.resolve(currentDir.slice(0, markerIndex), 'index.js');
+    }
+    if (currentDir.endsWith('/commands')) {
+      return posix.resolve(currentDir.slice(0, -'/commands'.length), 'index.js');
+    }
+    return posix.resolve(currentDir, '..', 'index.js');
   }
   return resolve(dirname(currentFile), '..', 'index.js');
 }

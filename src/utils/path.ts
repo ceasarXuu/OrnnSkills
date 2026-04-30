@@ -93,7 +93,7 @@ export function validateProjectPath(projectPath: string): string {
 
 /**
  * 验证用户输入的项目路径是否安全（适用于 dashboard onboarding 等接受任意磁盘路径的场景）
- * - 拒绝空串、NUL 字节、.. 路径穿越
+ * - 拒绝空串、NUL 字节、.. 路径段穿越
  * - 解析为绝对路径并检查路径存在且为目录
  * - 不限制在 cwd 下（与 validateProjectPath 不同）
  */
@@ -104,8 +104,8 @@ export function assertSafeProjectPath(input: string): string {
   if (input.includes('\0')) {
     throw new Error('Project path must not contain NUL bytes');
   }
-  if (input.includes('..')) {
-    throw new Error('Path traversal detected: path contains ".."');
+  if (input.split(/[\\/]+/).some((segment) => segment === '..')) {
+    throw new Error('Path traversal detected: path contains ".." segment');
   }
 
   const resolved = resolve(input);

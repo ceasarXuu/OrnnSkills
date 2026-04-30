@@ -24,8 +24,18 @@ describe('daemon helpers', () => {
     expect(cliEntry).toBe('/tmp/app/dist/cli/index.js');
   });
 
+  it('resolves cli entry path from nested daemon command path (posix)', () => {
+    const cliEntry = resolveCliEntryPath('/tmp/app/dist/cli/commands/daemon/start-command.js');
+    expect(cliEntry).toBe('/tmp/app/dist/cli/index.js');
+  });
+
   it('resolves cli entry path from daemon command path (windows)', () => {
     const cliEntry = resolveCliEntryPath('C:\\app\\dist\\cli\\commands\\daemon.js');
+    expect(cliEntry).toBe('C:\\app\\dist\\cli\\index.js');
+  });
+
+  it('resolves cli entry path from nested daemon command path (windows)', () => {
+    const cliEntry = resolveCliEntryPath('C:\\app\\dist\\cli\\commands\\daemon\\start-command.js');
     expect(cliEntry).toBe('C:\\app\\dist\\cli\\index.js');
   });
 

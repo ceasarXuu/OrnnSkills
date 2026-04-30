@@ -149,6 +149,12 @@ describe('Path Validation', () => {
       expect(() => assertSafeProjectPath('../../../etc/passwd')).toThrow('Path traversal');
     });
 
+    it('should accept existing directory names that contain consecutive dots', () => {
+      const dottedDir = join(testProjectPath, 'project..backup');
+      mkdirSync(dottedDir, { recursive: true });
+      expect(assertSafeProjectPath(dottedDir)).toBe(dottedDir);
+    });
+
     it('should reject non-existent path', () => {
       expect(() => assertSafeProjectPath('/nonexistent/path/that/does/not/exist')).toThrow('does not exist');
     });
