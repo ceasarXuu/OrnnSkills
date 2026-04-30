@@ -1,6 +1,7 @@
 import { Layers01Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { SkillContentEditor } from '@/components/skill-content-editor'
+import { SkillMarketplaceReview } from '@/components/skill-marketplace-review'
 import { SkillVersionHistory } from '@/components/skill-version-history'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -39,10 +40,19 @@ interface SkillFamilyDetailProps {
   draftContent: string
   family: DashboardSkillFamily | null
   isApplying: boolean
+  isCheckingMarketplace: boolean
   isLoading: boolean
   isSaving: boolean
+  marketplaceReview: {
+    source: { repo: string; skill: string; url: string }
+    content: string
+    localContent: string
+  } | null
+  onApplyMarketplaceChanges: (mergedContent: string) => void
   onApplyToFamily: () => void
+  onCheckMarketplace: () => void
   onCloseApplyPreview: () => void
+  onCloseMarketplaceReview: () => void
   onDraftChange: (value: string) => void
   onLoadApplyPreview: () => void
   onSelectDiffVersion: (version: number | null) => void
@@ -69,10 +79,15 @@ export function SkillFamilyDetail({
   draftContent,
   family,
   isApplying,
+  isCheckingMarketplace,
   isLoading,
   isSaving,
+  marketplaceReview,
+  onApplyMarketplaceChanges,
   onApplyToFamily,
+  onCheckMarketplace,
   onCloseApplyPreview,
+  onCloseMarketplaceReview,
   onDraftChange,
   onLoadApplyPreview,
   onSelectDiffVersion,
@@ -166,7 +181,16 @@ export function SkillFamilyDetail({
             <Button className="h-8 rounded-lg px-3" onClick={() => void onLoadApplyPreview()} size="sm" variant="ghost">
               {t('previewPropagation')}
             </Button>
-            <Button className="h-8 rounded-lg px-3" disabled={isSaving || isDiffMode} onClick={() => void onSave()} size="sm">
+            <Button
+              className="h-8 rounded-lg px-3"
+              disabled={isCheckingMarketplace || isDiffMode || Boolean(marketplaceReview) || !selectedInstance}
+              onClick={() => void onCheckMarketplace()}
+              size="sm"
+              variant="ghost"
+            >
+              {isCheckingMarketplace ? t('checkingMarketplace') : t('checkMarketplace')}
+            </Button>
+            <Button className="h-8 rounded-lg px-3" disabled={isSaving || isDiffMode || Boolean(marketplaceReview)} onClick={() => void onSave()} size="sm">
               {isSaving ? t('saving') : t('saveSkillContent')}
             </Button>
           </div>
@@ -174,19 +198,29 @@ export function SkillFamilyDetail({
       </CardHeader>
 
       <CardContent className="pt-6">
-        <SkillContentEditor
-          actionMessage={actionMessage}
-          applyPreview={applyPreview}
-          detailError={detailError}
-          diffContent={diffContent}
-          diffVersion={diffVersion}
-          draftContent={draftContent}
-          isApplying={isApplying}
-          onApplyToFamily={onApplyToFamily}
-          onCloseApplyPreview={onCloseApplyPreview}
-          onDraftChange={onDraftChange}
-          selectedVersion={selectedVersion}
-        />
+        {marketplaceReview ? (
+          <SkillMarketplaceReview
+            localContent={marketplaceReview.localContent}
+            marketplaceContent={marketplaceReview.content}
+            source={marketplaceReview.source}
+            onApply={onApplyMarketplaceChanges}
+            onCancel={onCloseMarketplaceReview}
+          />
+        ) : (
+          <SkillContentEditor
+            actionMessage={actionMessage}
+            applyPreview={applyPreview}
+            detailError={detailError}
+            diffContent={diffContent}
+            diffVersion={diffVersion}
+            draftContent={draftContent}
+            isApplying={isApplying}
+            onApplyToFamily={onApplyToFamily}
+            onCloseApplyPreview={onCloseApplyPreview}
+            onDraftChange={onDraftChange}
+            selectedVersion={selectedVersion}
+          />
+        )}
       </CardContent>
     </Card>
   )

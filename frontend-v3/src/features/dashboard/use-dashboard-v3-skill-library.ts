@@ -28,6 +28,7 @@ import {
   getInitialSkillLibraryState,
   setSkillLibraryCache,
 } from './use-dashboard-v3-skill-library-cache'
+import { useDashboardV3SkillMarketplace } from './use-dashboard-v3-skill-marketplace'
 import type {
   DashboardSkillApplyPreview,
   DashboardSkillDetail,
@@ -82,6 +83,12 @@ export function useDashboardV3SkillLibrary(preferredProjectPath: string) {
       setVersionMetadataByNumber((current) => ({ ...current, [version]: metadata }))
     },
     selectedFamilyId,
+    selectedInstance,
+  })
+  const marketplace = useDashboardV3SkillMarketplace({
+    draftContent,
+    onActionMessage: setActionMessage,
+    onDraftContent: setDraftContent,
     selectedInstance,
   })
   useEffect(() => {
@@ -446,9 +453,12 @@ export function useDashboardV3SkillLibrary(preferredProjectPath: string) {
   }, [draftContent, reload, selectedInstance])
   return {
     actionMessage,
+    applyMarketplaceChanges: marketplace.applyMarketplaceChanges,
     applyToFamily,
     applyPreview,
+    checkMarketplace: marketplace.checkMarketplace,
     closeApplyPreview: () => setApplyPreview(null),
+    closeMarketplaceReview: marketplace.closeMarketplaceReview,
     detail,
     detailError,
     diffContent: versionCompare.compareContent,
@@ -458,6 +468,7 @@ export function useDashboardV3SkillLibrary(preferredProjectPath: string) {
     familiesError,
     instances,
     isApplying,
+    isCheckingMarketplace: marketplace.isCheckingMarketplace,
     isLoadingFamilies,
     isLoadingFamilyDetail,
     isLoadingSkillDetail,
@@ -465,6 +476,7 @@ export function useDashboardV3SkillLibrary(preferredProjectPath: string) {
     loadApplyPreview,
     loadDiffVersion: versionCompare.selectCompareVersion,
     loadVersion,
+    marketplaceReview: marketplace.marketplaceReview,
     preferredRuntime,
     query,
     save,

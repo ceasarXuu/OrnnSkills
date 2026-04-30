@@ -7,14 +7,19 @@ import { COST_TRANSLATIONS, type CostTranslationKey } from './i18n-cost'
 import type { DashboardLanguage } from './i18n'
 
 export type TranslationKey = CostTranslationKey
+  | 'acceptAll'
+  | 'acceptChange'
+  | 'accepted'
   | 'addProject'
   | 'addProvider'
   | 'apiKeyHide'
   | 'apiKeyPastePlaceholder'
   | 'apiKeyShow'
+  | 'applyToDraft'
   | 'applyToFamily'
   | 'applying'
   | 'builtInPrompt'
+  | 'cancel'
   | 'catalogCustomOnly'
   | 'catalogErrorPrefix'
   | 'catalogLoading'
@@ -35,6 +40,8 @@ export type TranslationKey = CostTranslationKey
   | 'diffAgainst'
   | 'diffView'
   | 'calls'
+  | 'checkMarketplace'
+  | 'checkingMarketplace'
   | 'effective'
   | 'effectiveVersion'
   | 'evolutionStrategy'
@@ -56,11 +63,15 @@ export type TranslationKey = CostTranslationKey
   | 'market'
   | 'marketDirectories'
   | 'marketRepositories'
+  | 'marketplaceNoChanges'
+  | 'marketplaceReview'
+  | 'marketplaceSource'
   | 'marketTrustCommunity'
   | 'marketTrustOfficial'
   | 'marketTrustIndex'
   | 'model'
   | 'navLabel'
+  | 'noMarketplaceFound'
   | 'noMatchedProjects'
   | 'noMatchedSkillFamilies'
   | 'noMatchedSkills'
@@ -87,6 +98,9 @@ export type TranslationKey = CostTranslationKey
   | 'providersHelp'
   | 'providersLabel'
   | 'readOnlySkillDetail'
+  | 'rejectAll'
+  | 'rejectChange'
+  | 'rejected'
   | 'removeProvider'
   | 'restore'
   | 'retry'
@@ -124,18 +138,25 @@ export type TranslationKey = CostTranslationKey
 export const TRANSLATIONS: Record<DashboardLanguage, Record<TranslationKey, string>> = {
   zh: {
     ...COST_TRANSLATIONS.zh,
+    acceptAll: '全部接受',
+    acceptChange: '接受',
+    accepted: '已接受',
     addProject: '添加项目',
     addProvider: '新增模型服务',
     apiKeyHide: '隐藏',
     apiKeyPastePlaceholder: '直接粘贴 API Key',
     apiKeyShow: '显示',
+    applyToDraft: '应用到草稿',
     applyToFamily: '应用到同族实例',
     applying: '应用中',
     builtInPrompt: '内置系统提示词',
+    cancel: '取消',
     catalogCustomOnly: 'LiteLLM 列表未就绪（仅可自定义）',
     catalogErrorPrefix: 'LiteLLM 列表错误：',
     catalogLoading: 'LiteLLM 列表加载中...',
     checkConnectivity: '检查连通性',
+    checkMarketplace: '检查市场更新',
+    checkingMarketplace: '正在检查市场...',
     config: '配置',
     configLoading: '配置加载中...',
     connectivityChecking: '检查中...',
@@ -171,6 +192,9 @@ export const TRANSLATIONS: Record<DashboardLanguage, Record<TranslationKey, stri
     llmSafetyWindow: '滚动窗口（毫秒）',
     loadErrorPrefix: '远端配置加载失败：',
     market: '市场',
+    marketplaceNoChanges: '本地内容与市场版本一致，无差异',
+    marketplaceReview: '市场版本审阅',
+    marketplaceSource: '来源',
     marketDirectories: '市场目录',
     marketRepositories: 'GitHub 资源库',
     marketTrustCommunity: '社区',
@@ -178,6 +202,7 @@ export const TRANSLATIONS: Record<DashboardLanguage, Record<TranslationKey, stri
     marketTrustIndex: '索引',
     model: '模型',
     navLabel: '主导航',
+    noMarketplaceFound: '未在市场找到该技能',
     noMatchedProjects: '当前没有匹配的项目。',
     noMatchedSkillFamilies: '当前没有匹配的技能族。',
     noMatchedSkills: '当前项目没有匹配的技能。',
@@ -204,6 +229,9 @@ export const TRANSLATIONS: Record<DashboardLanguage, Record<TranslationKey, stri
     providersHelp: '通过下拉和输入框配置模型服务：选择模型服务，选择或输入模型，直接粘贴 API Key，并且只启用其中一个默认模型服务。',
     providersLabel: '模型服务列表',
     readOnlySkillDetail: '只读详情，确认版本、状态和最近更新时间。',
+    rejectAll: '全部拒绝',
+    rejectChange: '拒绝',
+    rejected: '已拒绝',
     removeProvider: '删除',
     restore: '恢复',
     retry: '重试',
@@ -240,18 +268,25 @@ export const TRANSLATIONS: Record<DashboardLanguage, Record<TranslationKey, stri
   },
   en: {
     ...COST_TRANSLATIONS.en,
+    acceptAll: 'Accept all',
+    acceptChange: 'Accept',
+    accepted: 'Accepted',
     addProject: 'Add project',
     addProvider: 'Add provider',
     apiKeyHide: 'Hide',
     apiKeyPastePlaceholder: 'Paste API Key',
     apiKeyShow: 'Show',
+    applyToDraft: 'Apply to draft',
     applyToFamily: 'Apply to family instances',
     applying: 'Applying',
     builtInPrompt: 'Built-in system prompt',
+    cancel: 'Cancel',
     catalogCustomOnly: 'LiteLLM catalog unavailable; custom only',
     catalogErrorPrefix: 'LiteLLM catalog error:',
     catalogLoading: 'Loading LiteLLM catalog...',
     checkConnectivity: 'Check connectivity',
+    checkMarketplace: 'Check marketplace',
+    checkingMarketplace: 'Checking marketplace...',
     config: 'Config',
     configLoading: 'Loading config...',
     connectivityChecking: 'Checking...',
@@ -287,6 +322,9 @@ export const TRANSLATIONS: Record<DashboardLanguage, Record<TranslationKey, stri
     llmSafetyWindow: 'Rolling window (ms)',
     loadErrorPrefix: 'Failed to load remote config:',
     market: 'Market',
+    marketplaceNoChanges: 'Local content matches the marketplace version — no differences',
+    marketplaceReview: 'Marketplace review',
+    marketplaceSource: 'Source',
     marketDirectories: 'Market directories',
     marketRepositories: 'GitHub repositories',
     marketTrustCommunity: 'Community',
@@ -294,6 +332,7 @@ export const TRANSLATIONS: Record<DashboardLanguage, Record<TranslationKey, stri
     marketTrustIndex: 'Index',
     model: 'Model',
     navLabel: 'Primary navigation',
+    noMarketplaceFound: 'Skill not found in marketplace',
     noMatchedProjects: 'No matching projects.',
     noMatchedSkillFamilies: 'No matching skill families.',
     noMatchedSkills: 'No matching skills in this project.',
@@ -320,6 +359,9 @@ export const TRANSLATIONS: Record<DashboardLanguage, Record<TranslationKey, stri
     providersHelp: 'Configure model providers with dropdowns and inputs. Pick a provider, choose or enter a model, paste an API key, and keep one provider active.',
     providersLabel: 'Model providers',
     readOnlySkillDetail: 'Read-only details for version, status, and recent updates.',
+    rejectAll: 'Reject all',
+    rejectChange: 'Reject',
+    rejected: 'Rejected',
     removeProvider: 'Remove',
     restore: 'Restore',
     retry: 'Retry',

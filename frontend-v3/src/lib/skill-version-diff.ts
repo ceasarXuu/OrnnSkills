@@ -88,3 +88,100 @@ function buildLcsLengths(oldLines: string[], newLines: string[]) {
   }
   return lengths
 }
+
+const CONTEXT_LINES = 2
+
+export interface SkillDiffHunk {
+  id: string
+  lines: SkillVersionDiffLine[]
+  oldRange: { start: number; end: number }
+  newRange: { start: number; end: number }
+  hasChanges: boolean
+}
+
+/**
+ * Group diff lines into hunks. Each hunk contains a contiguous block of
+ * added/removed lines surrounded by CONTEXT_LINES of context on each side.
+ */
+export function buildSkillDiffHunks(
+  oldContent: string,
+  newContent: string,
+): SkillDiffHunk[] {
+  const rows = buildSkillVersionDiff(oldContent, newContent)
+  if (rows.length === 0) return []
+
+  // Find indices of rows that are actual changes (added/removed)
+  const changeIndices: number[] = []
+  for (let i = 0; i < rows.length; i++) {
+    if (rows[i].kind !== 'context') {
+      changeIndices.push(i)
+    }
+  }
+
+  if (changeIndices.length === 0) {
+    // No changes — return a single context-only hunk
+    return [
+      {
+        id: 'hunk-0',
+        lines: rows,
+        oldRange: {
+          start: rows[0].oldLineNumber ?? 1,
+          end: rows[rows.length - 1].oldLineNumber ?? rows[0].oldLineNumber ?? 1,
+        },
+        newRange: {
+          start: rows[0].newLineNumber ?? 1,
+          end: rows[rows.length - 1].newLineNumber ?? rows[0].newLineNumber ?? 1,
+        },
+        hasChanges: false,
+      },
+    ]
+  }
+
+  // Group change indices into clusters (consecutive or separated by <= CONTEXT_LINES*2 context lines)
+  const clusters: Array<{ start: number; end: number }> = []
+  let clusterStart = changeIndices[0]
+  let clusterEnd = changeIndices[0]
+
+  for (let i = 1; i < changeIndices.length; i++) {
+    const gap = changeIndices[i] - clusterEnd
+    if (gap <= CONTEXT_LINES * 2 + 2) {
+      // Merge into current cluster
+      clusterEnd = changeIndices[i]
+    } else {
+      clusters.push({ start: clusterStart, end: clusterEnd })
+      clusterStart = changeIndices[i]
+      clusterEnd = changeIndices[i]
+    }
+  }
+  clusters.push({ start: clusterStart, end: clusterEnd })
+
+  // Build hunks with context padding
+  const hunks: SkillDiffHunk[] = []
+  for (let ci = 0; ci < clusters.length; ci++) {
+    const { start, end } = clusters[ci]
+    const hunkStart = Math.max(0, start - CONTEXT_LINES)
+    const hunkEnd = Math.min(rows.length - 1, end + CONTEXT_LINES)
+    const lines = rows.slice(hunkStart, hunkEnd + 1)
+
+    const firstOld = lines.find((l) => l.oldLineNumber !== null)
+    const lastOld = [...lines].reverse().find((l) => l.oldLineNumber !== null)
+    const firstNew = lines.find((l) => l.newLineNumber !== null)
+    const lastNew = [...lines].reverse().find((l) => l.newLineNumber !== null)
+
+    hunks.push({
+      id: `hunk-${ci}`,
+      lines,
+      oldRange: {
+        start: firstOld?.oldLineNumber ?? 1,
+        end: lastOld?.oldLineNumber ?? firstOld?.oldLineNumber ?? 1,
+      },
+      newRange: {
+        start: firstNew?.newLineNumber ?? 1,
+        end: lastNew?.newLineNumber ?? firstNew?.newLineNumber ?? 1,
+      },
+      hasChanges: true,
+    })
+  }
+
+  return hunks
+}

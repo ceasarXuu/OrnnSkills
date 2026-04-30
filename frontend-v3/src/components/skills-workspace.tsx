@@ -40,10 +40,15 @@ export function SkillsWorkspace({
           draftContent={skillLibrary.draftContent}
           family={skillLibrary.selectedFamily}
           isApplying={skillLibrary.isApplying}
+          isCheckingMarketplace={skillLibrary.isCheckingMarketplace}
           isLoading={skillLibrary.isLoadingFamilyDetail || skillLibrary.isLoadingSkillDetail}
           isSaving={skillLibrary.isSaving}
+          marketplaceReview={skillLibrary.marketplaceReview}
+          onApplyMarketplaceChanges={skillLibrary.applyMarketplaceChanges}
           onApplyToFamily={skillLibrary.applyToFamily}
+          onCheckMarketplace={skillLibrary.checkMarketplace}
           onCloseApplyPreview={skillLibrary.closeApplyPreview}
+          onCloseMarketplaceReview={skillLibrary.closeMarketplaceReview}
           onDraftChange={skillLibrary.setDraftContent}
           onLoadApplyPreview={skillLibrary.loadApplyPreview}
           onPreferredProjectChange={onSelectProject}

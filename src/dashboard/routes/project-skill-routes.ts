@@ -3,6 +3,7 @@ import { listProjects } from '../projects-registry.js';
 import { readSkillContent, readSkills } from '../data-reader.js';
 import type { RuntimeType } from '../../types/index.js';
 import { resolveDashboardRuntime, saveSkillVersion } from '../services/skill-version-service.js';
+import { searchMarketplace } from '../services/marketplace-search.js';
 
 interface RouteLogger {
   info(message: string, meta?: Record<string, unknown>): void;
@@ -261,6 +262,22 @@ export async function handleProjectSkillRoutes(context: ProjectSkillRouteContext
       skippedTargets,
       failedTargets,
     });
+    return true;
+  }
+
+  const marketplaceMatch = subPath.match(/^\/skills\/([^/]+)\/marketplace$/);
+  if (marketplaceMatch && method === 'GET') {
+    const skillId = decodeURIComponent(marketplaceMatch[1]);
+    try {
+      const result = await searchMarketplace(skillId, logger);
+      json(result);
+    } catch (error) {
+      logger.error('Marketplace search unexpected error', {
+        skillId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      json({ found: false });
+    }
     return true;
   }
 

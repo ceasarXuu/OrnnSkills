@@ -263,6 +263,21 @@ export async function applyDashboardSkillToFamily(input: ApplyDashboardSkillToFa
   )
 }
 
+export interface MarketplaceSkillResponse {
+  found: boolean
+  source?: { repo: string; skill: string; url: string }
+  content?: string
+}
+
+export async function fetchMarketplaceSkill(
+  projectPath: string,
+  skillId: string,
+): Promise<MarketplaceSkillResponse> {
+  return await fetchJson<MarketplaceSkillResponse>(
+    `/api/projects/${encodeProjectPath(projectPath)}/skills/${encodeURIComponent(skillId)}/marketplace`,
+  )
+}
+
 export async function fetchDashboardConfig() {
   const data = await fetchJson<DashboardConfigResponse>('/api/config')
   return data.config
