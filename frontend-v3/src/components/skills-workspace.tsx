@@ -1,3 +1,4 @@
+import { DashboardActionToast } from '@/components/dashboard-action-toast'
 import { SkillFamilyDetail } from '@/components/skill-family-detail'
 import { SkillFamilyList } from '@/components/skill-family-list'
 import { useDashboardV3SkillLibrary } from '@/features/dashboard/use-dashboard-v3-skill-library'
@@ -65,6 +66,11 @@ export function SkillsWorkspace({
           versionMetadataByNumber={skillLibrary.versionMetadataByNumber}
         />
       </section>
+
+      <DashboardActionToast
+        message={skillLibrary.toastMessage}
+        onDismiss={skillLibrary.clearToastMessage}
+      />
     </div>
   )
 }

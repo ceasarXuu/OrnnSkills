@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import { fetchMarketplaceSkill } from '@/lib/dashboard-api'
+import { fetchMarketplaceSkill, logDashboardV3Event } from '@/lib/dashboard-api'
 import type { DashboardSkillInstance } from '@/types/dashboard'
 
 export interface SkillMarketplaceReviewState {
@@ -12,6 +12,7 @@ interface UseDashboardV3SkillMarketplaceOptions {
   draftContent: string
   onActionMessage: (message: string | null) => void
   onDraftContent: (content: string) => void
+  onToastMessage: (message: string) => void
   selectedInstance: DashboardSkillInstance | null
 }
 
@@ -26,6 +27,7 @@ export function useDashboardV3SkillMarketplace({
   draftContent,
   onActionMessage,
   onDraftContent,
+  onToastMessage,
   selectedInstance,
 }: UseDashboardV3SkillMarketplaceOptions) {
   const [isCheckingMarketplace, setIsCheckingMarketplace] = useState(false)
@@ -52,14 +54,18 @@ export function useDashboardV3SkillMarketplace({
           })
         }
       } else {
-        onActionMessage('未在市场找到该技能')
+        onToastMessage('未在市场找到该技能')
+        logDashboardV3Event('skill_marketplace.not_found', {
+          instanceId: selectedInstance.instanceId,
+          skillId: selectedInstance.skillId,
+        })
       }
     } catch (error) {
       onActionMessage(getErrorMessage(error, '市场查询失败。'))
     } finally {
       setIsCheckingMarketplace(false)
     }
-  }, [draftContent, onActionMessage, selectedInstance])
+  }, [draftContent, onActionMessage, onToastMessage, selectedInstance])
 
   const applyMarketplaceChanges = useCallback(
     (mergedContent: string) => {

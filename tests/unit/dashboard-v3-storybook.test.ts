@@ -98,6 +98,7 @@ describe('dashboard v3 Storybook setup', () => {
       'frontend-v3/src/components/skill-family-detail.stories.tsx',
       'frontend-v3/src/components/skills-table.stories.tsx',
       'frontend-v3/src/components/skill-detail-dialog.stories.tsx',
+      'frontend-v3/src/components/dashboard-action-toast.stories.tsx',
       'frontend-v3/src/components/skill-content-editor.stories.tsx',
       'frontend-v3/src/components/skill-version-history.stories.tsx',
       'frontend-v3/src/components/config-provider-row.stories.tsx',
@@ -109,6 +110,16 @@ describe('dashboard v3 Storybook setup', () => {
     for (const storyFile of storyFiles) {
       expect(existsSync(new URL(storyFile, root)), storyFile).toBe(true)
     }
+  })
+
+  it('covers dashboard toast feedback as an overlay story', () => {
+    const toastStory = readWorkspaceFile('frontend-v3/src/components/dashboard-action-toast.stories.tsx')
+    const toastComponent = readWorkspaceFile('frontend-v3/src/components/dashboard-action-toast.tsx')
+
+    expect(toastStory).toContain('MarketplaceSkillNotFound')
+    expect(toastStory).toContain('未在市场找到该技能')
+    expect(toastComponent).toContain("from '@/components/ui/toast'")
+    expect(toastComponent).toContain('translateDashboardActionMessage')
   })
 
   it('only publishes project workbench stories once it owns real screen structure', () => {

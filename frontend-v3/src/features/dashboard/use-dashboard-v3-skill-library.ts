@@ -11,11 +11,7 @@ import {
   saveDashboardSkillDetail,
   toggleDashboardSkillVersionDisabled,
 } from '@/lib/dashboard-api'
-import {
-  filterSkillFamilies,
-  selectPreferredSkillInstance,
-  sortSkillFamilies,
-} from '@/lib/skill-library'
+import { filterSkillFamilies, selectPreferredSkillInstance, sortSkillFamilies } from '@/lib/skill-library'
 import {
   clearCachedSkillDetail,
   getCachedSkillDetail,
@@ -24,11 +20,9 @@ import {
   setCachedSkillDetail,
 } from '@/lib/skill-detail-cache'
 import { useSkillVersionCompare } from './use-skill-version-compare'
-import {
-  getInitialSkillLibraryState,
-  setSkillLibraryCache,
-} from './use-dashboard-v3-skill-library-cache'
+import { getInitialSkillLibraryState, setSkillLibraryCache } from './use-dashboard-v3-skill-library-cache'
 import { useDashboardV3SkillMarketplace } from './use-dashboard-v3-skill-marketplace'
+import type { DashboardActionToastMessage } from '@/components/dashboard-action-toast'
 import type {
   DashboardSkillApplyPreview,
   DashboardSkillDetail,
@@ -62,6 +56,8 @@ export function useDashboardV3SkillLibrary(preferredProjectPath: string) {
   const [query, setQuery] = useState(initialState?.query ?? '')
   const [applyPreview, setApplyPreview] = useState<DashboardSkillApplyPreview | null>(initialState?.applyPreview ?? null)
   const [actionMessage, setActionMessage] = useState<string | null>(initialState?.actionMessage ?? null)
+  const toastSequenceRef = useRef(0)
+  const [toastMessage, setToastMessage] = useState<DashboardActionToastMessage | null>(null)
   const [familiesError, setFamiliesError] = useState<string | null>(initialState?.familiesError ?? null)
   const [detailError, setDetailError] = useState<string | null>(initialState?.detailError ?? null)
   const [isLoadingFamilies, setIsLoadingFamilies] = useState(!hasInitialCache)
@@ -89,6 +85,7 @@ export function useDashboardV3SkillLibrary(preferredProjectPath: string) {
     draftContent,
     onActionMessage: setActionMessage,
     onDraftContent: setDraftContent,
+    onToastMessage: (message) => setToastMessage({ id: ++toastSequenceRef.current, message }),
     selectedInstance,
   })
   useEffect(() => {
@@ -457,6 +454,7 @@ export function useDashboardV3SkillLibrary(preferredProjectPath: string) {
     applyToFamily,
     applyPreview,
     checkMarketplace: marketplace.checkMarketplace,
+    clearToastMessage: () => setToastMessage(null),
     closeApplyPreview: () => setApplyPreview(null),
     closeMarketplaceReview: marketplace.closeMarketplaceReview,
     detail,
@@ -490,6 +488,7 @@ export function useDashboardV3SkillLibrary(preferredProjectPath: string) {
     setQuery,
     switchRuntime,
     toggleVersionDisabled,
+    toastMessage,
     versionMetadataByNumber,
   }
 }

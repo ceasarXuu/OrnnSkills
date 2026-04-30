@@ -12,6 +12,14 @@ const marketWorkspaceSource = readFileSync(
   new URL('../../frontend-v3/src/components/market-workspace.tsx', import.meta.url),
   'utf8',
 )
+const skillMarketplaceHookSource = readFileSync(
+  new URL('../../frontend-v3/src/features/dashboard/use-dashboard-v3-skill-marketplace.ts', import.meta.url),
+  'utf8',
+)
+const skillContentEditorSource = readFileSync(
+  new URL('../../frontend-v3/src/components/skill-content-editor.tsx', import.meta.url),
+  'utf8',
+)
 
 describe('dashboard v3 market directory', () => {
   it('keeps market entries data-driven for cheap expansion', () => {
@@ -104,5 +112,12 @@ describe('dashboard v3 market directory', () => {
     expect(marketWorkspaceSource).not.toContain("t('marketIntro')")
     expect(marketWorkspaceSource).not.toContain("t('marketTitle')")
     expect(marketWorkspaceSource).not.toContain('Search01Icon')
+  })
+
+  it('shows missing marketplace skill feedback as toast instead of inline editor text', () => {
+    expect(skillMarketplaceHookSource).toContain("onToastMessage('未在市场找到该技能')")
+    expect(skillMarketplaceHookSource).toContain("logDashboardV3Event('skill_marketplace.not_found'")
+    expect(skillMarketplaceHookSource).not.toContain("onActionMessage('未在市场找到该技能')")
+    expect(skillContentEditorSource).not.toContain("message === '未在市场找到该技能'")
   })
 })
