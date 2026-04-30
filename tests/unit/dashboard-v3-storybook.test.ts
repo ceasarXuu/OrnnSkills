@@ -120,6 +120,9 @@ describe('dashboard v3 Storybook setup', () => {
     expect(toastStory).toContain('未在市场找到该技能')
     expect(toastComponent).toContain("from '@/components/ui/toast'")
     expect(toastComponent).toContain('translateDashboardActionMessage')
+    expect(toastComponent).toContain('duration={8000}')
+    expect(toastComponent).toContain('ToastClose')
+    expect(toastComponent).toContain('关闭提示')
   })
 
   it('only publishes project workbench stories once it owns real screen structure', () => {

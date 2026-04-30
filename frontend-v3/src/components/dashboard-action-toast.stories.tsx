@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
-import { expect, within } from 'storybook/test'
+import { expect, fn, within } from 'storybook/test'
 import { DashboardActionToast } from '@/components/dashboard-action-toast'
 import { dashboardStoryParameters } from '@/stories/dashboard-storybook'
 
@@ -15,7 +15,7 @@ const meta = {
       id: 1,
       message: '未在市场找到该技能',
     },
-    onDismiss: () => undefined,
+    onDismiss: fn(),
   },
 } satisfies Meta<typeof DashboardActionToast>
 
@@ -27,6 +27,8 @@ export const MarketplaceSkillNotFound: Story = {
   play: async ({ canvasElement }) => {
     const documentScope = within(canvasElement.ownerDocument.body)
 
+    await expect(documentScope.getByText('提示')).toBeInTheDocument()
     await expect(documentScope.getByText('未在市场找到该技能')).toBeInTheDocument()
+    await expect(documentScope.getByRole('button', { name: '关闭提示' })).toBeInTheDocument()
   },
 }

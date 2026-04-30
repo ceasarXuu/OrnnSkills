@@ -17,7 +17,7 @@ function ToastViewport({
     <ToastPrimitive.Viewport
       data-slot="toast-viewport"
       className={cn(
-        "fixed right-6 bottom-6 z-50 flex w-[360px] max-w-[calc(100vw-2rem)] flex-col gap-2 outline-none",
+        "fixed right-6 bottom-6 z-50 flex w-[420px] max-w-[calc(100vw-2rem)] flex-col gap-2 outline-none",
         className,
       )}
       {...props}
@@ -33,9 +33,22 @@ function Toast({
     <ToastPrimitive.Root
       data-slot="toast"
       className={cn(
-        "rounded-lg border border-border/70 bg-popover/95 px-4 py-3 text-sm text-popover-foreground shadow-lg shadow-black/20 backdrop-blur-sm data-open:animate-in data-open:fade-in-0 data-open:slide-in-from-bottom-2 data-closed:animate-out data-closed:fade-out-0 data-closed:slide-out-to-bottom-2",
+        "relative overflow-hidden rounded-lg border border-primary/45 bg-card/98 p-4 text-sm text-card-foreground shadow-2xl shadow-black/35 backdrop-blur-sm before:absolute before:inset-y-0 before:left-0 before:w-1 before:bg-primary data-open:animate-in data-open:fade-in-0 data-open:slide-in-from-bottom-2 data-closed:animate-out data-closed:fade-out-0 data-closed:slide-out-to-bottom-2",
         className,
       )}
+      {...props}
+    />
+  )
+}
+
+function ToastTitle({
+  className,
+  ...props
+}: React.ComponentProps<typeof ToastPrimitive.Title>) {
+  return (
+    <ToastPrimitive.Title
+      data-slot="toast-title"
+      className={cn("text-sm font-medium leading-none", className)}
       {...props}
     />
   )
@@ -54,4 +67,10 @@ function ToastDescription({
   )
 }
 
-export { Toast, ToastDescription, ToastProvider, ToastViewport }
+function ToastClose({
+  ...props
+}: React.ComponentProps<typeof ToastPrimitive.Close>) {
+  return <ToastPrimitive.Close data-slot="toast-close" {...props} />
+}
+
+export { Toast, ToastClose, ToastDescription, ToastProvider, ToastTitle, ToastViewport }
