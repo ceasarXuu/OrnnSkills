@@ -226,6 +226,34 @@ describe('global daemon architecture', () => {
     expect(exitSpy).toHaveBeenCalledWith(0);
   });
 
+  it('starts in background when no projects have been initialized yet', async () => {
+    mocks.listProjects.mockReturnValue([]);
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
+    const { createStartCommand } = await import('../../src/cli/commands/daemon.js');
+
+    const command = createStartCommand();
+    await command.parseAsync(['--background', '--no-dashboard'], { from: 'user' });
+
+    expect(mocks.spawn).toHaveBeenCalledTimes(1);
+    expect(mocks.printErrorAndExit).not.toHaveBeenCalled();
+    expect(exitSpy).toHaveBeenCalledWith(0);
+  });
+
+  it('daemon runtime can start with an empty project registry', async () => {
+    mocks.listProjects.mockReturnValue([]);
+    const { Daemon } = await import('../../src/daemon/index.js');
+
+    const daemon = new Daemon('/launcher-context');
+    await daemon.start();
+
+    expect(mocks.createShadowManager).not.toHaveBeenCalled();
+    expect(mocks.createCodexObserver).toHaveBeenCalledTimes(1);
+    expect(daemon.isActive()).toBe(true);
+    expect(daemon.getState().isRunning).toBe(true);
+
+    await daemon.stop();
+  });
+
   it('stops routing traces for paused projects and resumes from new traces only', async () => {
     mocks.listProjects.mockReturnValue([
       {

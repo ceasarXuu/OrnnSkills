@@ -18,7 +18,6 @@ import { createStartCommand } from './start-command.js';
 import {
   DEFAULT_DASHBOARD_PORT,
   buildArgs,
-  getRegisteredProjectRootsOrThrow,
   resolveLaunchContext,
   type DaemonOptions,
 } from './shared.js';
@@ -37,7 +36,6 @@ export function createRestartCommand(): Command {
     .action(async (options: DaemonOptions): Promise<void> => {
       try {
         const launchContext = resolveLaunchContext(options.project);
-        getRegisteredProjectRootsOrThrow();
 
         // 停止现有 daemon
         const existingPid = readPidFile();

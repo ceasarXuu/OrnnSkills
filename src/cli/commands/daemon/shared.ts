@@ -27,16 +27,6 @@ export function getRegisteredProjectRoots(): string[] {
   return listProjects().map((project) => resolve(project.path));
 }
 
-export function getRegisteredProjectRootsOrThrow(): string[] {
-  const projectRoots = getRegisteredProjectRoots();
-  if (projectRoots.length === 0) {
-    throw new Error(
-      'No initialized projects found. Run "ornn init" in at least one project first.'
-    );
-  }
-  return projectRoots;
-}
-
 export function buildArgs(options: DaemonOptions): string[] {
   const args: string[] = [];
   const dashboardLang = normalizeDashboardLang(options.lang);

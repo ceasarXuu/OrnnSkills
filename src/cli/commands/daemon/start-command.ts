@@ -26,7 +26,7 @@ import {
 } from './dashboard-launcher.js';
 import {
   DEFAULT_DASHBOARD_PORT,
-  getRegisteredProjectRootsOrThrow,
+  getRegisteredProjectRoots,
   resolveLaunchContext,
   type DaemonOptions,
 } from './shared.js';
@@ -47,7 +47,7 @@ export function createStartCommand(): Command {
     .action(async (options: DaemonOptions): Promise<void> => {
       try {
         const launchContext = resolveLaunchContext(options.project);
-        const registeredProjects = getRegisteredProjectRootsOrThrow();
+        const registeredProjects = getRegisteredProjectRoots();
 
         // 检查是否已经在运行
         const existingPid = readPidFile();
@@ -97,7 +97,12 @@ export function createStartCommand(): Command {
           writePidFile(undefined, process.pid);
 
           spinner.succeed('Daemon started');
-          cliInfo(`Monitoring ${registeredProjects.length} registered project(s).`);
+          if (registeredProjects.length === 0) {
+            cliInfo('No projects registered yet. Daemon and dashboard are running.');
+            cliInfo('Run "ornn init" inside a project later to add it to monitoring.');
+          } else {
+            cliInfo(`Monitoring ${registeredProjects.length} registered project(s).`);
+          }
 
           // 启动 dashboard
           let dashboardServer: DashboardServerInstance | null = null;
