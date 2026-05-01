@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.13](https://github.com/ceasarXuu/OrnnSkills/compare/v0.1.12...v0.1.13) (2026-05-01)
+
+
+### 📝 Documentation
+
+* refresh product readme ([98c4b19](https://github.com/ceasarXuu/OrnnSkills/commit/98c4b19dd9359f7ada41bb63b052de615d8f48ca))
+
+
+### 🐛 Bug Fixes
+
+* allow daemon start without projects ([9e79646](https://github.com/ceasarXuu/OrnnSkills/commit/9e79646fac49d7880540000eeba221f0b017a871))
+* **ci:** clear root lint errors ([491263c](https://github.com/ceasarXuu/OrnnSkills/commit/491263c5fd0820394ad70151fcb8abf26cb1f577))
+* improve dashboard toast visibility ([0efba98](https://github.com/ceasarXuu/OrnnSkills/commit/0efba981fe3906f247fe77a968d1648a090ef70b))
+* show marketplace miss as toast ([fddafcb](https://github.com/ceasarXuu/OrnnSkills/commit/fddafcbe5fe57389b9aba2691ea36c2f7bc5003b))
+
 ### [0.1.12](https://github.com/ceasarXuu/OrnnSkills/compare/v0.1.11...v0.1.12) (2026-04-30)
 
 
