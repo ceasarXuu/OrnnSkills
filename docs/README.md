@@ -1,6 +1,6 @@
 # OrnnSkills 文档索引
 
-> 最后更新：2026-04-29
+> 最后更新：2026-05-13
 
 OrnnSkills 当前主线版本为 **V2.0**（围绕 `Skill Family / Instance / Revision` 模型，dashboard V3 为主使用现场）。
 
@@ -17,6 +17,7 @@ OrnnSkills 当前主线版本为 **V2.0**（围绕 `Skill Family / Instance / Re
 | [TESTING-STRATEGY.md](TESTING-STRATEGY.md) | 测试与覆盖策略 | V2.0 |
 | [PERFORMANCE-BENCHMARKS.md](PERFORMANCE-BENCHMARKS.md) | dashboard 基准 | V2.0 |
 | [ARCHITECTURE_CONSTRAINTS.md](ARCHITECTURE_CONSTRAINTS.md) | 架构约束 | V2.0 |
+| [EVOLUTION-ARCHITECTURE-UPGRADE-PLAN.md](EVOLUTION-ARCHITECTURE-UPGRADE-PLAN.md) | 演化能力架构升级计划 | V2.0 |
 | [DESIGN.md](DESIGN.md) | UI/UX 设计 | V3 dashboard |
 | [dashboard-v3-storybook.md](dashboard-v3-storybook.md) | Storybook 规范 | V3 dashboard |
 | [SKILL-DOMAIN-REFACTOR-PLAN.md](SKILL-DOMAIN-REFACTOR-PLAN.md) | Skill 领域重构计划 | V2.0 |
