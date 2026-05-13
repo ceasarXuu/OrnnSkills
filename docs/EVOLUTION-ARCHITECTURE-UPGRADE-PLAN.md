@@ -222,6 +222,19 @@ interface EvolutionProposal {
 - 新模型先作为 contract/projection 层引入，不强制迁移全部存储。
 - 单测覆盖合法状态迁移和非法状态拒绝。
 
+执行状态:
+
+| 文件 | 职责 |
+|---|---|
+| `src/core/evolution/domain.ts` | 定义 `EvolutionEpisode`、`EvolutionRun`、`EvolutionProposal`、`EvolutionApplication`、`EvolutionVerification` 等一等领域 contract。 |
+| `src/core/evolution/events.ts` | 定义后续 event-sourced workflow 可复用的领域事件类型。 |
+| `src/core/evolution/state-machine.ts` | 显式声明 run 生命周期状态迁移，拒绝非法跳转。 |
+| `src/core/evolution/projection.ts` | 先把现有 `TaskEpisode`、`DecisionEventRecord`、`VersionMetadata` 映射为 `EvolutionRun` 读模型，不迁移现有存储。 |
+
+守护机制:
+
+- `tests/unit/evolution-domain.test.ts` 覆盖合法状态流、非法跳转拒绝，以及从现有 episode/event/version 投影到一等演化模型。
+
 建议提交:
 
 ```text

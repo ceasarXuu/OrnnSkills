@@ -169,6 +169,10 @@ npm run benchmark:check
 npm run build
 ```
 
+执行注意:
+
+- `npm run benchmark:check` 必须独立运行，避免与全量 Vitest、构建或其他高负载命令并发。dashboard reader benchmark 使用 wall-clock 预算，并发执行会制造性能误报。
+
 ## 变更类型与最低门禁
 
 | 变更类型 | 最低执行 |
