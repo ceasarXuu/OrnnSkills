@@ -390,6 +390,19 @@ interface ChangePlan {
 - AST 定位失败不会写入 shadow。
 - 增加 Markdown fixtures 回归测试。
 
+执行状态:
+
+| 文件 | 职责 |
+|---|---|
+| `src/core/evolution/change-plan.ts` | 新增结构化 `EvolutionChangePlan` 和操作类型，先表达 append/replace/remove/tighten 等 Markdown 编辑意图。 |
+| `tests/unit/evolution-change-plan.test.ts` | 覆盖稳定 idempotency key、section 定位必填、空操作拒绝。 |
+
+后续接入顺序:
+
+1. 将现有 `PatchGenerator` 先产出 `EvolutionChangePlan`，再由 adapter 生成当前 unified diff。
+2. 引入 Markdown section parser 后，把 section 定位失败映射为 proposal `needs_review`。
+3. 在 apply 前用 `idempotencyKey` 检查重复应用，避免重复段落。
+
 建议提交:
 
 ```text

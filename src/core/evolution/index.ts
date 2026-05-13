@@ -1,4 +1,5 @@
 export * from './architecture-status.js';
+export * from './change-plan.js';
 export * from './domain.js';
 export * from './events.js';
 export * from './proposal-policy.js';
