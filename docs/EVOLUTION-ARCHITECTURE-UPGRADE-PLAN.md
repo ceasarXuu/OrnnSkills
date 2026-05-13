@@ -272,6 +272,19 @@ interface EvolutionWorkflow {
 - 自动分析、手动分析共用同一套 workflow result 协议。
 - 失败事件明确区分 `analysis_failed`、`proposal_failed`、`apply_failed`、`deploy_failed`、`verification_failed`。
 
+执行状态:
+
+| 文件 | 职责 |
+|---|---|
+| `src/core/evolution/workflow.ts` | 新增最小 `EvolutionWorkflow` coordinator，负责合法状态推进并生成 `evolution.run_status_changed` 领域事件。 |
+| `tests/unit/evolution-workflow.test.ts` | 覆盖 workflow 推进、事件生成、非法跳转拒绝。 |
+
+后续接入顺序:
+
+1. 先把 `ShadowEpisodeProbeService` 的 episode readiness 结果映射为 `collecting -> analyzing/skipped`。
+2. 再把 `ShadowOptimizationRunner` 的 analyzer / patch / version 结果映射为 `proposed -> applying -> applied`。
+3. 最后让 `ShadowManager.processTrace()` 只负责 trace 入口和 runtime lifecycle，把演化步骤委托给 workflow。
+
 建议提交:
 
 ```text
