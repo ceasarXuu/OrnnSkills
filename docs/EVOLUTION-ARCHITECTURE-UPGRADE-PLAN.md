@@ -335,6 +335,20 @@ proposal 必须包含:
 - proposal 支持 apply、reject、expire。
 - proposal 与后续 revision 有稳定关联。
 
+执行状态:
+
+| 文件 | 职责 |
+|---|---|
+| `src/core/evolution/proposal-policy.ts` | 把 proposal apply 决策显式化，统一处理 `autoOptimize`、`userConfirm`、证据数量、来源 session、confidence 和风险等级。 |
+| `src/core/evolution/domain.ts` | 补齐 proposal 的 `skipped`、`needs_more_context` 状态，匹配 proposal-first 门禁结果。 |
+| `tests/unit/evolution-proposal-policy.test.ts` | 覆盖手动确认、自动 apply、高风险 review、证据不足、关闭自动优化五类策略分支。 |
+
+后续接入顺序:
+
+1. 将 analyzer 结果先写为 `EvolutionProposal`，不要直接进入 patch apply。
+2. 在 `ShadowOptimizationRunner` 调用 patch 前执行 `evaluateEvolutionProposalPolicy()`。
+3. 将 `needs_review`、`skipped`、`needs_more_context` 投影到 dashboard proposal 列表。
+
 建议提交:
 
 ```text
