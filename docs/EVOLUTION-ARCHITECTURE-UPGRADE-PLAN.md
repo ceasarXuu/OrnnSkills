@@ -482,6 +482,19 @@ feat(evolution): honor runtime sync policy
 - dashboard 能展示演化后观察结果。
 - 如果 `regressed`，系统建议 rollback 或 freeze，但高风险操作仍需用户确认。
 
+执行状态:
+
+| 文件 | 职责 |
+|---|---|
+| `src/core/evolution/verification.ts` | 新增后验验证 contract，基于前后 failure、need_more_context、manual correction 信号判断 `improved`、`neutral`、`regressed`、`inconclusive`。 |
+| `tests/unit/evolution-verification.test.ts` | 覆盖负面信号下降、上升、样本不足三类结果。 |
+
+后续接入顺序:
+
+1. revision applied 后创建 verification window，收集后续相关 episode。
+2. 用 `evaluateEvolutionVerification()` 写入 verification outcome。
+3. dashboard 展示 outcome，并在 `regressed` 时提供 rollback/freeze 建议但保留用户确认。
+
 建议提交:
 
 ```text
