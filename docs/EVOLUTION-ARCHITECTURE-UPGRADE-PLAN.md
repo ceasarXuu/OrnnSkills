@@ -435,6 +435,19 @@ test(patch): cover markdown section edits
 - 部署失败有明确事件和错误信息。
 - `runtime_sync` 配置真实控制主链路。
 
+执行状态:
+
+| 文件 | 职责 |
+|---|---|
+| `src/core/evolution/deployment-policy.ts` | 新增部署决策 contract，区分 revision 创建、跳过宿主同步、同步失败和 partial 标记。 |
+| `tests/unit/evolution-deployment-policy.test.ts` | 覆盖 `runtimeSync=true`、`runtimeSync=false`、部署失败三类状态。 |
+
+后续接入顺序:
+
+1. 在 `EvolutionApplication` 之后执行 `decideEvolutionDeployment()`。
+2. 部署 adapter 先创建 backup，再写入宿主 skill 目录。
+3. 部署失败只标记 partial 和事件，不自动回滚 shadow revision。
+
 建议提交:
 
 ```text
