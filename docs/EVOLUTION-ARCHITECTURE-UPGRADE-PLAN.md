@@ -148,6 +148,20 @@ Observer
 - 不再有两个并行模块都被称为主 evolution engine。
 - 遗留模块有迁移或删除计划。
 
+执行状态:
+
+| 模块 | 状态 | 当前决策 |
+|---|---|---|
+| `src/core/shadow-manager/index.ts` | `production` | 当前唯一在线演化入口。daemon 通过 `ProjectRuntimeRegistry` 创建 `ShadowManager`，trace 处理继续由该 facade 串联 episode、analysis、patch、version 和 decision event。 |
+| `src/core/skill-evolution/index.ts` | `legacy` | 作为历史演化管理器和迁移参考保留，禁止继续扩张为第二条生产主链路。后续只迁移可复用 contract。 |
+| `src/core/pipeline/index.ts` | `to_migrate` | 抽取仍有价值的 workflow/pipeline 概念后，避免与 `ShadowManager` 形成并行编排。 |
+| `src/core/readiness-probe/index.ts` | `to_remove` | 未接入当前 daemon 生产链路。确认 dashboard 和迁移流程无依赖后移除。 |
+
+守护机制:
+
+- `src/core/evolution/architecture-status.ts` 声明生产入口、真实调用链和遗留模块状态。
+- `tests/unit/evolution-architecture.test.ts` 锁定 daemon 生产代码不得导入遗留演化引擎，并验证项目运行时必须通过 `ShadowManager` facade 创建。
+
 建议提交:
 
 ```text
