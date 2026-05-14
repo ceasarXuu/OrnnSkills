@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   readRecentDecisionEvents: vi.fn(),
   readAgentUsageRecords: vi.fn(),
   readTracesBySessionWindow: vi.fn(),
+  readProjectEvolutionLifecycle: vi.fn(),
   readProjectLanguage: vi.fn(),
   buildActivityScopeDetailFromData: vi.fn(),
 }));
@@ -24,6 +25,7 @@ vi.mock('../../src/dashboard/data-reader.js', () => ({
   readRecentDecisionEvents: mocks.readRecentDecisionEvents,
   readAgentUsageRecords: mocks.readAgentUsageRecords,
   readTracesBySessionWindow: mocks.readTracesBySessionWindow,
+  readProjectEvolutionLifecycle: mocks.readProjectEvolutionLifecycle,
 }));
 
 vi.mock('../../src/dashboard/language-state.js', () => ({
@@ -145,6 +147,30 @@ describe('dashboard project read routes', () => {
     expect(mocks.readRecentTraces).toHaveBeenCalledWith('/tmp/demo', 50);
     expect(mocks.computeTraceStats).toHaveBeenCalledWith(traces);
     expect(json).toHaveBeenCalledWith({ traces, stats });
+  });
+
+  it('handles GET /api/projects/:id/evolution', async () => {
+    const { handleProjectReadRoutes } = await import('../../src/dashboard/routes/project-read-routes.js');
+    const json = vi.fn();
+    const lifecycle = {
+      summary: { activeEpisodes: 1, pendingProposals: 1 },
+      runs: [{ runId: 'episode-1:skill-a' }],
+    };
+    mocks.readProjectEvolutionLifecycle.mockReturnValue(lifecycle);
+
+    const handled = await handleProjectReadRoutes({
+      subPath: '/evolution',
+      method: 'GET',
+      projectPath: '/tmp/demo',
+      currentLang: 'en',
+      json,
+      notFound: vi.fn(),
+      logger: { debug: vi.fn(), warn: vi.fn() },
+    });
+
+    expect(handled).toBe(true);
+    expect(mocks.readProjectEvolutionLifecycle).toHaveBeenCalledWith('/tmp/demo');
+    expect(json).toHaveBeenCalledWith(lifecycle);
   });
 
   it('handles GET /api/projects/:id/activity-scopes/:scopeId', async () => {

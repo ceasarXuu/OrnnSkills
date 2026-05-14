@@ -8,6 +8,7 @@ import {
   computeTraceStats,
   readProjectSnapshot,
   readProjectSnapshotVersion,
+  readProjectEvolutionLifecycle,
 } from '../data-reader.js';
 import { readProjectLanguage } from '../language-state.js';
 import { buildActivityScopeDetailFromData } from '../activity-scope-reader.js';
@@ -72,6 +73,11 @@ export async function handleProjectReadRoutes(context: ProjectReadRouteContext):
   if (subPath === '/traces' && method === 'GET') {
     const traces = readRecentTraces(projectPath, 50);
     json({ traces, stats: computeTraceStats(traces) });
+    return true;
+  }
+
+  if (subPath === '/evolution' && method === 'GET') {
+    json(readProjectEvolutionLifecycle(projectPath));
     return true;
   }
 

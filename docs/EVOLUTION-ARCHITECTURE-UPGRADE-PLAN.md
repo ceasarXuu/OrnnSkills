@@ -528,6 +528,21 @@ Project view 增加:
 - 不需要读取 `.ornn` 文件即可理解演化状态。
 - high-risk 操作保留预览、备份、回滚路径。
 
+执行状态:
+
+| 文件 | 职责 |
+|---|---|
+| `src/dashboard/evolution-lifecycle-reader.ts` | 新增 dashboard 只读 lifecycle reader，将 task episode、decision event、version metadata 投影为 `EvolutionRun` 列表和汇总。 |
+| `src/dashboard/routes/project-read-routes.ts` | 新增 `GET /api/projects/:id/evolution`，让前端无需读取 `.ornn` 文件即可拿到演化状态。 |
+| `tests/unit/dashboard-evolution-lifecycle-reader.test.ts` | 覆盖 active episodes、pending proposals、applied revisions 的读模型投影。 |
+| `tests/unit/dashboard-project-read-routes.test.ts` | 覆盖 evolution API route 合同。 |
+
+后续接入顺序:
+
+1. 在 `frontend-v3` 增加 evolution lifecycle 类型和 API client。
+2. 在 Project view 增加 pending proposals / failed runs / verified improvements / regressions 区域。
+3. 在 Skill detail 增加 Evolution 区域，展示 proposal、deployment、verification 与 rollback 入口。
+
 建议提交:
 
 ```text

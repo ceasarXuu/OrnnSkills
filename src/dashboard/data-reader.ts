@@ -60,6 +60,11 @@ export { readDaemonStatus } from './readers/daemon-status-reader.js';
 export type { DaemonStatus } from './readers/daemon-status-reader.js';
 export { readAgentUsageStats, readAgentUsageRecords } from './readers/agent-usage-reader.js';
 export type { AgentUsageStats, AgentUsageBucket } from './readers/agent-usage-reader.js';
+export { readProjectEvolutionLifecycle } from './evolution-lifecycle-reader.js';
+export type {
+  DashboardEvolutionLifecycle,
+  DashboardEvolutionLifecycleSummary,
+} from './evolution-lifecycle-reader.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
