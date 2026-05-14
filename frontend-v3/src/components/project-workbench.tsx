@@ -1,16 +1,19 @@
 import { CostWorkspace } from '@/components/cost-workspace'
+import { EvolutionWorkspace } from '@/components/evolution-workspace'
 import { SkillsTable } from '@/components/skills-table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useI18n } from '@/lib/i18n'
-import type { DashboardAgentUsage, DashboardSkill } from '@/types/dashboard'
+import type { DashboardAgentUsage, DashboardEvolutionLifecycle, DashboardSkill } from '@/types/dashboard'
 import type { DashboardProviderCatalogEntry } from '@/types/config'
 
 interface ProjectWorkbenchProps {
   agentUsage?: DashboardAgentUsage | null
   catalogError?: string | null
-  defaultTab?: 'skills' | 'cost'
+  defaultTab?: 'skills' | 'cost' | 'evolution'
+  evolutionLifecycle?: DashboardEvolutionLifecycle | null
   isLoading: boolean
   isCatalogLoading: boolean
+  isLoadingEvolution?: boolean
   onQueryChange: (value: string) => void
   onSelectSkill: (skill: DashboardSkill) => void
   projectName?: string
@@ -25,8 +28,10 @@ export function ProjectWorkbench({
   agentUsage,
   catalogError,
   defaultTab = 'skills',
+  evolutionLifecycle,
   isLoading,
   isCatalogLoading,
+  isLoadingEvolution = false,
   onQueryChange,
   onSelectSkill,
   projectName,
@@ -44,6 +49,7 @@ export function ProjectWorkbench({
         <TabsList variant="line">
           <TabsTrigger value="skills">{t('skills')}</TabsTrigger>
           <TabsTrigger value="cost">{t('cost')}</TabsTrigger>
+          <TabsTrigger value="evolution">演化</TabsTrigger>
         </TabsList>
       </div>
 
@@ -67,6 +73,13 @@ export function ProjectWorkbench({
           projectName={projectName}
           projectPath={projectPath}
           providerCatalog={providerCatalog}
+        />
+      </TabsContent>
+
+      <TabsContent className="mt-0" value="evolution">
+        <EvolutionWorkspace
+          isLoading={isLoadingEvolution || isLoading}
+          lifecycle={evolutionLifecycle}
         />
       </TabsContent>
     </Tabs>

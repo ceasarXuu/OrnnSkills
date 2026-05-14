@@ -36,4 +36,10 @@ describe('dashboard v3 project workspace contract', () => {
     expect(combinedSource).not.toContain('Recent Traces')
     expect(combinedSource).not.toContain('Decision Events')
   })
+
+  it('exposes evolution lifecycle as a first-class project workspace tab', () => {
+    expect(projectWorkbenchSource).toContain("import { EvolutionWorkspace }")
+    expect(projectWorkbenchSource).toContain('TabsTrigger value="evolution"')
+    expect(projectWorkbenchSource).toContain('<EvolutionWorkspace')
+  })
 })

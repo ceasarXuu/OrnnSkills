@@ -534,14 +534,18 @@ Project view 增加:
 |---|---|
 | `src/dashboard/evolution-lifecycle-reader.ts` | 新增 dashboard 只读 lifecycle reader，将 task episode、decision event、version metadata 投影为 `EvolutionRun` 列表和汇总。 |
 | `src/dashboard/routes/project-read-routes.ts` | 新增 `GET /api/projects/:id/evolution`，让前端无需读取 `.ornn` 文件即可拿到演化状态。 |
+| `frontend-v3/src/components/evolution-workspace.tsx` | 新增项目演化工作区，展示 active episodes、pending proposals、failed runs、verified improvements、regressions。 |
+| `frontend-v3/src/features/dashboard/use-dashboard-v3-workspace.ts` | 选择项目时同时加载 snapshot 与 evolution lifecycle。 |
+| `frontend-v3/src/components/project-workbench.tsx` | Project view 新增 `演化` tab。 |
 | `tests/unit/dashboard-evolution-lifecycle-reader.test.ts` | 覆盖 active episodes、pending proposals、applied revisions 的读模型投影。 |
 | `tests/unit/dashboard-project-read-routes.test.ts` | 覆盖 evolution API route 合同。 |
+| `tests/unit/dashboard-v3-evolution-workspace.test.ts` | 覆盖前端 API、hook 和项目演化状态分组合同。 |
 
 后续接入顺序:
 
-1. 在 `frontend-v3` 增加 evolution lifecycle 类型和 API client。
-2. 在 Project view 增加 pending proposals / failed runs / verified improvements / regressions 区域。
-3. 在 Skill detail 增加 Evolution 区域，展示 proposal、deployment、verification 与 rollback 入口。
+1. 在 Skill detail 增加 Evolution 区域，展示 proposal、deployment、verification 与 rollback 入口。
+2. 为 high-risk proposal 增加 preview/backup/rollback 操作入口。
+3. 将 `regressed` verification outcome 显式接到 rollback/freeze 建议。
 
 建议提交:
 

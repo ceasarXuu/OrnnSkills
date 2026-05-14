@@ -189,6 +189,73 @@ export interface ProjectSnapshot {
   agentUsage?: DashboardAgentUsage
 }
 
+export type DashboardEvolutionRunStatus =
+  | 'collecting'
+  | 'analyzing'
+  | 'proposed'
+  | 'skipped'
+  | 'applying'
+  | 'applied'
+  | 'deploying'
+  | 'deployed'
+  | 'verifying'
+  | 'verified'
+  | 'regressed'
+  | 'failed'
+  | 'rolled_back'
+
+export interface DashboardEvolutionProposal {
+  proposalId: string
+  changeType: string
+  reason: string
+  confidence: number
+  riskLevel: 'low' | 'medium' | 'high'
+  status: string
+  evidence: string[]
+}
+
+export interface DashboardEvolutionApplication {
+  proposalId: string
+  appliedAt: string
+  revision: number
+  previousRevision: number | null
+}
+
+export interface DashboardEvolutionVerification {
+  verifiedAt: string
+  revision: number
+  outcome: 'improved' | 'neutral' | 'regressed' | 'inconclusive'
+  reason: string
+  evidence: string[]
+}
+
+export interface DashboardEvolutionRun {
+  runId: string
+  episodeId: string
+  skillId: string
+  runtime: SkillDomainRuntime
+  status: DashboardEvolutionRunStatus
+  createdAt: string
+  updatedAt: string
+  proposal?: DashboardEvolutionProposal | null
+  application?: DashboardEvolutionApplication | null
+  verification?: DashboardEvolutionVerification | null
+}
+
+export interface DashboardEvolutionLifecycleSummary {
+  activeEpisodes: number
+  pendingProposals: number
+  appliedRevisions: number
+  failedRuns: number
+  regressions: number
+  verifiedImprovements: number
+}
+
+export interface DashboardEvolutionLifecycle {
+  summary: DashboardEvolutionLifecycleSummary
+  runs: DashboardEvolutionRun[]
+}
+
 export interface DashboardProjectsResponse {
   projects: DashboardProject[]
 }

@@ -129,8 +129,12 @@ describe('dashboard v3 Storybook setup', () => {
     const source = readWorkspaceFile('frontend-v3/src/components/project-workbench.tsx')
     expect(source).toContain('TabsTrigger value="skills"')
     expect(source).toContain('TabsTrigger value="cost"')
+    expect(source).toContain('TabsTrigger value="evolution"')
     expect(readWorkspaceFile('frontend-v3/src/components/project-workbench.stories.tsx')).toContain(
       'CostSelected',
+    )
+    expect(readWorkspaceFile('frontend-v3/src/components/project-workbench.stories.tsx')).toContain(
+      'EvolutionSelected',
     )
   })
 

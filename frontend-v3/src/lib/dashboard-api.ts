@@ -8,6 +8,7 @@ import type {
   DashboardSkillVersionRecord,
   DashboardProjectPickResponse,
   DashboardProjectsResponse,
+  DashboardEvolutionLifecycle,
   DashboardSsePayload,
   ProjectSnapshot,
   SkillDomainRuntime,
@@ -135,6 +136,12 @@ export async function pickDashboardProject() {
 export async function fetchProjectSnapshot(projectPath: string) {
   return await fetchJson<ProjectSnapshot>(
     `/api/projects/${encodeProjectPath(projectPath)}/snapshot`,
+  )
+}
+
+export async function fetchProjectEvolutionLifecycle(projectPath: string) {
+  return await fetchJson<DashboardEvolutionLifecycle>(
+    `/api/projects/${encodeProjectPath(projectPath)}/evolution`,
   )
 }
 
