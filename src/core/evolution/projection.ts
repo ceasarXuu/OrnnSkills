@@ -16,6 +16,16 @@ export interface EvolutionRunProjectionInput {
   versions?: VersionMetadata[];
 }
 
+function inferRiskLevel(changeType: string | null | undefined): 'low' | 'medium' | 'high' {
+  if (['rewrite_section', 'remove_section', 'prune_noise'].includes(changeType ?? '')) {
+    return 'high';
+  }
+  if (changeType === 'tighten_trigger') {
+    return 'medium';
+  }
+  return 'low';
+}
+
 function dedupe(values: Array<string | null | undefined>): string[] {
   return Array.from(new Set(values.filter((value): value is string => !!value)));
 }
@@ -95,7 +105,7 @@ function buildProposal(
       ...(decisionEvent.evidence?.causalJudgment ?? []),
     ]),
     confidence: decisionEvent.confidence ?? 0,
-    riskLevel: 'medium',
+    riskLevel: inferRiskLevel(decisionEvent.changeType),
     status: 'ready',
   };
 }

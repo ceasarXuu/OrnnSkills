@@ -60,5 +60,6 @@ describe('dashboard v3 skill detail loading', () => {
     expect(skillDetailDialogSource).toContain('evolutionLifecycle')
     expect(skillDetailDialogSource).toContain('SkillEvolutionSummary')
     expect(skillDetailDialogSource).toContain('matchingEvolutionRuns')
+    expect(skillDetailDialogSource).toContain('recommendedActions')
   })
 })

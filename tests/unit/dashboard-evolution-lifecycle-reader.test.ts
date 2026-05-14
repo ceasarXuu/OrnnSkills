@@ -140,4 +140,90 @@ describe('dashboard evolution lifecycle reader', () => {
       ['episode-applied', 'applied'],
     ]);
   });
+
+  it('adds high-risk and regression action entries for dashboard operations', () => {
+    writeFileSync(
+      join(testDir, '.ornn', 'state', 'task-episodes.json'),
+      JSON.stringify({
+        updatedAt: '2026-05-13T00:02:00.000Z',
+        episodes: [
+          makeEpisode({
+            episodeId: 'episode-risk',
+            traceRefs: ['trace-5', 'trace-6'],
+            sessionIds: ['session-risk'],
+          }),
+          makeEpisode({ episodeId: 'episode-regressed' }),
+        ],
+      }),
+      'utf-8'
+    );
+    writeFileSync(
+      join(testDir, '.ornn', 'state', 'decision-events.ndjson'),
+      [
+        JSON.stringify({
+          id: 'event-risk',
+          timestamp: '2026-05-13T00:03:00.000Z',
+          tag: 'optimization_completed',
+          episodeId: 'episode-risk',
+          skillId: 'skill-a',
+          runtime: 'codex',
+          status: 'apply_optimization',
+          changeType: 'rewrite_section',
+          confidence: 0.91,
+          reason: 'High-risk rewrite',
+        }),
+        JSON.stringify({
+          id: 'event-regressed',
+          timestamp: '2026-05-13T00:04:00.000Z',
+          tag: 'optimization_completed',
+          episodeId: 'episode-regressed',
+          skillId: 'skill-a',
+          runtime: 'codex',
+          status: 'apply_optimization',
+          changeType: 'tighten_trigger',
+          confidence: 0.82,
+          reason: 'Applied regression',
+        }),
+        JSON.stringify({
+          id: 'event-regressed-verification',
+          timestamp: '2026-05-13T00:06:00.000Z',
+          tag: 'evolution_verification',
+          episodeId: 'episode-regressed',
+          skillId: 'skill-a',
+          runtime: 'codex',
+          status: 'regressed',
+          reason: 'Negative skill outcome increased after the revision',
+        }),
+      ].join('\n'),
+      'utf-8'
+    );
+
+    const versionDir = join(testDir, '.ornn', 'skills', 'codex', 'skill-a', 'versions', 'v3');
+    mkdirSync(versionDir, { recursive: true });
+    writeFileSync(
+      join(versionDir, 'metadata.json'),
+      JSON.stringify({
+        version: 3,
+        createdAt: '2026-05-13T00:05:00.000Z',
+        reason: 'Applied regression',
+        traceIds: ['trace-1', 'trace-2'],
+        previousVersion: 2,
+        activityScopeId: 'episode-regressed',
+      }),
+      'utf-8'
+    );
+
+    const lifecycle = readProjectEvolutionLifecycle(testDir);
+    const riskRun = lifecycle.runs.find((run) => run.episodeId === 'episode-risk');
+    const regressedRun = lifecycle.runs.find((run) => run.episodeId === 'episode-regressed');
+
+    expect(riskRun?.recommendedActions.map((action) => action.type)).toEqual([
+      'preview',
+      'backup',
+    ]);
+    expect(regressedRun?.recommendedActions.map((action) => action.type)).toEqual([
+      'rollback',
+      'freeze',
+    ]);
+  });
 });

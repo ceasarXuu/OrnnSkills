@@ -8,6 +8,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { formatCompactNumberForLocale, formatDateTime, formatRelativeTime, getSkillStatusBadgeVariant } from '@/lib/format'
 import { useI18n } from '@/lib/i18n'
@@ -94,6 +95,33 @@ function SkillEvolutionSummary({ runs }: { runs: DashboardEvolutionRun[] }) {
         <MiniMetric label="已应用" value={appliedCount} />
         <MiniMetric label="回退风险" value={regressionCount} />
       </div>
+      <SkillEvolutionActions runs={runs} />
+    </div>
+  )
+}
+
+function SkillEvolutionActions({ runs }: { runs: DashboardEvolutionRun[] }) {
+  const recommendedActions = runs.flatMap((run) => {
+    return (run.recommendedActions ?? []).map((action) => ({ action, run }))
+  })
+
+  if (recommendedActions.length === 0) {
+    return null
+  }
+
+  return (
+    <div className="mt-3 flex flex-wrap gap-2">
+      {recommendedActions.slice(0, 4).map(({ action, run }) => (
+        <Button
+          aria-label={`${action.label}: ${run.skillId}`}
+          key={`${run.runId}:${action.type}`}
+          size="sm"
+          title={action.reason}
+          variant={action.type === 'rollback' || action.type === 'freeze' ? 'destructive' : 'outline'}
+        >
+          {action.label}
+        </Button>
+      ))}
     </div>
   )
 }

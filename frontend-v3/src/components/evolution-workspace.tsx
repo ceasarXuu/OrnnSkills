@@ -1,4 +1,5 @@
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatRelativeTime } from '@/lib/format'
@@ -20,6 +21,13 @@ const statusLabels: Record<string, string> = {
   verified: '已验证',
   skipped: '已跳过',
 }
+
+const actionFallbackLabels = {
+  preview: '预览变更',
+  backup: '创建备份',
+  rollback: '回滚到上一修订',
+  freeze: '冻结当前 skill',
+} as const
 
 export function EvolutionWorkspace({ isLoading, lifecycle }: EvolutionWorkspaceProps) {
   const summary = lifecycle?.summary
@@ -128,6 +136,7 @@ function StatusGroup({ runs, title }: { runs: DashboardEvolutionRun[]; title: st
               <div className="mt-1 truncate text-xs text-muted-foreground">
                 {run.proposal?.changeType ?? run.verification?.outcome ?? run.status}
               </div>
+              <RecommendedActions run={run} />
             </div>
           ))
         ) : (
@@ -135,6 +144,29 @@ function StatusGroup({ runs, title }: { runs: DashboardEvolutionRun[]; title: st
         )}
       </CardContent>
     </Card>
+  )
+}
+
+function RecommendedActions({ run }: { run: DashboardEvolutionRun }) {
+  const recommendedActions = run.recommendedActions ?? []
+  if (recommendedActions.length === 0) {
+    return null
+  }
+
+  return (
+    <div className="mt-3 flex flex-wrap gap-2">
+      {recommendedActions.map((action) => (
+        <Button
+          aria-label={`${action.label}: ${run.skillId}`}
+          key={`${run.runId}:${action.type}`}
+          size="sm"
+          title={action.reason}
+          variant={action.type === 'rollback' || action.type === 'freeze' ? 'destructive' : 'outline'}
+        >
+          {action.label || actionFallbackLabels[action.type]}
+        </Button>
+      ))}
+    </div>
   )
 }
 

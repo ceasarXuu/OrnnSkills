@@ -1,6 +1,6 @@
 # OrnnSkills 演化能力架构升级计划
 
-> 最后更新：2026-05-13
+> 最后更新：2026-05-14
 
 ## 1. 目标
 
@@ -538,15 +538,17 @@ Project view 增加:
 | `frontend-v3/src/features/dashboard/use-dashboard-v3-workspace.ts` | 选择项目时同时加载 snapshot 与 evolution lifecycle。 |
 | `frontend-v3/src/components/project-workbench.tsx` | Project view 新增 `演化` tab。 |
 | `frontend-v3/src/components/skill-detail-dialog.tsx` | Skill detail 增加演化摘要，按 skill/runtime 展示待处理、已应用和回退风险。 |
-| `tests/unit/dashboard-evolution-lifecycle-reader.test.ts` | 覆盖 active episodes、pending proposals、applied revisions 的读模型投影。 |
+| `src/core/evolution/projection.ts` | proposal 投影会按 change type 推断风险等级，`rewrite_section`、`remove_section`、`prune_noise` 默认进入 high-risk 路径。 |
+| `src/dashboard/evolution-lifecycle-reader.ts` | 在读模型中汇总 high-risk proposal 的 preview/backup 建议，并把 `evolution_verification` 的 `regressed` outcome 映射为 rollback/freeze 建议。 |
+| `tests/unit/dashboard-evolution-lifecycle-reader.test.ts` | 覆盖 active episodes、pending proposals、applied revisions、high-risk action entries 和 regression action entries 的读模型投影。 |
 | `tests/unit/dashboard-project-read-routes.test.ts` | 覆盖 evolution API route 合同。 |
-| `tests/unit/dashboard-v3-evolution-workspace.test.ts` | 覆盖前端 API、hook 和项目演化状态分组合同。 |
-| `tests/unit/dashboard-v3-skill-detail-load.test.ts` | 覆盖 Skill detail 接入 evolution lifecycle。 |
+| `tests/unit/dashboard-v3-evolution-workspace.test.ts` | 覆盖前端 API、hook、项目演化状态分组和 preview/backup/rollback/freeze 操作入口合同。 |
+| `tests/unit/dashboard-v3-skill-detail-load.test.ts` | 覆盖 Skill detail 接入 evolution lifecycle 与推荐操作入口。 |
 
 后续接入顺序:
 
-1. 为 high-risk proposal 增加 preview/backup/rollback 操作入口。
-2. 将 `regressed` verification outcome 显式接到 rollback/freeze 建议。
+1. 将 preview、backup、rollback、freeze 按钮接入真实 action API。
+2. 为 action API 增加执行前预览、备份产物、确认门禁和回滚结果审计事件。
 
 建议提交:
 
@@ -568,6 +570,7 @@ feat(dashboard): add evolution lifecycle workspace
 8. `feat(evolution): track runtime deployment status`
 9. `feat(evolution): add revision verification windows`
 10. `feat(dashboard): expose evolution lifecycle workspace`
+11. `feat(dashboard): add evolution action entries`
 
 优先级:
 
