@@ -12,6 +12,11 @@ const skillLibraryHookSource = readFileSync(
   'utf8',
 )
 
+const skillDetailDialogSource = readFileSync(
+  new URL('../../frontend-v3/src/components/skill-detail-dialog.tsx', import.meta.url),
+  'utf8',
+)
+
 describe('dashboard v3 skill detail loading', () => {
   it('does not block content rendering on version metadata fan-out', () => {
     const contentReadyIndex = skillLibraryHookSource.indexOf("logDashboardV3Event('skill_library.content_ready'")
@@ -50,5 +55,10 @@ describe('dashboard v3 skill detail loading', () => {
 
     expect(getCachedSkillDetail('instance-1')?.versionMetadataByNumber[2]?.reason).toBe('test')
   })
-})
 
+  it('shows evolution lifecycle context in skill detail', () => {
+    expect(skillDetailDialogSource).toContain('evolutionLifecycle')
+    expect(skillDetailDialogSource).toContain('SkillEvolutionSummary')
+    expect(skillDetailDialogSource).toContain('matchingEvolutionRuns')
+  })
+})

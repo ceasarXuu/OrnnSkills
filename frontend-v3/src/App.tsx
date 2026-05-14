@@ -169,6 +169,7 @@ function DashboardWorkspacePage() {
       </main>
 
       <SkillDetailDialog
+        evolutionLifecycle={selectedEvolutionLifecycle}
         onOpenChange={(open) => {
           if (!open) {
             setSelectedSkill(null)

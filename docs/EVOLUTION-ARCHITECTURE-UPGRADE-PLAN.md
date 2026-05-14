@@ -537,15 +537,16 @@ Project view 增加:
 | `frontend-v3/src/components/evolution-workspace.tsx` | 新增项目演化工作区，展示 active episodes、pending proposals、failed runs、verified improvements、regressions。 |
 | `frontend-v3/src/features/dashboard/use-dashboard-v3-workspace.ts` | 选择项目时同时加载 snapshot 与 evolution lifecycle。 |
 | `frontend-v3/src/components/project-workbench.tsx` | Project view 新增 `演化` tab。 |
+| `frontend-v3/src/components/skill-detail-dialog.tsx` | Skill detail 增加演化摘要，按 skill/runtime 展示待处理、已应用和回退风险。 |
 | `tests/unit/dashboard-evolution-lifecycle-reader.test.ts` | 覆盖 active episodes、pending proposals、applied revisions 的读模型投影。 |
 | `tests/unit/dashboard-project-read-routes.test.ts` | 覆盖 evolution API route 合同。 |
 | `tests/unit/dashboard-v3-evolution-workspace.test.ts` | 覆盖前端 API、hook 和项目演化状态分组合同。 |
+| `tests/unit/dashboard-v3-skill-detail-load.test.ts` | 覆盖 Skill detail 接入 evolution lifecycle。 |
 
 后续接入顺序:
 
-1. 在 Skill detail 增加 Evolution 区域，展示 proposal、deployment、verification 与 rollback 入口。
-2. 为 high-risk proposal 增加 preview/backup/rollback 操作入口。
-3. 将 `regressed` verification outcome 显式接到 rollback/freeze 建议。
+1. 为 high-risk proposal 增加 preview/backup/rollback 操作入口。
+2. 将 `regressed` verification outcome 显式接到 rollback/freeze 建议。
 
 建议提交:
 
