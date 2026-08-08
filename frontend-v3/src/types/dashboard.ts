@@ -229,14 +229,6 @@ export interface DashboardEvolutionVerification {
   evidence: string[]
 }
 
-export interface DashboardEvolutionRecommendedAction {
-  type: 'preview' | 'backup' | 'rollback' | 'freeze'
-  label: string
-  requiresConfirmation: boolean
-  targetRevision?: number | null
-  reason: string
-}
-
 export interface DashboardEvolutionRun {
   runId: string
   episodeId: string
@@ -248,7 +240,6 @@ export interface DashboardEvolutionRun {
   proposal?: DashboardEvolutionProposal | null
   application?: DashboardEvolutionApplication | null
   verification?: DashboardEvolutionVerification | null
-  recommendedActions: DashboardEvolutionRecommendedAction[]
 }
 
 export interface DashboardEvolutionLifecycleSummary {

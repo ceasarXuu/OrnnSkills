@@ -1,8 +1,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { projectEvolutionRunFromEpisode } from '../core/evolution/projection.js';
-import type { EvolutionRun, EvolutionVerification } from '../core/evolution/domain.js';
-import type { DecisionEventRecord } from '../core/decision-events/index.js';
+import type { EvolutionRun } from '../core/evolution/domain.js';
 import {
   createEmptyTaskEpisodeSnapshot,
   normalizeTaskEpisodeSnapshot,
@@ -20,27 +19,9 @@ export interface DashboardEvolutionLifecycleSummary {
   verifiedImprovements: number;
 }
 
-export type DashboardEvolutionRecommendedActionType =
-  | 'preview'
-  | 'backup'
-  | 'rollback'
-  | 'freeze';
-
-export interface DashboardEvolutionRecommendedAction {
-  type: DashboardEvolutionRecommendedActionType;
-  label: string;
-  requiresConfirmation: boolean;
-  targetRevision?: number | null;
-  reason: string;
-}
-
-export type DashboardEvolutionRun = EvolutionRun & {
-  recommendedActions: DashboardEvolutionRecommendedAction[];
-};
-
 export interface DashboardEvolutionLifecycle {
   summary: DashboardEvolutionLifecycleSummary;
-  runs: DashboardEvolutionRun[];
+  runs: EvolutionRun[];
 }
 
 function readTaskEpisodes(projectRoot: string): TaskEpisodeSnapshot {
@@ -110,11 +91,11 @@ function readVersionMetadata(projectRoot: string): VersionMetadata[] {
   return metadata;
 }
 
-function countActiveEpisodes(runs: DashboardEvolutionRun[]): number {
+function countActiveEpisodes(runs: EvolutionRun[]): number {
   return runs.filter((run) => !['skipped', 'failed', 'rolled_back'].includes(run.status)).length;
 }
 
-function summarizeRuns(runs: DashboardEvolutionRun[]): DashboardEvolutionLifecycleSummary {
+function summarizeRuns(runs: EvolutionRun[]): DashboardEvolutionLifecycleSummary {
   return {
     activeEpisodes: countActiveEpisodes(runs),
     pendingProposals: runs.filter((run) => run.status === 'proposed').length,
@@ -125,109 +106,12 @@ function summarizeRuns(runs: DashboardEvolutionRun[]): DashboardEvolutionLifecyc
   };
 }
 
-function getRunPriority(run: DashboardEvolutionRun): number {
+function getRunPriority(run: EvolutionRun): number {
   if (run.status === 'proposed') return 0;
   if (run.verification?.outcome === 'regressed') return 1;
   if (run.status === 'failed') return 2;
   if (run.application) return 3;
   return 4;
-}
-
-function isHighRiskProposal(run: EvolutionRun): boolean {
-  return run.proposal?.riskLevel === 'high' ||
-    ['rewrite_section', 'remove_section', 'prune_noise'].includes(run.proposal?.changeType ?? '');
-}
-
-function getRecommendedActions(run: EvolutionRun): DashboardEvolutionRecommendedAction[] {
-  if (run.verification?.outcome === 'regressed') {
-    return [
-      {
-        type: 'rollback',
-        label: '回滚到上一修订',
-        requiresConfirmation: true,
-        targetRevision: run.application?.previousRevision ?? null,
-        reason: run.verification.reason,
-      },
-      {
-        type: 'freeze',
-        label: '冻结当前 skill',
-        requiresConfirmation: true,
-        targetRevision: run.application?.revision ?? null,
-        reason: 'regressed verification outcome requires attention',
-      },
-    ];
-  }
-
-  if (run.status === 'proposed' && isHighRiskProposal(run)) {
-    return [
-      {
-        type: 'preview',
-        label: '预览变更',
-        requiresConfirmation: false,
-        reason: 'high-risk proposal must be previewed before apply',
-      },
-      {
-        type: 'backup',
-        label: '创建备份',
-        requiresConfirmation: true,
-        reason: 'high-risk proposal requires backup before apply',
-      },
-    ];
-  }
-
-  return [];
-}
-
-function toVerificationOutcome(status: string | null | undefined): EvolutionVerification['outcome'] | null {
-  if (status === 'improved' || status === 'neutral' || status === 'regressed' || status === 'inconclusive') {
-    return status;
-  }
-  return null;
-}
-
-function findVerificationEvent(
-  run: EvolutionRun,
-  decisionEvents: DecisionEventRecord[]
-): DecisionEventRecord | null {
-  return (
-    decisionEvents.find((event) => {
-      return event.episodeId === run.episodeId &&
-        event.skillId === run.skillId &&
-        event.tag === 'evolution_verification' &&
-        !!toVerificationOutcome(event.status);
-    }) ?? null
-  );
-}
-
-function applyVerificationSignals(
-  run: EvolutionRun,
-  decisionEvents: DecisionEventRecord[]
-): EvolutionRun {
-  const event = findVerificationEvent(run, decisionEvents);
-  const outcome = toVerificationOutcome(event?.status);
-  if (!event || !outcome) {
-    return run;
-  }
-
-  return {
-    ...run,
-    status: outcome === 'regressed' ? 'regressed' : run.status,
-    updatedAt: event.timestamp > run.updatedAt ? event.timestamp : run.updatedAt,
-    verification: {
-      verifiedAt: event.timestamp,
-      revision: run.application?.revision ?? 0,
-      outcome,
-      evidence: [event.id],
-      reason: event.reason ?? event.detail ?? event.status ?? '',
-    },
-  };
-}
-
-function toDashboardEvolutionRun(run: EvolutionRun): DashboardEvolutionRun {
-  return {
-    ...run,
-    recommendedActions: getRecommendedActions(run),
-  };
 }
 
 export function readProjectEvolutionLifecycle(projectRoot: string): DashboardEvolutionLifecycle {
@@ -237,13 +121,12 @@ export function readProjectEvolutionLifecycle(projectRoot: string): DashboardEvo
   const runs = snapshot.episodes
     .map((episode) => {
       try {
-        const run = projectEvolutionRunFromEpisode({ episode, decisionEvents, versions });
-        return toDashboardEvolutionRun(applyVerificationSignals(run, decisionEvents));
+        return projectEvolutionRunFromEpisode({ episode, decisionEvents, versions });
       } catch {
         return null;
       }
     })
-    .filter((run): run is DashboardEvolutionRun => !!run)
+    .filter((run): run is EvolutionRun => !!run)
     .sort((left, right) => {
       const priorityDelta = getRunPriority(left) - getRunPriority(right);
       if (priorityDelta !== 0) return priorityDelta;
