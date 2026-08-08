@@ -1,21 +1,9 @@
-import { useEffect, useState } from 'react'
-import { ConfigGovernancePanel } from '@/components/config-governance-panel'
 import { ConfigProviderStack } from '@/components/config-provider-stack'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
-import { getConfigText, normalizeConfigSubTab, type DashboardConfigSubTab } from '@/lib/config-workspace'
+import { getConfigText } from '@/lib/config-workspace'
 import { useDashboardV3Config } from '@/features/dashboard/use-dashboard-v3-config'
 import { useI18n } from '@/lib/i18n'
-
-const CONFIG_SUBTAB_STORAGE_KEY = 'dashboard-v3.config-subtab'
-
-function loadStoredConfigSubTab(): DashboardConfigSubTab {
-  if (typeof window === 'undefined') {
-    return 'model'
-  }
-
-  return normalizeConfigSubTab(window.localStorage.getItem(CONFIG_SUBTAB_STORAGE_KEY))
-}
 
 export function ConfigWorkspace() {
   const { lang } = useI18n()
@@ -36,19 +24,10 @@ export function ConfigWorkspace() {
     removeProvider,
     saveHint,
     setDefaultProvider,
-    setPromptOverride,
-    setPromptSource,
     setSafetyField,
     toggleApiKeyVisibility,
     updateProvider,
   } = useDashboardV3Config()
-  const [selectedSubTab, setSelectedSubTab] = useState<DashboardConfigSubTab>(() =>
-    loadStoredConfigSubTab(),
-  )
-
-  useEffect(() => {
-    window.localStorage.setItem(CONFIG_SUBTAB_STORAGE_KEY, selectedSubTab)
-  }, [selectedSubTab])
 
   return (
     <div className="space-y-5">
@@ -72,42 +51,30 @@ export function ConfigWorkspace() {
         />
       ) : null}
 
-      <Tabs
-        onValueChange={(value) => setSelectedSubTab(normalizeConfigSubTab(value))}
-        value={selectedSubTab}
-      >
+      <Tabs value="model">
         <TabsList variant="line">
           <TabsTrigger value="model">{configText.modelSubTab}</TabsTrigger>
-          <TabsTrigger value="evolution">{configText.evolutionSubTab}</TabsTrigger>
         </TabsList>
       </Tabs>
 
-      {selectedSubTab === 'model' ? (
-        <ConfigProviderStack
-          apiKeyVisibilityByRow={config.providers.reduce<Record<string, boolean>>((acc, _, index) => {
-            acc[String(index)] = isApiKeyVisible(index)
-            return acc
-          }, {})}
-          config={config}
-          connectivityResults={connectivityResults}
-          isCatalogLoading={isLoading && providerCatalog.length === 0}
-          isCheckingConnectivity={isCheckingConnectivity}
-          onAddProvider={addProvider}
-          onCheckConnectivity={checkConnectivity}
-          onRemoveProvider={removeProvider}
-          onSetDefaultProvider={setDefaultProvider}
-          onSetSafetyField={setSafetyField}
-          onToggleApiKeyVisibility={toggleApiKeyVisibility}
-          onUpdateProvider={updateProvider}
-          providerCatalog={providerCatalog}
-        />
-      ) : (
-        <ConfigGovernancePanel
-          config={config}
-          onSetPromptOverride={setPromptOverride}
-          onSetPromptSource={setPromptSource}
-        />
-      )}
+      <ConfigProviderStack
+        apiKeyVisibilityByRow={config.providers.reduce<Record<string, boolean>>((acc, _, index) => {
+          acc[String(index)] = isApiKeyVisible(index)
+          return acc
+        }, {})}
+        config={config}
+        connectivityResults={connectivityResults}
+        isCatalogLoading={isLoading && providerCatalog.length === 0}
+        isCheckingConnectivity={isCheckingConnectivity}
+        onAddProvider={addProvider}
+        onCheckConnectivity={checkConnectivity}
+        onRemoveProvider={removeProvider}
+        onSetDefaultProvider={setDefaultProvider}
+        onSetSafetyField={setSafetyField}
+        onToggleApiKeyVisibility={toggleApiKeyVisibility}
+        onUpdateProvider={updateProvider}
+        providerCatalog={providerCatalog}
+      />
 
       <div className="flex min-h-6 items-center text-sm text-muted-foreground">
         <span id="cfg_save_hint">{translateConfigHint(saveHint, configText)}</span>
