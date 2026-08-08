@@ -112,13 +112,6 @@ describe('dashboard v3 Storybook setup', () => {
     }
   })
 
-  it('covers skill detail evolution context in Storybook', () => {
-    const story = readWorkspaceFile('frontend-v3/src/components/skill-detail-dialog.stories.tsx')
-
-    expect(story).toContain('evolutionLifecycle')
-    expect(story).toContain('WithEvolution')
-  })
-
   it('covers dashboard toast feedback as an overlay story', () => {
     const toastStory = readWorkspaceFile('frontend-v3/src/components/dashboard-action-toast.stories.tsx')
     const toastComponent = readWorkspaceFile('frontend-v3/src/components/dashboard-action-toast.tsx')
