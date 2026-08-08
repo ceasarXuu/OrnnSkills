@@ -23,9 +23,7 @@ export type EvolutionProposalStatus =
   | 'needs_review'
   | 'applied'
   | 'rejected'
-  | 'expired'
-  | 'skipped'
-  | 'needs_more_context';
+  | 'expired';
 
 export interface EvolutionEvidenceRef {
   kind: 'trace' | 'session' | 'episode' | 'decision_event' | 'version' | 'note';
