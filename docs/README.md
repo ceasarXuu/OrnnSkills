@@ -28,12 +28,12 @@ OrnnSkills 当前主线版本为 **V2.0**（围绕 `Skill Family / Instance / Re
 
 ## 1.1 版本发布文档
 
-按语义化版本在 [releases/](releases/README.md) 下建立版本文档：v0.1.x 为版本级三件套（`prd.md` / `technical-design.md` / `engineering-plan.md`），v0.2.0 起为 topic 子文件夹结构（每个 topic 内三件套），规则见 [releases/README.md](releases/README.md)。
+按语义化版本在 [releases/](releases/README.md) 下建立版本文档三件套（`prd.md` / `technical-design.md` / `engineering-plan.md`），命名规则见 [releases/README.md](releases/README.md)。
 
 | 版本目录 | 状态 | 说明 |
 |---|---|---|
-| [releases/v0.1.13/](releases/v0.1.13/prd.md) | released | 当前已发布版本锁定（2026-05-01），版本级三件套 |
-| [releases/v0.2.0/](releases/v0.2.0/) | draft | 需求未定，待建 topic 子文件夹 |
+| [releases/v0.1.13/](releases/v0.1.13/prd.md) | released | 当前已发布版本锁定（2026-05-01） |
+| [releases/v0.2.0/](releases/v0.2.0/prd.md) | draft | 后续 feature / debug 需求收纳与计划工作区 |
 
 ## 2. 历史/归档（仅追溯背景）
 
