@@ -13,7 +13,8 @@ docs/releases/
     topic-<主题>/         <- 一个可独立交付的工作单元（feature / bug 修复 / 工程维护）
       prd.md              <- 该 topic 的产品范围、目标、完成定义、验收标准
       technical-design.md <- 该 topic 的架构与实现设计
-      engineering-plan.md <- 该 topic 的工作分解、里程碑、状态追踪
+      plan.md             <- 正式工程计划（产品权威引用、工作单元、阶段与验证）
+      decisions.md        <- 受保护产品决策基线（仅存在用户直接确认的 material 决策时）
 ```
 
 ## 版本目录规则
@@ -22,8 +23,8 @@ docs/releases/
 - **v0.2.0 起**：版本目录下不直接放文档，只放 `topic-<主题>` 子文件夹；版本级不设独立汇总文档。版本目标、完成定义、验收标准分散由各 topic 的 `prd.md` 承担。
 - **v0.1.x（已发布历史）**：沿用版本级三件套模式（`prd.md` / `technical-design.md` / `engineering-plan.md` 直接位于版本目录下），不回改。
 - topic 命名：`topic-<kebab-case 主题>`，如 `topic-freeze-evolution`、`topic-ci-fix`。一个 feature 或一个 bug 修复对应一个 topic；一个版本内有多个工作单元时，按单元数量建立多个 topic 子文件夹。
-- 每个 topic 目录必须且只包含三个文档：`prd.md`、`technical-design.md`、`engineering-plan.md`。
-- 文档职责链：topic `prd.md` 定义该 topic 的范围与完成定义；`technical-design.md` 从 PRD 派生，不得重定义范围；`engineering-plan.md` 从 PRD 与设计派生，不得重定义范围。
+- topic 文档组成：`prd.md` + `technical-design.md` + `plan.md` 为必选；存在用户直接确认的 material 产品决策时，另加受保护权威文档 `decisions.md`（仅可写入用户明确批准的决策，禁止 Agent 自批）。
+- 文档职责链：topic `prd.md` 定义该 topic 的范围与完成定义；`technical-design.md` 从 PRD 派生，不得重定义范围；`plan.md` 从 PRD 与设计派生，声明产品权威来源、工作单元、阶段与验证，不得重定义范围。
 - topic `prd.md` 必须携带独立的 PRD 文档版本号与版本历史表，与产品版本号解耦。
 - 需求尚未确定的版本（如当前 v0.2.0）只保留空目录，待需求确定后再按 topic 结构补齐。
 - 版本发布（`npm run release`）后，已发布版本对应 topic 状态标注 `released`；未发布 topic 状态标注 `draft`。
