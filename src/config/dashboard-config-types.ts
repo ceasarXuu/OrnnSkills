@@ -30,6 +30,7 @@ export interface OrnnConfig {
     auto_optimize?: boolean;
     user_confirm?: boolean;
     runtime_sync?: boolean;
+    evolution_frozen?: boolean;
   };
   llm_safety?: {
     enabled?: boolean;
@@ -66,6 +67,8 @@ export interface DashboardConfig {
   autoOptimize: boolean;
   userConfirm: boolean;
   runtimeSync: boolean;
+  /** 演化冻结开关：true 时演化功能不生效（默认 true，D4） */
+  evolutionFrozen: boolean;
   llmSafety: LLMSafetyOptions;
   promptSources: DashboardPromptSources;
   promptOverrides: DashboardPromptOverrides;

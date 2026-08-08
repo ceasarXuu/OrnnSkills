@@ -54,6 +54,7 @@ export async function handleProjectConfigRoutes(
         autoOptimize?: boolean;
         userConfirm?: boolean;
         runtimeSync?: boolean;
+        evolutionFrozen?: boolean;
         llmSafety?: {
           enabled?: boolean;
           windowMs?: number;
@@ -94,6 +95,7 @@ export async function handleProjectConfigRoutes(
       autoOptimize: body.config.autoOptimize ?? true,
       userConfirm: body.config.userConfirm ?? false,
       runtimeSync: body.config.runtimeSync ?? true,
+      evolutionFrozen: body.config.evolutionFrozen ?? true,
       llmSafety: normalizedSafety,
       promptSources: normalizedPromptSources,
       promptOverrides: normalizedPromptOverrides,

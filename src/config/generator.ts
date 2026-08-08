@@ -41,6 +41,7 @@ max_tokens = 4000
 [tracking]
 auto_optimize = true
 user_confirm = false
+evolution_frozen = true
 `;
 
   return config.trim();

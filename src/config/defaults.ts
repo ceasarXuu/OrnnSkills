@@ -29,4 +29,7 @@ export const DEFAULT_CONFIG: EVOConfig = {
     auto_start: true,
     log_level: 'info',
   },
+  tracking: {
+    evolution_frozen: true,
+  },
 };

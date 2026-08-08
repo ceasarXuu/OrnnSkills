@@ -150,6 +150,7 @@ describe('dashboard project config routes', () => {
       autoOptimize: true,
       userConfirm: false,
       runtimeSync: true,
+      evolutionFrozen: true,
       llmSafety: normalizedSafety,
       promptSources: normalizedPromptSources,
       promptOverrides: normalizedPromptOverrides,

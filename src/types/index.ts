@@ -209,6 +209,10 @@ export interface AutoOptimizePolicy {
   cooldown_hours: number;
   max_patches_per_day: number;
   pause_after_rollback_hours: number;
+  /**
+   * 演化冻结开关：true 时演化功能不生效（D4：默认冻结，缺省按 true 处理）
+   */
+  evolution_frozen?: boolean;
 }
 
 // Session 信息
@@ -269,6 +273,12 @@ export interface EVOConfig {
   daemon: {
     auto_start: boolean;
     log_level: 'debug' | 'info' | 'warn' | 'error';
+  };
+  tracking?: {
+    evolution_frozen?: boolean;
+    auto_optimize?: boolean;
+    user_confirm?: boolean;
+    runtime_sync?: boolean;
   };
 }
 

@@ -87,6 +87,7 @@ async function readLegacyProjectDashboardConfig(
     autoOptimize: config.tracking?.auto_optimize ?? true,
     userConfirm: config.tracking?.user_confirm ?? false,
     runtimeSync: config.tracking?.runtime_sync ?? true,
+    evolutionFrozen: config.tracking?.evolution_frozen ?? true,
     llmSafety: resolveLLMSafetyOptions({
       enabled: config.llm_safety?.enabled,
       windowMs: config.llm_safety?.window_ms,
@@ -195,7 +196,7 @@ export function generateConfigContent(
   providers: ProviderConfig[],
   defaultProvider?: string,
   logLevel: string = DEFAULT_LOG_LEVEL,
-  tracking: { autoOptimize?: boolean; userConfirm?: boolean; runtimeSync?: boolean } = {},
+  tracking: { autoOptimize?: boolean; userConfirm?: boolean; runtimeSync?: boolean; evolutionFrozen?: boolean } = {},
   llmSafety?: Partial<LLMSafetyOptions>,
   promptOverrides: DashboardPromptOverrides = DEFAULT_DASHBOARD_PROMPT_OVERRIDES,
   promptSources: DashboardPromptSources = DEFAULT_DASHBOARD_PROMPT_SOURCES
@@ -231,6 +232,7 @@ api_key_env_var = "${provider.apiKeyEnvVar}"
 auto_optimize = ${tracking.autoOptimize ?? true}
 user_confirm = ${tracking.userConfirm ?? false}
 runtime_sync = ${tracking.runtimeSync ?? true}
+evolution_frozen = ${tracking.evolutionFrozen ?? true}
 
 [llm_safety]
 enabled = ${normalizedSafety.enabled}
@@ -285,6 +287,7 @@ export async function writeConfig(
       autoOptimize: existingConfig?.tracking?.auto_optimize ?? true,
       userConfirm: existingConfig?.tracking?.user_confirm ?? false,
       runtimeSync: existingConfig?.tracking?.runtime_sync ?? true,
+      evolutionFrozen: existingConfig?.tracking?.evolution_frozen ?? true,
     },
     {
       enabled: existingConfig?.llm_safety?.enabled,
@@ -340,6 +343,7 @@ export async function setDefaultProvider(
       autoOptimize: config.tracking?.auto_optimize ?? true,
       userConfirm: config.tracking?.user_confirm ?? false,
       runtimeSync: config.tracking?.runtime_sync ?? true,
+      evolutionFrozen: config.tracking?.evolution_frozen ?? true,
     },
     {
       enabled: config.llm_safety?.enabled,
@@ -364,6 +368,7 @@ export async function readDashboardConfig(projectPath?: string): Promise<Dashboa
     autoOptimize: config?.tracking?.auto_optimize ?? true,
     userConfirm: config?.tracking?.user_confirm ?? false,
     runtimeSync: config?.tracking?.runtime_sync ?? true,
+    evolutionFrozen: config?.tracking?.evolution_frozen ?? true,
     llmSafety: resolveLLMSafetyOptions({
       enabled: config?.llm_safety?.enabled,
       windowMs: config?.llm_safety?.window_ms,
@@ -441,6 +446,7 @@ export async function writeDashboardConfig(
       autoOptimize: payload.autoOptimize,
       userConfirm: payload.userConfirm,
       runtimeSync: payload.runtimeSync,
+      evolutionFrozen: payload.evolutionFrozen,
     },
     payload.llmSafety,
     resolveDashboardPromptOverrides(payload.promptOverrides),
