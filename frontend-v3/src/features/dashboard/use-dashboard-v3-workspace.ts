@@ -2,14 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   connectDashboardEvents,
   fetchDashboardProjects,
-  fetchProjectEvolutionLifecycle,
   fetchProjectSnapshot,
   logDashboardV3Event,
   pickDashboardProject,
 } from '@/lib/dashboard-api'
 import type {
   ConnectionState,
-  DashboardEvolutionLifecycle,
   DashboardProject,
   ProjectSnapshot,
 } from '@/types/dashboard'
@@ -28,11 +26,8 @@ export function useDashboardV3Workspace() {
   const [projects, setProjects] = useState<DashboardProject[]>([])
   const [selectedProjectId, setSelectedProjectId] = useState('')
   const [selectedSnapshot, setSelectedSnapshot] = useState<ProjectSnapshot | null>(null)
-  const [selectedEvolutionLifecycle, setSelectedEvolutionLifecycle] =
-    useState<DashboardEvolutionLifecycle | null>(null)
   const [isLoadingProjects, setIsLoadingProjects] = useState(true)
   const [isLoadingSnapshot, setIsLoadingSnapshot] = useState(false)
-  const [isLoadingEvolution, setIsLoadingEvolution] = useState(false)
   const [isPickingProject, setIsPickingProject] = useState(false)
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -47,16 +42,11 @@ export function useDashboardV3Workspace() {
   const loadSnapshotForProject = useCallback(
     async (projectPath: string, reason: RefreshReason) => {
       setIsLoadingSnapshot(true)
-      setIsLoadingEvolution(true)
       logDashboardV3Event('snapshot.load_started', { projectPath, reason })
 
       try {
-        const [snapshot, evolutionLifecycle] = await Promise.all([
-          fetchProjectSnapshot(projectPath),
-          fetchProjectEvolutionLifecycle(projectPath),
-        ])
+        const snapshot = await fetchProjectSnapshot(projectPath)
         setSelectedSnapshot(snapshot)
-        setSelectedEvolutionLifecycle(evolutionLifecycle)
         setLastSyncedAt(new Date().toISOString())
         setLoadError(null)
         logDashboardV3Event('snapshot.load_succeeded', {
@@ -64,7 +54,6 @@ export function useDashboardV3Workspace() {
           reason,
           skillCount: snapshot.skills?.length ?? 0,
           traceCount: snapshot.traceStats?.total ?? 0,
-          pendingProposals: evolutionLifecycle.summary.pendingProposals,
         })
       } catch (error) {
         const message = getErrorMessage(error)
@@ -72,7 +61,6 @@ export function useDashboardV3Workspace() {
         logDashboardV3Event('snapshot.load_failed', { projectPath, reason, message })
       } finally {
         setIsLoadingSnapshot(false)
-        setIsLoadingEvolution(false)
       }
     },
     [],
@@ -98,7 +86,6 @@ export function useDashboardV3Workspace() {
           await loadSnapshotForProject(nextSelection, reason)
         } else {
           setSelectedSnapshot(null)
-          setSelectedEvolutionLifecycle(null)
           setLastSyncedAt(new Date().toISOString())
         }
 
@@ -126,7 +113,6 @@ export function useDashboardV3Workspace() {
 
       setSelectedProjectId(projectPath)
       setSelectedSnapshot(null)
-      setSelectedEvolutionLifecycle(null)
       void loadSnapshotForProject(projectPath, 'selection')
     },
     [loadSnapshotForProject],
@@ -168,7 +154,6 @@ export function useDashboardV3Workspace() {
         await loadSnapshotForProject(nextSelection, 'manual')
       } else {
         setSelectedSnapshot(null)
-        setSelectedEvolutionLifecycle(null)
         setLastSyncedAt(new Date().toISOString())
       }
 
@@ -215,7 +200,6 @@ export function useDashboardV3Workspace() {
     isPickingProject,
     isLoadingProjects,
     isLoadingSnapshot,
-    isLoadingEvolution,
     lastSyncedAt,
     loadError,
     pickProject,
@@ -224,7 +208,6 @@ export function useDashboardV3Workspace() {
     selectProject,
     selectedProject,
     selectedProjectId,
-    selectedEvolutionLifecycle,
     selectedSnapshot,
   }
 }

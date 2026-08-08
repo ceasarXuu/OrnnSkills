@@ -55,7 +55,6 @@ function DashboardWorkspacePage() {
   const {
     isLoadingProjects,
     isLoadingSnapshot,
-    isLoadingEvolution,
     isPickingProject,
     loadError,
     pickProject,
@@ -63,7 +62,6 @@ function DashboardWorkspacePage() {
     selectProject,
     selectedProject,
     selectedProjectId,
-    selectedEvolutionLifecycle,
     selectedSnapshot,
   } = useDashboardV3Workspace()
   const cost = useDashboardV3Cost(currentView === 'project')
@@ -130,8 +128,6 @@ function DashboardWorkspacePage() {
                 currentView={currentView}
                 filteredSkills={filteredSkills}
                 isLoadingSnapshot={isLoadingSnapshot}
-                isLoadingEvolution={isLoadingEvolution}
-                selectedEvolutionLifecycle={selectedEvolutionLifecycle}
                 cost={cost}
                 onQueryChange={setQuery}
                 onSelectProject={selectProject}
@@ -151,8 +147,6 @@ function DashboardWorkspacePage() {
               currentView={currentView}
               filteredSkills={filteredSkills}
               isLoadingSnapshot={isLoadingSnapshot}
-              isLoadingEvolution={isLoadingEvolution}
-              selectedEvolutionLifecycle={selectedEvolutionLifecycle}
               cost={cost}
               onQueryChange={setQuery}
               onSelectProject={selectProject}
@@ -185,7 +179,6 @@ interface ViewContentProps {
   cost: ReturnType<typeof useDashboardV3Cost>
   currentView: DashboardView
   filteredSkills: DashboardSkill[]
-  isLoadingEvolution: boolean
   isLoadingSnapshot: boolean
   onQueryChange: (value: string) => void
   onSelectProject: (projectPath: string) => void
@@ -193,7 +186,6 @@ interface ViewContentProps {
   projects: DashboardProject[]
   query: string
   selectedProject: DashboardProject | null
-  selectedEvolutionLifecycle: ReturnType<typeof useDashboardV3Workspace>['selectedEvolutionLifecycle']
   selectedProjectId: string
   selectedSnapshot: ReturnType<typeof useDashboardV3Workspace>['selectedSnapshot']
   selectedSkillKey: string
@@ -203,7 +195,6 @@ function ViewContent({
   cost,
   currentView,
   filteredSkills,
-  isLoadingEvolution,
   isLoadingSnapshot,
   onQueryChange,
   onSelectProject,
@@ -211,7 +202,6 @@ function ViewContent({
   projects,
   query,
   selectedProject,
-  selectedEvolutionLifecycle,
   selectedProjectId,
   selectedSnapshot,
   selectedSkillKey,
@@ -234,8 +224,6 @@ function ViewContent({
           catalogError={cost.catalogError}
           isLoading={isLoadingSnapshot}
           isCatalogLoading={cost.isCatalogLoading}
-          isLoadingEvolution={isLoadingEvolution}
-          evolutionLifecycle={selectedEvolutionLifecycle}
           onQueryChange={onQueryChange}
           onSelectSkill={onSelectSkill}
           projectName={selectedProject?.name}
