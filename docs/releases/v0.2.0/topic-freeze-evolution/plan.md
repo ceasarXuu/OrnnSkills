@@ -71,29 +71,30 @@ v0.1.13 的演化功能是隐式副作用流水线：`Observer -> Daemon -> Shad
 | ID | Objective | Change Axis | Change Location | Target Object | Concrete Action | Resulting Behavior | Benefit | Side Effects | Verification | Safe Stop / Rollback | Plan Status |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | W1 | 完成冻结前盘点（D3） | 文档 | `docs/releases/v0.2.0/topic-freeze-evolution/technical-design.md` §3 | 盘点清单 | 记录演化代码/UI/生效路径/配置现状 | 冻结边界明确 | 冻结实现有据可依 | 无 | 已核对源码与路由（盘点证据） | 已完成，不需要回滚 | verified |
-| W2 | 冻结开关配置落地（D4） | 配置 schema | `src/config/dashboard-config-types.ts` / `dashboard-config.ts` / `generator.ts` / `defaults.ts` | `evolution_frozen` 字段 | 新增字段（默认 `true`），写入/读取 settings.toml，旧配置缺失按默认 | 配置可声明冻结状态，默认冻结演化 | D4 落地：默认关闭演化 | 复杂度：+1 配置字段；config 单测需覆盖默认与读写 | 配置读写单测 + 现有 config 测试回归 | 回滚：撤销字段改动，无迁移 | planned |
-| W3 | 主触发链冻结短路（D1） | 行为短路 | `src/core/shadow-manager/episode-probe-service.ts` | 就绪判定后的 runner 调用点 | 冻结检查：冻结则跳过 runner，记录决策事件 | 冻结时自动分析/优化不再触发 | D1 核心达成 | 复杂度：+1 分支 + 1 事件类型；决策事件读侧兼容无需改 | 单测：就绪 episode + 冻结=true 不触发 runner；冻结=false 行为不变 | 回滚：删除短路分支 | planned |
-| W4 | runner 入口防御短路（D1） | 行为短路 | `src/core/shadow-manager/optimization-runner.ts` | run 入口 | 入口冻结检查，冻结直接 skip | 旁路路径也无法执行优化 | 双保险，防未来旁路 | 复杂度：+1 分支 | 单测：直接调用 runner 冻结时 skip | 回滚：删除短路分支 | planned |
-| W5 | 演化 UI 隐藏（D2） | 渲染分支 | `frontend-v3/src/components/config-workspace.tsx` | 「演进策略」TabsTrigger | 不渲染演化 tab | 配置页只显示「模型」tab | D2 核心达成 | 复杂度：-1 tab；契约测试需同步 | 契约测试：演化 tab 文案不出现；配置模型 tab 与自动保存回归 | 回滚：恢复 TabsTrigger | planned |
-| W6 | 冻结态零副作用验证 | 回归验证 | 测试 + 运行时 | 冻结行为 | 构造 episode 就绪场景，验证无 patch/新版本/部署事件；开关回切验证恢复 | 冻结与恢复均被验证 | 完成定义达成 | 无 | vitest 回归 + `npm run test:smoke` | 不适用 | planned |
+| W2 | 冻结开关配置落地（D4） | 配置 schema | `src/config/dashboard-config-types.ts` / `dashboard-config.ts` / `generator.ts` / `defaults.ts` | `evolution_frozen` 字段 | 新增字段（默认 `true`），写入/读取 settings.toml，旧配置缺失按默认 | 配置可声明冻结状态，默认冻结演化 | D4 落地：默认关闭演化 | 复杂度：+1 配置字段；config 单测需覆盖默认与读写 | 配置读写单测 + 现有 config 测试回归 | 回滚：撤销字段改动，无迁移 | verified |
+| W3 | 主触发链冻结短路（D1） | 行为短路 | `src/core/shadow-manager/episode-probe-service.ts` | 就绪判定后的 runner 调用点 | 冻结检查：冻结则跳过 runner，记录 debug 日志 | 冻结时自动分析/优化不再触发 | D1 核心达成 | 复杂度：+1 分支；不新增决策事件类型（实现与计划偏差：skip 以日志记录，见 Delta 审计） | 单测：就绪 episode + 冻结=true 不触发 runner；冻结=false 行为不变 | 回滚：删除短路分支 | verified |
+| W4 | runner 入口防御短路（D1） | 行为短路 | `src/core/shadow-manager/optimization-runner.ts` | run 入口 | 入口冻结检查，冻结直接 skip | 旁路路径也无法执行优化 | 双保险，防未来旁路 | 复杂度：+1 分支 | 单测：直接调用 runner 冻结时 skip | 回滚：删除短路分支 | verified |
+| W5 | 演化 UI 隐藏（D2） | 渲染分支 | `frontend-v3/src/components/config-workspace.tsx` | 「演进策略」TabsTrigger | 不渲染演化 tab | 配置页只显示「模型」tab | D2 核心达成 | 复杂度：-1 tab；契约测试需同步 | 契约测试：演化 tab 文案不出现；配置模型 tab 与自动保存回归 | 回滚：恢复 TabsTrigger | verified |
+| W6 | 冻结态零副作用验证 | 回归验证 | 测试 + 运行时 | 冻结行为 | 构造 episode 就绪场景，验证无 patch/新版本/部署事件；开关回切验证恢复 | 冻结与恢复均被验证 | 完成定义达成 | 无 | vitest 回归 + `npm run test:smoke` | 不适用 | in-progress（单元级验证完成：813 单测 + 59 storybook 全绿、lint 0 errors、API 返回 evolutionFrozen:true；24h 运行期观察窗口待执行） |
 
 ## 7. 阶段与 Product Decision Delta
 
 | Phase | 内容 | 进入条件 | 适用决策 | 退出条件 |
 |---|---|---|---|---|
 | A | 盘点 | D3 | D3 | 盘点清单经源码核对（已完成，W1） |
-| B | 配置 + 写侧短路 | A 完成（P2-P4 按 defer 默认执行） | D1, D4 | W2-W4 单测通过 |
-| C | UI 隐藏 | B 完成 | D2 | W5 契约测试通过 |
-| D | 验证与恢复 | C 完成 | D1, D2 | W6 通过，完成定义达成 |
+| B | 配置 + 写侧短路 | A 完成（P2-P4 按 defer 默认执行） | D1, D4 | W2-W4 单测通过（已完成 2026-08-09） |
+| C | UI 隐藏 | B 完成 | D2 | W5 契约测试通过（已完成 2026-08-09） |
+| D | 验证与恢复 | C 完成 | D1, D2 | W6 通过，完成定义达成（单元级已完成，24h 运行期观察待执行） |
 
 ### Product Decision Delta 审计（每个阶段完成后填写）
 
 | Phase | Decision Surface | Implemented / Observed Semantics | Authority Coverage | Classification | Required Action |
 |---|---|---|---|---|---|
 | A | 盘点范围 = 冻结边界 | 单条写链路 + 1 个 UI tab（technical-design §3） | D1, D2 | covered | 无 |
-| B | 冻结开关默认值（默认关闭演化） | 已确认 `evolution_frozen` 默认 `true`（待实现后更新 Observed） | D4 | covered | 无 |
-| C | UI 隐藏范围 | （待实现后填写） | D2 | （待填写） | （待填写） |
-| D | 冻结/恢复行为 | （待实现后填写） | D1, D2, D4 | （待填写） | （待填写） |
+| B | 冻结开关默认值（默认关闭演化） | `evolution_frozen` 默认 `true` 已实现；API 返回 `evolutionFrozen: true`（runtime 证据） | D4 | covered | 无 |
+| B | 冻结 skip 的观测方式 | 计划草案为"记录 evolution_frozen 决策事件"，实现改为 debug 日志（不新增决策事件类型） | 非用户确认项 | engineering-only | 无需用户确认；如后续需要事件级观测另行立项 |
+| C | UI 隐藏范围 | 配置页「演进策略」tab 不渲染（W5）；契约测试断言沿用 | D2 | covered | 无 |
+| D | 冻结/恢复行为 | （24h 观察窗口完成后填写） | D1, D2, D4 | （待填写） | （待填写） |
 
 ## 8. 验证策略
 
@@ -113,6 +114,6 @@ v0.1.13 的演化功能是隐式副作用流水线：`Observer -> Daemon -> Shad
 
 ## 10. 计划状态
 
-- Plan validity: `valid`（A 阶段证据充分；P2-P4 以 defer 默认执行，不阻塞）
-- Execution Tracking: A `verified`；B-D `not-started`
+- Plan validity: `valid`
+- Execution Tracking: A/B/C `verified`；D `in-progress`（W6 单元级完成，24h 运行期观察待执行）
 - Plan Authoring: `planned`
