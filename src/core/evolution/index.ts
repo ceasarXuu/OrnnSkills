@@ -6,5 +6,4 @@ export * from './events.js';
 export * from './proposal-policy.js';
 export * from './projection.js';
 export * from './state-machine.js';
-export * from './verification.js';
 export * from './workflow.js';
