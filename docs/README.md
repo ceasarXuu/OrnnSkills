@@ -25,6 +25,15 @@ OrnnSkills 当前主线版本为 **V2.0**（围绕 `Skill Family / Instance / Re
 | [PROMO-ANIMATION.md](PROMO-ANIMATION.md) | Remotion promo | 通用 |
 | [CODE-QUALITY-GOVERNANCE-2026-04.md](CODE-QUALITY-GOVERNANCE-2026-04.md) | 当前治理计划 | V2.0 |
 
+## 1.1 版本发布文档
+
+按语义化版本在 [releases/](releases/README.md) 下建立版本文档：v0.2.0 起为 topic 子文件夹结构（每个 topic 内 `prd.md` / `technical-design.md` / `engineering-plan.md` 三件套），规则与 topic 清单见 [releases/README.md](releases/README.md)。
+
+| 版本目录 | 状态 | 说明 |
+|---|---|---|
+| v0.1.13 | released | 当前已发布版本（2026-05-01）；版本文档已撤销，追溯见 CHANGELOG 与 git tag |
+| [releases/v0.2.0/](releases/v0.2.0/) | draft | 需求逐步确定中，按 topic 建立文档 |
+
 ## 2. 历史/归档（仅追溯背景）
 
 | 文档 | 状态 |
