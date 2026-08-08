@@ -200,6 +200,7 @@ describe('shadow manager components', () => {
 
     const service = new ShadowEpisodeProbeService({
       projectRoot: '/project',
+      evolutionFrozen: false,
       shadowRegistry: {
         readContent: vi.fn(() => '# skill'),
       },
@@ -246,6 +247,139 @@ describe('shadow manager components', () => {
     expect(optimizationRunner.handleEvaluation).not.toHaveBeenCalled();
   });
 
+  it('episode probe skips automatic analysis when evolution is frozen', async () => {
+    const trace = makeTrace({
+      trace_id: 'trace-10',
+      session_id: 'sess-1',
+      turn_id: 'turn-10',
+      timestamp: '2026-04-18T00:00:10.000Z',
+    });
+    const episode = makeEpisode({
+      traceRefs: ['trace-1', 'trace-10'],
+      turnIds: ['turn-1', 'turn-10'],
+      stats: {
+        totalTraceCount: 10,
+        totalTurnCount: 10,
+        mappedTraceCount: 10,
+        tracesSinceLastProbe: 10,
+        turnsSinceLastProbe: 10,
+      },
+    });
+    const context = makeContext({
+      traceId: 'trace-10',
+      traceCount: 10,
+    });
+    const decisionEvents = { record: vi.fn() };
+    const optimizationRunner = { handleEvaluation: vi.fn(async () => ({ kind: 'patch_applied', evaluation: null, detail: 'done' })) };
+    const taskEpisodes = {
+      shouldTriggerProbe: vi.fn(() => ({
+        shouldProbe: true,
+        reason: 'initial_window_ready',
+        mode: 'count_driven',
+      })),
+      applyNeedMoreContextHint: vi.fn(),
+      markAnalysisState: vi.fn(),
+    };
+    const daemonStatus = {
+      setAnalyzing: vi.fn(),
+      setIdle: vi.fn(),
+      setError: vi.fn(),
+    };
+
+    const service = new ShadowEpisodeProbeService({
+      projectRoot: '/project',
+      evolutionFrozen: true,
+      shadowRegistry: {
+        readContent: vi.fn(() => '# skill'),
+      },
+      taskEpisodes,
+      decisionEvents,
+      daemonStatus,
+      analyzeSkillWindow: vi.fn(async () => ({
+        kind: 'no_optimization',
+        cause: 'analysis',
+        detail: '无需优化',
+        evaluation: {
+          should_patch: false,
+          reason: '无需优化',
+          source_sessions: ['sess-1'],
+          confidence: 0.9,
+          rule_name: 'agent_call_window_analysis',
+        },
+      })),
+      optimizationRunner,
+    });
+
+    await service.maybeRunEpisodeProbe(episode, buildShadowId('test-skill', '/project'), trace, [trace], context);
+
+    expect(taskEpisodes.markAnalysisState).not.toHaveBeenCalled();
+    expect(decisionEvents.record).not.toHaveBeenCalled();
+    expect(optimizationRunner.handleEvaluation).not.toHaveBeenCalled();
+  });
+
+  it('optimization runner skips execution when evolution is frozen', async () => {
+    const evaluation: EvaluationResult = {
+      should_patch: true,
+      change_type: 'prune_noise',
+      target_section: 'TODO',
+      reason: 'remove noise',
+      source_sessions: ['sess-1'],
+      confidence: 0.93,
+      rule_name: 'agent_call_window_analysis',
+    };
+    const context = makeContext();
+    const executePatch = vi.fn(async () => ({ ok: true }));
+    const runner = new ShadowOptimizationRunner({
+      projectRoot: '/project',
+      policy: {
+        min_signal_count: 1,
+        min_source_sessions: 1,
+        min_confidence: 0.5,
+        cooldown_hours: 24,
+        max_patches_per_day: 3,
+        pause_after_rollback_hours: 48,
+        evolution_frozen: true,
+      },
+      shadowRegistry: {
+        get: vi.fn(() => ({ status: 'active' })),
+        readContent: vi.fn(() => '# updated skill'),
+        writeContent: vi.fn(),
+      },
+      journalManager: {
+        getLatestRevision: vi.fn(() => 0),
+        createSnapshot: vi.fn(),
+        record: vi.fn(),
+      },
+      decisionEvents: {
+        record: vi.fn(),
+      },
+      daemonStatus: {
+        setOptimizing: vi.fn(),
+        setIdle: vi.fn(),
+        setError: vi.fn(),
+      },
+      taskEpisodes: {
+        markAnalysisState: vi.fn(),
+      },
+      createSkillVersionManager: vi.fn(() => ({
+        createVersion: vi.fn(),
+      })),
+      executeOptimizationPatch: executePatch,
+    });
+
+    const result = await runner.handleEvaluation(
+      buildShadowId('test-skill', '/project'),
+      evaluation,
+      [makeTrace({ trace_id: 'trace-1' })],
+      context,
+      { skipAnalysisRequested: true, closeOnSkip: true }
+    );
+
+    expect(result.kind).toBe('optimization_skipped');
+    expect(result.status).toBe('evolution_frozen');
+    expect(executePatch).not.toHaveBeenCalled();
+  });
+
   it('optimization runner applies successful patches and tracks patch timestamps', async () => {
     const evaluation: EvaluationResult = {
       should_patch: true,
@@ -275,6 +409,7 @@ describe('shadow manager components', () => {
         cooldown_hours: 24,
         max_patches_per_day: 3,
         pause_after_rollback_hours: 48,
+        evolution_frozen: false,
       },
       shadowRegistry: {
         get: vi.fn(() => ({ status: 'active' })),

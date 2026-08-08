@@ -54,6 +54,27 @@ export class ShadowOptimizationRunner {
     const runtime = runtimeFromShadowId(shadowId) ?? 'codex';
     const shadow = this.options.shadowRegistry.get(skillId, runtime);
 
+    if (this.options.policy.evolution_frozen ?? true) {
+      logger.debug('Evolution frozen: optimization execution skipped', {
+        shadowId,
+      });
+      if (options.closeOnSkip) {
+        this.options.taskEpisodes.markAnalysisState(
+          context.sessionId,
+          context.skillId,
+          context.runtime,
+          'completed'
+        );
+        this.options.daemonStatus.setIdle();
+      }
+      return {
+        kind: 'optimization_skipped',
+        evaluation,
+        detail: '演化功能已冻结，跳过本轮优化执行。',
+        status: 'evolution_frozen',
+      };
+    }
+
     const eligibility = resolveOptimizationEligibility({
       evaluation,
       minConfidence: this.options.policy.min_confidence,

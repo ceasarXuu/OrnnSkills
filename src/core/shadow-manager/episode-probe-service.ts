@@ -25,6 +25,8 @@ export class ShadowEpisodeProbeService {
   constructor(
     private readonly options: {
       projectRoot: string;
+      /** 演化冻结开关：true 时自动演化不生效（D4：默认冻结） */
+      evolutionFrozen: boolean;
       shadowRegistry: Pick<ShadowRegistryLike, 'readContent'>;
       taskEpisodes: Pick<
         TaskEpisodeStoreLike,
@@ -74,6 +76,17 @@ export class ShadowEpisodeProbeService {
           windowId: context.windowId,
         });
       }
+      return;
+    }
+
+    if (this.options.evolutionFrozen) {
+      logger.debug('Evolution frozen: skipping automatic window analysis trigger', {
+        traceId: trace.trace_id,
+        sessionId: context.sessionId,
+        skillId: context.skillId,
+        runtime: context.runtime,
+        windowId: context.windowId,
+      });
       return;
     }
 

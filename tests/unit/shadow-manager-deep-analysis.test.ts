@@ -185,7 +185,7 @@ describe('ShadowManager deep analysis recovery chain', () => {
       },
     });
 
-    const manager = createShadowManager(testProjectPath);
+    const manager = createShadowManager(testProjectPath, { evolutionFrozen: false });
     await manager.init();
     await processUntilReady(manager);
 
@@ -258,7 +258,7 @@ describe('ShadowManager deep analysis recovery chain', () => {
       changeType: 'prune_noise',
     });
 
-    const manager = createShadowManager(testProjectPath);
+    const manager = createShadowManager(testProjectPath, { evolutionFrozen: false });
     await manager.init();
     await processUntilReady(manager);
 
@@ -305,7 +305,7 @@ describe('ShadowManager deep analysis recovery chain', () => {
       },
     });
 
-    const manager = createShadowManager(testProjectPath);
+    const manager = createShadowManager(testProjectPath, { evolutionFrozen: false });
     await manager.init();
     await processUntilReady(manager);
 
@@ -344,7 +344,7 @@ describe('ShadowManager deep analysis recovery chain', () => {
     });
     analyzeWindowMock.mockImplementation(() => pendingAnalysis);
 
-    const manager = createShadowManager(testProjectPath);
+    const manager = createShadowManager(testProjectPath, { evolutionFrozen: false });
     await manager.init();
 
     for (let index = 1; index <= 9; index += 1) {
@@ -425,7 +425,7 @@ describe('ShadowManager deep analysis recovery chain', () => {
       resolvePatch = resolve as typeof resolvePatch;
     }));
 
-    const manager = createShadowManager(testProjectPath);
+    const manager = createShadowManager(testProjectPath, { evolutionFrozen: false });
     await manager.init();
 
     const targetTraces = [

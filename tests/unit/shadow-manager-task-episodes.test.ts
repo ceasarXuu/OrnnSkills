@@ -142,7 +142,7 @@ describe('ShadowManager task episodes', () => {
       },
     });
 
-    const manager = createShadowManager(testProjectPath);
+    const manager = createShadowManager(testProjectPath, { evolutionFrozen: false });
     await manager.init();
 
     for (let index = 1; index <= 10; index += 1) {
@@ -220,7 +220,7 @@ describe('ShadowManager task episodes', () => {
       changeType: 'prune_noise',
     });
 
-    const manager = createShadowManager(testProjectPath);
+    const manager = createShadowManager(testProjectPath, { evolutionFrozen: false });
     await manager.init();
 
     for (let index = 1; index <= 10; index += 1) {
@@ -258,7 +258,7 @@ describe('ShadowManager task episodes', () => {
       },
     });
 
-    const manager = createShadowManager(testProjectPath);
+    const manager = createShadowManager(testProjectPath, { evolutionFrozen: false });
     await manager.init();
 
     for (let index = 1; index <= 10; index += 1) {
@@ -310,7 +310,7 @@ describe('ShadowManager task episodes', () => {
       },
     });
 
-    const manager = createShadowManager(testProjectPath);
+    const manager = createShadowManager(testProjectPath, { evolutionFrozen: false });
     await manager.init();
 
     await manager.processTrace(makeMixedTrace(1, testProjectPath, true));

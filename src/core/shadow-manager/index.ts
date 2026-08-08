@@ -45,7 +45,10 @@ export class ShadowManager {
   private readonly manualOptimizeService: ShadowManualOptimizeService;
   private db: Awaited<ReturnType<typeof createSQLiteStorage>> | null = null;
 
-  constructor(private readonly projectRoot: string) {
+  constructor(
+    private readonly projectRoot: string,
+    private readonly options: { evolutionFrozen?: boolean } = {}
+  ) {
     this.shadowRegistry = createShadowRegistry(projectRoot);
     this.journalManager = createJournalManager(projectRoot);
     this.traceManager = createTraceManager(projectRoot);
@@ -64,6 +67,10 @@ export class ShadowManager {
       cooldown_hours: patchConfig.cooldown_hours,
       max_patches_per_day: patchConfig.max_patches_per_day,
       pause_after_rollback_hours: 48,
+      evolution_frozen:
+        this.options.evolutionFrozen ??
+        configManager.getGlobalConfig().tracking?.evolution_frozen ??
+        true,
     };
 
     this.optimizationRunner = new ShadowOptimizationRunner({
@@ -78,6 +85,7 @@ export class ShadowManager {
     });
     this.episodeProbeService = new ShadowEpisodeProbeService({
       projectRoot,
+      evolutionFrozen: this.policy.evolution_frozen ?? true,
       shadowRegistry: this.shadowRegistry,
       taskEpisodes: this.taskEpisodes,
       decisionEvents: this.decisionEvents,
@@ -191,6 +199,9 @@ export class ShadowManager {
 }
 
 // 导出工厂函数
-export function createShadowManager(projectRoot: string): ShadowManager {
-  return new ShadowManager(projectRoot);
+export function createShadowManager(
+  projectRoot: string,
+  options?: { evolutionFrozen?: boolean }
+): ShadowManager {
+  return new ShadowManager(projectRoot, options);
 }

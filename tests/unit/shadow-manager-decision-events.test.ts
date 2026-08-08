@@ -121,7 +121,7 @@ describe('ShadowManager decision events', () => {
       },
     });
 
-    const manager = createShadowManager(testProjectPath);
+    const manager = createShadowManager(testProjectPath, { evolutionFrozen: false });
     await manager.init();
 
     for (let index = 1; index <= 10; index += 1) {
@@ -171,7 +171,7 @@ describe('ShadowManager decision events', () => {
       changeType: 'prune_noise',
     });
 
-    const manager = createShadowManager(testProjectPath);
+    const manager = createShadowManager(testProjectPath, { evolutionFrozen: false });
     await manager.init();
 
     for (let index = 1; index <= 10; index += 1) {
@@ -249,7 +249,7 @@ describe('ShadowManager decision events', () => {
       error: 'strategy execution failed',
     });
 
-    const manager = createShadowManager(testProjectPath);
+    const manager = createShadowManager(testProjectPath, { evolutionFrozen: false });
     await manager.init();
 
     for (let index = 1; index <= 10; index += 1) {
@@ -297,7 +297,7 @@ describe('ShadowManager decision events', () => {
       },
     });
 
-    const manager = createShadowManager(testProjectPath);
+    const manager = createShadowManager(testProjectPath, { evolutionFrozen: false });
     await manager.init();
 
     for (let index = 1; index <= 10; index += 1) {
@@ -343,7 +343,7 @@ describe('ShadowManager decision events', () => {
       },
     });
 
-    const manager = createShadowManager(testProjectPath);
+    const manager = createShadowManager(testProjectPath, { evolutionFrozen: false });
     await manager.init();
 
     for (let index = 1; index <= 9; index += 1) {
