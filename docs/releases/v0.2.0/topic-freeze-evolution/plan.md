@@ -1,7 +1,7 @@
 # 冻结演化功能 Engineering Plan
 
 - Product Authority: `./decisions.md`
-- Applicable Decisions: D1, D2, D3
+- Applicable Decisions: D1, D2, D3, D4
 - Release Version: v0.2.0（计划中，未发布）
 - Topic PRD: `./prd.md`
 - Topic Technical Design: `./technical-design.md`
@@ -49,16 +49,17 @@ v0.1.13 的演化功能是隐式副作用流水线：`Observer -> Daemon -> Shad
 
 | ID | Decision Surface | Current / Proposed Behavior | Why Material | Evidence | Impact If Changed |
 |---|---|---|---|---|---|
-| P1 | 冻结开关命名与配置项 | 建议新增 `tracking.evolution_frozen`（默认 false） | 持久化配置 schema，属默认值/自动化决策 | `auto_optimize` 已失效（盘点证据，technical-design §3.5） | 影响配置文件格式与 dashboard-config 映射 |
-| P2 | 解冻入口 | 建议仅配置文件维护，不暴露 UI | 影响用户控制/可逆性（D1 相关） | 配置页无 tracking 开关先例 | 若需 UI，增加配置页开关控件与契约测试 |
-| P3 | 冻结期间进行中执行 | 不中断已开始执行（判定在执行链最前） | 影响状态一致性 | 执行链无挂起路径（A2） | 若改为强制中断，需中断协议与半成品清理 |
-| P4 | 历史演化数据展示 | 读侧保留（决策事件/版本历史仍可读），仅写侧冻结 | 影响可见性边界 | PRD §7 草案 | 若隐藏读侧，影响技能详情/项目视图 |
+| P2 | 解冻入口 | 建议仅配置文件维护，不暴露 UI（defer：当前工作可保持） | 影响用户控制/可逆性（D1 相关） | 配置页无 tracking 开关先例 | 若需 UI，增加配置页开关控件与契约测试 |
+| P3 | 冻结期间进行中执行 | 不中断已开始执行（判定在执行链最前，defer） | 影响状态一致性 | 执行链无挂起路径（A2） | 若改为强制中断，需中断协议与半成品清理 |
+| P4 | 历史演化数据展示 | 读侧保留（决策事件/版本历史仍可读），仅写侧冻结（defer） | 影响可见性边界 | PRD §7 草案 | 若隐藏读侧，影响技能详情/项目视图 |
+
+已确认决策：P1（冻结开关命名与默认值）于 2026-08-09 由用户确认，落为 `decisions.md` D4：`tracking.evolution_frozen` 默认 `true`（默认关闭演化功能），命名由维护者确定。
 
 ## 5. 最小构造技术设计
 
 摘要（完整设计与盘点见 `technical-design.md`）：
 
-- 冻结开关：`~/.ornn/config/settings.toml` 新增 `[tracking] evolution_frozen`（默认 false），经 dashboard-config schema 读入
+- 冻结开关：`~/.ornn/config/settings.toml` 新增 `[tracking] evolution_frozen`（默认 `true`，即默认关闭演化功能，D4），经 dashboard-config schema 读入
 - 写侧短路（双保险）：`ShadowEpisodeProbeService` episode 就绪后、调用 runner 前检查冻结开关，跳过并记录 `evolution_frozen` 决策事件；`ShadowOptimizationRunner` 入口同样检查防御旁路
 - UI 隐藏：`config-workspace.tsx` 不渲染「演进策略」TabsTrigger（TabsList 只保留「模型」）
 - 恢复：`evolution_frozen = false` 即恢复，无状态迁移
@@ -70,7 +71,7 @@ v0.1.13 的演化功能是隐式副作用流水线：`Observer -> Daemon -> Shad
 | ID | Objective | Change Axis | Change Location | Target Object | Concrete Action | Resulting Behavior | Benefit | Side Effects | Verification | Safe Stop / Rollback | Plan Status |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | W1 | 完成冻结前盘点（D3） | 文档 | `docs/releases/v0.2.0/topic-freeze-evolution/technical-design.md` §3 | 盘点清单 | 记录演化代码/UI/生效路径/配置现状 | 冻结边界明确 | 冻结实现有据可依 | 无 | 已核对源码与路由（盘点证据） | 已完成，不需要回滚 | verified |
-| W2 | 冻结开关配置落地（P1 待确认） | 配置 schema | `src/config/dashboard-config-types.ts` / `dashboard-config.ts` / `generator.ts` / `defaults.ts` | `evolution_frozen` 字段 | 新增字段（默认 false），写入/读取 settings.toml，旧配置缺失按默认 | 配置可声明冻结状态 | 冻结开关可持久化 | 复杂度：+1 配置字段；config 单测需覆盖默认与读写 | 配置读写单测 + 现有 config 测试回归 | 回滚：撤销字段改动，无迁移 | planned |
+| W2 | 冻结开关配置落地（D4） | 配置 schema | `src/config/dashboard-config-types.ts` / `dashboard-config.ts` / `generator.ts` / `defaults.ts` | `evolution_frozen` 字段 | 新增字段（默认 `true`），写入/读取 settings.toml，旧配置缺失按默认 | 配置可声明冻结状态，默认冻结演化 | D4 落地：默认关闭演化 | 复杂度：+1 配置字段；config 单测需覆盖默认与读写 | 配置读写单测 + 现有 config 测试回归 | 回滚：撤销字段改动，无迁移 | planned |
 | W3 | 主触发链冻结短路（D1） | 行为短路 | `src/core/shadow-manager/episode-probe-service.ts` | 就绪判定后的 runner 调用点 | 冻结检查：冻结则跳过 runner，记录决策事件 | 冻结时自动分析/优化不再触发 | D1 核心达成 | 复杂度：+1 分支 + 1 事件类型；决策事件读侧兼容无需改 | 单测：就绪 episode + 冻结=true 不触发 runner；冻结=false 行为不变 | 回滚：删除短路分支 | planned |
 | W4 | runner 入口防御短路（D1） | 行为短路 | `src/core/shadow-manager/optimization-runner.ts` | run 入口 | 入口冻结检查，冻结直接 skip | 旁路路径也无法执行优化 | 双保险，防未来旁路 | 复杂度：+1 分支 | 单测：直接调用 runner 冻结时 skip | 回滚：删除短路分支 | planned |
 | W5 | 演化 UI 隐藏（D2） | 渲染分支 | `frontend-v3/src/components/config-workspace.tsx` | 「演进策略」TabsTrigger | 不渲染演化 tab | 配置页只显示「模型」tab | D2 核心达成 | 复杂度：-1 tab；契约测试需同步 | 契约测试：演化 tab 文案不出现；配置模型 tab 与自动保存回归 | 回滚：恢复 TabsTrigger | planned |
@@ -81,7 +82,7 @@ v0.1.13 的演化功能是隐式副作用流水线：`Observer -> Daemon -> Shad
 | Phase | 内容 | 进入条件 | 适用决策 | 退出条件 |
 |---|---|---|---|---|
 | A | 盘点 | D3 | D3 | 盘点清单经源码核对（已完成，W1） |
-| B | 配置 + 写侧短路 | A 完成、P1 确认 | D1 | W2-W4 单测通过 |
+| B | 配置 + 写侧短路 | A 完成（P2-P4 按 defer 默认执行） | D1, D4 | W2-W4 单测通过 |
 | C | UI 隐藏 | B 完成 | D2 | W5 契约测试通过 |
 | D | 验证与恢复 | C 完成 | D1, D2 | W6 通过，完成定义达成 |
 
@@ -90,9 +91,9 @@ v0.1.13 的演化功能是隐式副作用流水线：`Observer -> Daemon -> Shad
 | Phase | Decision Surface | Implemented / Observed Semantics | Authority Coverage | Classification | Required Action |
 |---|---|---|---|---|---|
 | A | 盘点范围 = 冻结边界 | 单条写链路 + 1 个 UI tab（technical-design §3） | D1, D2 | covered | 无 |
-| B | 冻结开关命名与默认值 | （待实现后填写） | P1 | （待填写） | （待填写） |
+| B | 冻结开关默认值（默认关闭演化） | 已确认 `evolution_frozen` 默认 `true`（待实现后更新 Observed） | D4 | covered | 无 |
 | C | UI 隐藏范围 | （待实现后填写） | D2 | （待填写） | （待填写） |
-| D | 冻结/恢复行为 | （待实现后填写） | D1, D2 | （待填写） | （待填写） |
+| D | 冻结/恢复行为 | （待实现后填写） | D1, D2, D4 | （待填写） | （待填写） |
 
 ## 8. 验证策略
 
@@ -112,6 +113,6 @@ v0.1.13 的演化功能是隐式副作用流水线：`Observer -> Daemon -> Shad
 
 ## 10. 计划状态
 
-- Plan validity: `valid`（A 阶段证据充分，B 阶段入口决策 P1 未确认）
-- Execution Tracking: A `verified`；B-D `not-started`（阻塞于 P1）
-- Plan Authoring: `blocked-on-user-decision`（P1 开关命名确认前，W2 不实施）
+- Plan validity: `valid`（A 阶段证据充分；P2-P4 以 defer 默认执行，不阻塞）
+- Execution Tracking: A `verified`；B-D `not-started`
+- Plan Authoring: `planned`

@@ -84,7 +84,7 @@ v0.1.13 的演化能力是隐式副作用流水线：daemon 采集 trace 后，S
 
 ## 7. Product Rules And State Logic
 
-- 冻结状态由配置决定（新增 `evolution.frozen` 或复用 `tracking.auto_optimize`，待技术设计决策）
+- 冻结状态由配置决定：`tracking.evolution_frozen` 默认 `true`（默认关闭演化功能，2026-08-09 用户确认），`false` 解除冻结
 - 冻结优先于一切演化门禁：冻结时不执行 eligibility / 分析 / patch / 版本 / 部署任何一步
 - 历史演化数据（决策事件、版本历史）仍可读，仅写侧冻结
 
@@ -121,3 +121,4 @@ v0.1.13 的演化能力是隐式副作用流水线：daemon 采集 trace 后，S
 | UI 处理 | 隐藏而非禁用 | 用户要求"临时隐藏" | 2026-08-09 用户要求 |
 | 第一步 | 盘点（代码/UI/配置/生效路径） | 冻结前必须先明确边界 | 2026-08-09 用户要求 |
 | 自动优化旁路 | `auto_optimize` 配置当前未被主链路消费（盘点确认） | 冻结实现不得依赖该失效配置，需新增真实门禁 | 盘点证据，见 technical-design §4 |
+| 冻结默认值 | `tracking.evolution_frozen` 默认 `true`，默认关闭演化功能 | 用户明确"默认关指的是默认关闭演化功能" | 2026-08-09 用户确认（decisions.md D4） |

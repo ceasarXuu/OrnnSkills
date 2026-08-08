@@ -76,11 +76,11 @@ Observer（src/core/observer/）采集 trace
 
 ### 4.1 冻结开关
 
-新增真实门禁配置（建议 `tracking.evolution_frozen`，默认 false），写入 `~/.ornn/config/settings.toml`：
+新增真实门禁配置 `tracking.evolution_frozen`，**默认 `true`（默认关闭演化功能，D4，2026-08-09 用户确认）**，写入 `~/.ornn/config/settings.toml`：
 
 ```toml
 [tracking]
-evolution_frozen = true
+evolution_frozen = true   # 默认 true：演化功能默认关闭；置 false 解除冻结
 ```
 
 ### 4.2 写侧冻结点
@@ -152,5 +152,6 @@ evolution_frozen = true
 
 ## 13. Open Questions
 
-- 冻结开关命名：`tracking.evolution_frozen` vs 复用 `auto_optimize`（建议前者，因后者已失效）
-- 是否暴露解冻 UI（当前建议仅配置文件维护）
+- 是否暴露解冻 UI（当前建议仅配置文件维护，plan.md P2 挂起）
+- 冻结期间进行中执行的处理（当前建议不中断，plan.md P3 挂起）
+- 历史演化数据展示（当前建议读侧保留，plan.md P4 挂起）
