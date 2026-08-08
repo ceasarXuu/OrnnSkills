@@ -1,6 +1,6 @@
 # OrnnSkills 文档索引
 
-> 最后更新：2026-08-09
+> 最后更新：2026-05-13
 
 OrnnSkills 当前主线版本为 **V2.0**（围绕 `Skill Family / Instance / Revision` 模型，dashboard V3 为主使用现场）。
 
@@ -25,15 +25,6 @@ OrnnSkills 当前主线版本为 **V2.0**（围绕 `Skill Family / Instance / Re
 | [TRACE-SKILL-MAPPING.md](TRACE-SKILL-MAPPING.md) | trace→skill 映射 | V2.0 |
 | [PROMO-ANIMATION.md](PROMO-ANIMATION.md) | Remotion promo | 通用 |
 | [CODE-QUALITY-GOVERNANCE-2026-04.md](CODE-QUALITY-GOVERNANCE-2026-04.md) | 当前治理计划 | V2.0 |
-
-## 1.1 版本发布文档
-
-按语义化版本在 [releases/](releases/README.md) 下建立版本文档三件套（`prd.md` / `technical-design.md` / `engineering-plan.md`），命名规则见 [releases/README.md](releases/README.md)。
-
-| 版本目录 | 状态 | 说明 |
-|---|---|---|
-| [releases/v0.1.13/](releases/v0.1.13/prd.md) | released | 当前已发布版本锁定（2026-05-01） |
-| [releases/v0.2.0/](releases/v0.2.0/prd.md) | draft | 后续 feature / debug 需求收纳与计划工作区 |
 
 ## 2. 历史/归档（仅追溯背景）
 
