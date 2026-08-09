@@ -16,6 +16,21 @@ import type {
 
 type RefreshReason = 'initial' | 'manual' | 'selection' | 'sse'
 
+function sameProjectList(left: DashboardProject[], right: DashboardProject[]): boolean {
+  if (left.length !== right.length) {
+    return false
+  }
+  return left.every((project, index) => {
+    const other = right[index]
+    return (
+      project.path === other.path &&
+      project.name === other.name &&
+      project.isRunning === other.isRunning &&
+      project.skillCount === other.skillCount
+    )
+  })
+}
+
 function getErrorMessage(error: unknown) {
   if (error instanceof Error && error.message.trim().length > 0) {
     return error.message
@@ -33,15 +48,20 @@ export function useDashboardV3Workspace() {
   const [isPickingProject, setIsPickingProject] = useState(false)
   const [isManualPickOpen, setIsManualPickOpen] = useState(false)
   const [isSubmittingManualPick, setIsSubmittingManualPick] = useState(false)
-
-  const isPickingProjectRef = useRef(isPickingProject)
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [connectionState, setConnectionState] = useState<ConnectionState>('connecting')
 
+  const isPickingProjectRef = useRef(isPickingProject)
+  const projectsRef = useRef<DashboardProject[]>([])
+
   useEffect(() => {
     isPickingProjectRef.current = isPickingProject
   }, [isPickingProject])
+
+  useEffect(() => {
+    projectsRef.current = projects
+  }, [projects])
 
   const selectedProjectIdRef = useRef(selectedProjectId)
 
@@ -239,6 +259,15 @@ export function useDashboardV3Workspace() {
         })
         // 添加项目流程中不刷新列表，添加完成后由 applyProjectRegistration 主动刷新
         if (isPickingProjectRef.current) {
+          return
+        }
+        // 后端 3 秒心跳由日志驱动，快照/项目无变化时不值得全量刷新：
+        // 仅当 changedProjects 非空或 projects 列表签名变化时才刷新
+        const hasSnapshotChanges = (payload.changedProjects?.length ?? 0) > 0
+        const projectsChanged = payload.projects
+          ? !sameProjectList(payload.projects, projectsRef.current)
+          : false
+        if (!hasSnapshotChanges && !projectsChanged) {
           return
         }
         await refreshWorkspace('sse')
