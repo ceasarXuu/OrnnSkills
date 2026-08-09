@@ -132,6 +132,10 @@ export async function pickDashboardProject() {
   return await postJson<DashboardProjectPickResponse>('/api/projects/pick', {})
 }
 
+export async function registerDashboardProject(path: string) {
+  return await postJson<DashboardProjectPickResponse>('/api/projects', { path })
+}
+
 export async function fetchProjectSnapshot(projectPath: string) {
   return await fetchJson<ProjectSnapshot>(
     `/api/projects/${encodeProjectPath(projectPath)}/snapshot`,

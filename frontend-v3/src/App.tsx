@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom'
+import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
 import { ConfigWorkspace } from '@/components/config-workspace'
 import { MarketWorkspace } from '@/components/market-workspace'
 import { ProjectRail } from '@/components/project-rail'
@@ -10,6 +13,7 @@ import { WorkspaceHeader } from '@/components/workspace-header'
 import { useDashboardV3Workspace } from '@/features/dashboard/use-dashboard-v3-workspace'
 import { useDashboardV3Cost } from '@/features/dashboard/use-dashboard-v3-cost'
 import { logDashboardV3Event } from '@/lib/dashboard-api'
+import { useI18n } from '@/lib/i18n'
 import { sortSkills } from '@/lib/format'
 import { I18nProvider } from '@/lib/i18n'
 import { resolveDashboardViewLayout } from '@/lib/view-layout'
@@ -53,9 +57,12 @@ function DashboardWorkspacePage() {
   const [query, setQuery] = useState('')
   const [selectedSkill, setSelectedSkill] = useState<DashboardSkill | null>(null)
   const {
+    closeManualPick,
     isLoadingProjects,
     isLoadingSnapshot,
+    isManualPickOpen,
     isPickingProject,
+    isSubmittingManualPick,
     loadError,
     pickProject,
     projects,
@@ -63,6 +70,7 @@ function DashboardWorkspacePage() {
     selectedProject,
     selectedProjectId,
     selectedSnapshot,
+    submitManualProject,
   } = useDashboardV3Workspace()
   const cost = useDashboardV3Cost(currentView === 'project')
 
@@ -105,6 +113,13 @@ function DashboardWorkspacePage() {
       <div className="pointer-events-none fixed inset-0 -z-10 bg-[linear-gradient(180deg,color-mix(in_oklab,var(--background)_96%,transparent),color-mix(in_oklab,var(--background)_100%,transparent)),linear-gradient(0deg,color-mix(in_oklab,var(--foreground)_4%,transparent)_1px,transparent_1px),linear-gradient(90deg,color-mix(in_oklab,var(--foreground)_3%,transparent)_1px,transparent_1px)] bg-[size:auto,32px_32px,32px_32px]" />
 
       <WorkspaceHeader currentView={currentView} />
+
+      <ManualProjectDialog
+        isSubmitting={isSubmittingManualPick}
+        onClose={closeManualPick}
+        onSubmit={submitManualProject}
+        open={isManualPickOpen}
+      />
 
       <main className="mx-auto max-w-[1680px] space-y-8 px-4 py-8 xl:px-6">
         {loadError ? (
@@ -237,6 +252,62 @@ function ViewContent({
 
       {currentView === 'config' ? <ConfigWorkspace /> : null}
     </>
+  )
+}
+
+function ManualProjectDialog({
+  isSubmitting,
+  onClose,
+  onSubmit,
+  open,
+}: {
+  isSubmitting: boolean
+  onClose: () => void
+  onSubmit: (path: string) => void
+  open: boolean
+}) {
+  const { t } = useI18n()
+  const [path, setPath] = useState('')
+
+  useEffect(() => {
+    if (open) {
+      setPath('')
+    }
+  }, [open])
+
+  return (
+    <Dialog onOpenChange={(nextOpen) => (nextOpen ? undefined : onClose())} open={open}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{t('addProject')}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <Input
+            id="manual_project_path"
+            onChange={(event) => setPath(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && path.trim()) {
+                onSubmit(path)
+              }
+            }}
+            placeholder="/path/to/project"
+            value={path}
+          />
+          <div className="flex justify-end gap-2">
+            <Button disabled={isSubmitting} onClick={onClose} type="button" variant="outline">
+              {t('cancel')}
+            </Button>
+            <Button
+              disabled={isSubmitting || !path.trim()}
+              onClick={() => onSubmit(path)}
+              type="button"
+            >
+              {t('addProject')}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }
 

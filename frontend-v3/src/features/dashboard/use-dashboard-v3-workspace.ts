@@ -5,10 +5,12 @@ import {
   fetchProjectSnapshot,
   logDashboardV3Event,
   pickDashboardProject,
+  registerDashboardProject,
 } from '@/lib/dashboard-api'
 import type {
   ConnectionState,
   DashboardProject,
+  DashboardProjectPickResponse,
   ProjectSnapshot,
 } from '@/types/dashboard'
 
@@ -29,6 +31,8 @@ export function useDashboardV3Workspace() {
   const [isLoadingProjects, setIsLoadingProjects] = useState(true)
   const [isLoadingSnapshot, setIsLoadingSnapshot] = useState(false)
   const [isPickingProject, setIsPickingProject] = useState(false)
+  const [isManualPickOpen, setIsManualPickOpen] = useState(false)
+  const [isSubmittingManualPick, setIsSubmittingManualPick] = useState(false)
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [connectionState, setConnectionState] = useState<ConnectionState>('connecting')
@@ -118,22 +122,8 @@ export function useDashboardV3Workspace() {
     [loadSnapshotForProject],
   )
 
-  const pickProject = useCallback(async () => {
-    if (isPickingProject) {
-      return
-    }
-
-    setIsPickingProject(true)
-    logDashboardV3Event('project.pick_started')
-
-    try {
-      const result = await pickDashboardProject()
-
-      if (result.cancelled) {
-        logDashboardV3Event('project.pick_cancelled')
-        return
-      }
-
+  const applyProjectRegistration = useCallback(
+    async (result: DashboardProjectPickResponse) => {
       if (!result.ok || !result.path) {
         const message = result.error ?? '项目选择失败。'
         setLoadError(message)
@@ -161,6 +151,28 @@ export function useDashboardV3Workspace() {
         projectCount: nextProjects.length,
         selectedProjectId: nextSelection,
       })
+    },
+    [loadSnapshotForProject],
+  )
+
+  const pickProject = useCallback(async () => {
+    if (isPickingProject) {
+      return
+    }
+
+    setIsPickingProject(true)
+    logDashboardV3Event('project.pick_started')
+
+    try {
+      const result = await pickDashboardProject()
+
+      if (result.cancelled) {
+        logDashboardV3Event('project.pick_cancelled')
+        setIsManualPickOpen(true)
+        return
+      }
+
+      await applyProjectRegistration(result)
     } catch (error) {
       const message = getErrorMessage(error)
       setLoadError(message)
@@ -168,7 +180,40 @@ export function useDashboardV3Workspace() {
     } finally {
       setIsPickingProject(false)
     }
-  }, [isPickingProject, loadSnapshotForProject])
+  }, [applyProjectRegistration, isPickingProject])
+
+  const closeManualPick = useCallback(() => {
+    if (!isSubmittingManualPick) {
+      setIsManualPickOpen(false)
+    }
+  }, [isSubmittingManualPick])
+
+  const submitManualProject = useCallback(
+    async (path: string) => {
+      const trimmedPath = path.trim()
+      if (!trimmedPath) {
+        return
+      }
+      setIsSubmittingManualPick(true)
+      try {
+        const result = await registerDashboardProject(trimmedPath)
+        if (result.ok && result.path) {
+          setIsManualPickOpen(false)
+          await applyProjectRegistration(result)
+        } else {
+          setLoadError(result.error ?? '添加项目失败。')
+          logDashboardV3Event('project.add_failed', { message: result.error ?? '' })
+        }
+      } catch (error) {
+        const message = getErrorMessage(error)
+        setLoadError(message)
+        logDashboardV3Event('project.add_failed', { message })
+      } finally {
+        setIsSubmittingManualPick(false)
+      }
+    },
+    [applyProjectRegistration],
+  )
 
   useEffect(() => {
     void refreshWorkspace('initial')
@@ -196,10 +241,13 @@ export function useDashboardV3Workspace() {
   )
 
   return {
+    closeManualPick,
     connectionState,
+    isManualPickOpen,
     isPickingProject,
     isLoadingProjects,
     isLoadingSnapshot,
+    isSubmittingManualPick,
     lastSyncedAt,
     loadError,
     pickProject,
@@ -209,5 +257,6 @@ export function useDashboardV3Workspace() {
     selectedProject,
     selectedProjectId,
     selectedSnapshot,
+    submitManualProject,
   }
 }
