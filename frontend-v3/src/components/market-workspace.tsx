@@ -1,5 +1,5 @@
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 import { useI18n } from '@/lib/i18n'
 import { resolveMarketEntries, type MarketEntry, type MarketEntryGroup } from '@/lib/market-directory'
 
@@ -56,21 +56,6 @@ function MarketEntryCard({ entry }: { entry: MarketEntry }) {
             <Badge variant={entry.trust === 'official' ? 'default' : 'outline'}>{trustLabel(entry.trust, t)}</Badge>
           </div>
         </CardHeader>
-        <CardContent className="flex flex-1 flex-col gap-4">
-          <p className="text-sm leading-6 text-muted-foreground">{entry.displayDescription}</p>
-          <div className="flex flex-wrap gap-2">
-            {entry.hosts?.map((host) => (
-              <Badge key={host} variant="secondary">
-                {host}
-              </Badge>
-            ))}
-            {entry.displayTags.map((tag) => (
-              <Badge key={tag} variant="outline">
-                {tag}
-              </Badge>
-            ))}
-          </div>
-        </CardContent>
       </Card>
     </a>
   )
