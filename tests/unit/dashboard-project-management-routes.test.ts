@@ -93,6 +93,39 @@ describe('dashboard project management routes', () => {
     });
   });
 
+  it('skips native picker and reports unavailable when daemon runs in background', async () => {
+    const original = process.env.ORNN_DAEMON_BACKGROUND;
+    process.env.ORNN_DAEMON_BACKGROUND = '1';
+    try {
+      const { handleProjectManagementRoutes } = await import('../../src/dashboard/routes/project-management-routes.js');
+      const json = vi.fn();
+      const pickProjectDirectory = vi.fn();
+
+      const handled = await handleProjectManagementRoutes({
+        path: '/api/projects/pick',
+        method: 'POST',
+        json,
+        parseBody: vi.fn(),
+        getProjectsWithStatus: vi.fn(),
+        onboardProjectForMonitoring: vi.fn(),
+        pickProjectDirectory,
+        setProjectMonitoringState: vi.fn(),
+        readGlobalLogs: vi.fn(),
+        logger: makeLogger(),
+      });
+
+      expect(handled).toBe(true);
+      expect(pickProjectDirectory).not.toHaveBeenCalled();
+      expect(json).toHaveBeenCalledWith({ ok: false, nativePickerUnavailable: true });
+    } finally {
+      if (original === undefined) {
+        delete process.env.ORNN_DAEMON_BACKGROUND;
+      } else {
+        process.env.ORNN_DAEMON_BACKGROUND = original;
+      }
+    }
+  });
+
   it('handles PATCH /api/projects/:id/monitoring', async () => {
     const { handleProjectManagementRoutes } = await import('../../src/dashboard/routes/project-management-routes.js');
     const json = vi.fn();

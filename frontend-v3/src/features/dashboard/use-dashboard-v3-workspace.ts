@@ -33,9 +33,15 @@ export function useDashboardV3Workspace() {
   const [isPickingProject, setIsPickingProject] = useState(false)
   const [isManualPickOpen, setIsManualPickOpen] = useState(false)
   const [isSubmittingManualPick, setIsSubmittingManualPick] = useState(false)
+
+  const isPickingProjectRef = useRef(isPickingProject)
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [connectionState, setConnectionState] = useState<ConnectionState>('connecting')
+
+  useEffect(() => {
+    isPickingProjectRef.current = isPickingProject
+  }, [isPickingProject])
 
   const selectedProjectIdRef = useRef(selectedProjectId)
 
@@ -168,6 +174,11 @@ export function useDashboardV3Workspace() {
 
       if (result.cancelled) {
         logDashboardV3Event('project.pick_cancelled')
+        return
+      }
+
+      if (result.nativePickerUnavailable) {
+        logDashboardV3Event('project.pick_native_unavailable')
         setIsManualPickOpen(true)
         return
       }
@@ -226,6 +237,10 @@ export function useDashboardV3Workspace() {
           changedProjects: payload.changedProjects ?? [],
           projectCount: payload.projects?.length ?? 0,
         })
+        // 添加项目流程中不刷新列表，添加完成后由 applyProjectRegistration 主动刷新
+        if (isPickingProjectRef.current) {
+          return
+        }
         await refreshWorkspace('sse')
       },
       (state) => {

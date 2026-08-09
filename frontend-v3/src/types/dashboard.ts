@@ -199,6 +199,7 @@ export interface DashboardProjectPickResponse {
   daemonStarted?: boolean
   error?: string
   initialized?: boolean
+  nativePickerUnavailable?: boolean
   ok: boolean
   path?: string
   projects?: DashboardProject[]

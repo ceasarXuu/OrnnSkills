@@ -69,6 +69,7 @@ export function createStartCommand(): Command {
           const child = spawn(process.execPath, [resolveCliEntryPath(__filename), ...args], {
             detached: true,
             stdio: 'ignore',
+            env: { ...process.env, ORNN_DAEMON_BACKGROUND: '1' },
           });
           child.unref();
 

@@ -70,6 +70,13 @@ export async function handleProjectManagementRoutes(
 
   if (path === '/api/projects/pick' && method === 'POST') {
     try {
+      // 后台 daemon 无 GUI 会话，无法弹出原生目录选择器（osascript 会挂起/静默失败）
+      if (process.env.ORNN_DAEMON_BACKGROUND === '1') {
+        logger.info('Native project picker unavailable in background daemon');
+        json({ ok: false, nativePickerUnavailable: true });
+        return true;
+      }
+
       logger.info('Opening native project picker');
       const selectedProjectPath = await pickProjectDirectory();
       if (!selectedProjectPath) {
