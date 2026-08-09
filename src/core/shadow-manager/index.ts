@@ -72,6 +72,10 @@ export class ShadowManager {
         configManager.getGlobalConfig().tracking?.evolution_frozen ??
         true,
     };
+    logger.info('Evolution policy resolved', {
+      projectRoot,
+      evolutionFrozen: this.policy.evolution_frozen,
+    });
 
     this.optimizationRunner = new ShadowOptimizationRunner({
       projectRoot,

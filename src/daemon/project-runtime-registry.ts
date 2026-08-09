@@ -2,6 +2,7 @@ import { watch, type FSWatcher } from 'chokidar';
 import { existsSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 import { createShadowManager } from '../core/shadow-manager/index.js';
+import { readDashboardConfig } from '../config/dashboard-config.js';
 import * as projectsRegistry from '../dashboard/projects-registry.js';
 import type { RegisteredProject } from '../dashboard/projects-registry.js';
 import type { Trace } from '../types/index.js';
@@ -68,7 +69,10 @@ export class ProjectRuntimeRegistry {
 
   constructor(
     private readonly options: {
-      createShadowManager?: (projectRoot: string) => ShadowManagerLike;
+      createShadowManager?: (
+        projectRoot: string,
+        options?: { evolutionFrozen?: boolean }
+      ) => ShadowManagerLike;
       listProjects?: () => RegistryProject[];
       getProjectRegistration?: (projectRoot: string) => RegistryProject | null;
       touchProject?: (projectRoot: string) => void;
@@ -143,8 +147,10 @@ export class ProjectRuntimeRegistry {
       return existing;
     }
 
+    const dashboardConfig = await readDashboardConfig();
     const shadowManager = (this.options.createShadowManager ?? createShadowManager)(
-      normalizedProjectRoot
+      normalizedProjectRoot,
+      { evolutionFrozen: dashboardConfig.evolutionFrozen }
     );
     await shadowManager.init();
 

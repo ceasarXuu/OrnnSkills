@@ -9,11 +9,22 @@ import { DaemonLifecycleCoordinator } from '../../src/daemon/daemon-lifecycle.js
 import type { ProjectRuntime } from '../../src/daemon/daemon-types.js';
 import type { Trace } from '../../src/types/index.js';
 
+const { readDashboardConfigMock } = vi.hoisted(() => ({
+  readDashboardConfigMock: vi.fn(),
+}));
+
+vi.mock('../../src/config/dashboard-config.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/config/dashboard-config.js')>();
+  return { ...actual, readDashboardConfig: readDashboardConfigMock };
+});
+
 describe('daemon components', () => {
   const cleanupPaths = new Set<string>();
 
   beforeEach(() => {
     vi.useFakeTimers();
+    readDashboardConfigMock.mockClear();
+    readDashboardConfigMock.mockResolvedValue({ evolutionFrozen: true });
   });
 
   afterEach(() => {
@@ -140,6 +151,47 @@ describe('daemon components', () => {
 
     expect(matched).toBeNull();
     expect(Array.from(registry.keys())).toEqual(['/projects/alpha']);
+  });
+
+  it('passes evolutionFrozen from the dashboard config when creating shadow managers', async () => {
+    readDashboardConfigMock.mockResolvedValue({ evolutionFrozen: false });
+    const createOptions: Array<{ evolutionFrozen?: boolean } | undefined> = [];
+
+    const registry = new ProjectRuntimeRegistry({
+      listProjects: () => [
+        {
+          path: '/projects/alpha',
+          name: 'alpha',
+          registeredAt: '',
+          lastSeenAt: '',
+          monitoringState: 'active',
+        },
+      ],
+      getProjectRegistration: (projectRoot) => ({
+        path: projectRoot,
+        name: projectRoot,
+        registeredAt: '',
+        lastSeenAt: '',
+        monitoringState: 'active',
+        pausedAt: null,
+      }),
+      createShadowManager: (projectRoot, options) => {
+        createOptions.push(options);
+        return {
+          init: vi.fn(async () => {}),
+          processTrace: vi.fn(async () => {}),
+          close: vi.fn(async () => {}),
+          cleanupOldTraces: vi.fn(() => 0),
+        };
+      },
+      touchProject: vi.fn(),
+      startFileWatcher: () => null,
+    });
+
+    await registry.syncRegisteredProjects();
+
+    expect(createOptions).toEqual([{ evolutionFrozen: false }]);
+    expect(readDashboardConfigMock).toHaveBeenCalledTimes(1);
   });
 
   it('retry queue deduplicates traces, drops the oldest when full, and clears project entries', () => {
