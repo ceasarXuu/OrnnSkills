@@ -75,7 +75,7 @@ v0.1.13 的演化功能是隐式副作用流水线：`Observer -> Daemon -> Shad
 | W3 | 主触发链冻结短路（D1） | 行为短路 | `src/core/shadow-manager/episode-probe-service.ts` | 就绪判定后的 runner 调用点 | 冻结检查：冻结则跳过 runner，记录 debug 日志 | 冻结时自动分析/优化不再触发 | D1 核心达成 | 复杂度：+1 分支；不新增决策事件类型（实现与计划偏差：skip 以日志记录，见 Delta 审计） | 单测：就绪 episode + 冻结=true 不触发 runner；冻结=false 行为不变 | 回滚：删除短路分支 | verified |
 | W4 | runner 入口防御短路（D1） | 行为短路 | `src/core/shadow-manager/optimization-runner.ts` | run 入口 | 入口冻结检查，冻结直接 skip | 旁路路径也无法执行优化 | 双保险，防未来旁路 | 复杂度：+1 分支 | 单测：直接调用 runner 冻结时 skip | 回滚：删除短路分支 | verified |
 | W5 | 演化 UI 隐藏（D2） | 渲染分支 | `frontend-v3/src/components/config-workspace.tsx` | 「演进策略」TabsTrigger | 不渲染演化 tab | 配置页只显示「模型」tab | D2 核心达成 | 复杂度：-1 tab；契约测试需同步 | 契约测试：演化 tab 文案不出现；配置模型 tab 与自动保存回归 | 回滚：恢复 TabsTrigger | verified |
-| W5b | 影子机制冻结（D5） | 行为短路 + 读侧隐藏 | `src/core/shadow-manager/index.ts` / `src/dashboard/routes/skill-family-routes.ts` / `frontend-v3/src/components/skills-workspace.tsx` | bootstrap 物化 / families API / 技能库视图 | 冻结时跳过 bootstrap；API 返回 frozen；前端渲染冻结空态 | 冻结期间无影子产生、无影子展示 | D5 落地 | 复杂度：+1 同步配置读取 + 1 前端分支 | 单测（init 不物化、API frozen）+ 契约测试 + 运行期 curl 验证 | 回滚：恢复 bootstrap 调用与展示 | verified |
+| W5b | 影子机制冻结（D5） | 行为短路 | `src/core/shadow-manager/index.ts` | bootstrap 物化 | 冻结时跳过 bootstrap | 冻结期间无影子产生、无影子更新；**技能库展示保留**（展示层按用户纠正回滚） | D5 落地 | 复杂度：+1 分支 | 单测（init 不物化）；技能库展示回归（families API 正常返回） | 回滚：恢复 bootstrap 调用 | verified |
 | W6 | 冻结态零副作用验证 | 回归验证 | 测试 + 运行时 | 冻结行为 | 构造 episode 就绪场景，验证无 patch/新版本/部署事件；开关回切验证恢复 | 冻结与恢复均被验证 | 完成定义达成 | 无 | vitest 回归 + `npm run test:smoke` | 不适用 | in-progress（单元级验证完成：813 单测 + 59 storybook 全绿、lint 0 errors、API 返回 evolutionFrozen:true；24h 运行期观察窗口待执行） |
 
 ## 7. 阶段与 Product Decision Delta

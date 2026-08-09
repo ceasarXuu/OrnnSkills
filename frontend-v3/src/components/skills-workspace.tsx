@@ -17,22 +17,6 @@ export function SkillsWorkspace({
 }: SkillsWorkspaceProps) {
   const skillLibrary = useDashboardV3SkillLibrary(selectedProjectId)
 
-  if (skillLibrary.evolutionFrozen) {
-    return (
-      <div
-        className="flex min-h-[50vh] items-center justify-center text-center text-sm text-muted-foreground"
-        data-testid="skills-frozen-empty-state"
-      >
-        <div className="space-y-2">
-          <p id="skills_frozen_hint">演化功能已冻结，技能库暂不展示。</p>
-          <p className="text-xs">
-            在配置中设置 evolution_frozen = false 并重启 daemon 后恢复。
-          </p>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className="grid min-w-[1540px] grid-cols-[340px_minmax(0,1fr)] items-start gap-6">
       <aside className="sticky top-24 self-start">

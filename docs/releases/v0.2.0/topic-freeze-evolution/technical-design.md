@@ -59,7 +59,7 @@ Observer（src/core/observer/）采集 trace
 | 位置 | 现状 | 冻结动作 |
 |---|---|---|
 | 配置页「演进策略」子 tab（config-workspace.tsx:81） | 仅提示词配置（prompt source/override，config-prompt-editor.tsx） | **隐藏整个子 tab** |
-| 技能库展示（/v3/skills，family/instance 数据源为影子投影） | 影子数据展示（SkillsWorkspace） | **D5：冻结时渲染冻结空态**（`/api/skills/families` 返回 `{families:[], frozen:true}`，前端不渲染技能内容） |
+| 技能库展示（/v3/skills，family/instance 数据源为影子投影） | 影子数据展示（SkillsWorkspace） | **保留**（2026-08-09 用户纠正：冻结仅作用于演化功能本体，技能库是核心产品能力） |
 | `activityScopes` / `decisionEvents` 快照字段（types/dashboard.ts） | 仅类型定义，无组件消费（演化工作区此前已随升级回滚移除） | 无需动作（无渲染入口），读路由保留 |
 | 技能详情 / 项目工作台 | 无演化入口（project-workbench 无演化 tab） | 无需动作 |
 | 手动优化 API | **不存在**（project-skill-routes.ts 等无 optimize POST） | 无需动作 |
@@ -96,7 +96,7 @@ evolution_frozen = true   # 默认 true：演化功能默认关闭；置 false �
 ### 4.3 UI 隐藏
 
 - config-workspace「演进策略」tab 隐藏（TabsTrigger 不渲染，TabsList 只保留「模型」）
-- 技能库展示隐藏（D5）：`/api/skills/families` 冻结时返回 `{ families: [], frozen: true }`；前端 SkillsWorkspace 渲染冻结空态（`readEvolutionFrozenSync` 同步读 `~/.ornn/config/settings.toml`，缺省冻结）
+- 技能库展示**不隐藏**（2026-08-09 用户纠正越界：仅冻结演化功能本体）
 - 冻结开关本身不暴露 UI（由配置文件维护，避免用户在 dashboard 误操作解冻；如需 UI 需另行决策）
 - 未来新增演化入口的评审规则：属于演化能力则默认不渲染
 

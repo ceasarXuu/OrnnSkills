@@ -7,11 +7,6 @@ const mocks = vi.hoisted(() => ({
   readSkillFamilyInstances: vi.fn(),
   readSkillFamilySignature: vi.fn(),
   listProjects: vi.fn(),
-  readEvolutionFrozenSync: vi.fn(() => false),
-}));
-
-vi.mock('../../src/config/dashboard-config.js', () => ({
-  readEvolutionFrozenSync: mocks.readEvolutionFrozenSync,
 }));
 
 vi.mock('../../src/core/skill-domain/projector.js', () => ({
@@ -54,25 +49,7 @@ describe('dashboard skill family routes', () => {
     expect(handled).toBe(true);
     expect(mocks.aggregateSkillFamilies).toHaveBeenCalledWith(['/tmp/a', '/tmp/b']);
     expect(mocks.readAggregateSkillFamiliesSignature).toHaveBeenCalledWith(['/tmp/a', '/tmp/b']);
-    expect(jsonWithEtag).toHaveBeenCalledWith({ families, frozen: false }, 'families-v1');
-  });
-
-  it('returns empty families with frozen flag when evolution is frozen', async () => {
-    const { handleSkillFamilyRoutes } = await import('../../src/dashboard/routes/skill-family-routes.js');
-    const json = vi.fn();
-    mocks.readEvolutionFrozenSync.mockReturnValue(true);
-
-    const handled = await handleSkillFamilyRoutes({
-      path: '/api/skills/families',
-      method: 'GET',
-      json,
-      jsonWithEtag: json,
-      notFound: vi.fn(),
-    });
-
-    expect(handled).toBe(true);
-    expect(json).toHaveBeenCalledWith({ families: [], frozen: true }, 'frozen');
-    expect(mocks.aggregateSkillFamilies).not.toHaveBeenCalled();
+    expect(jsonWithEtag).toHaveBeenCalledWith({ families }, 'families-v1');
   });
 
   it('handles GET /api/skills/families/:familyId', async () => {

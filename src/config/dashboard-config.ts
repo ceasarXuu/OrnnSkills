@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -55,20 +55,6 @@ async function readTomlConfigFile(configPath: string): Promise<OrnnConfig | null
   } catch (error) {
     logger.warn("Failed to read existing config:", error);
     return null;
-  }
-}
-
-/**
- * 同步读取全局冻结开关（D4/D5 事实来源：~/.ornn/config/settings.toml）
- * 文件缺失或解析失败时按默认冻结（true）处理
- */
-export function readEvolutionFrozenSync(): boolean {
-  try {
-    const content = readFileSync(GLOBAL_DASHBOARD_CONFIG_PATH(), "utf-8");
-    const config = parse(content) as OrnnConfig;
-    return config.tracking?.evolution_frozen ?? true;
-  } catch {
-    return true;
   }
 }
 
