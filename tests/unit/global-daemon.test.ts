@@ -97,6 +97,10 @@ vi.mock('../../src/dashboard/projects-registry.js', () => ({
   registerProject: vi.fn(),
 }));
 
+vi.mock('../../src/config/dashboard-config.js', () => ({
+  readDashboardConfig: vi.fn(async () => ({ evolutionFrozen: true })),
+}));
+
 vi.mock('../../src/cli/lib/cli-setup.js', () => ({
   validateProjectRootOrExit: mocks.validateProjectRootOrExit,
 }));

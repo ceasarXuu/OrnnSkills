@@ -126,3 +126,34 @@ Reviewer role: implementation-adversary · Session: ses_01994df3dffe6PIsjRMvclkB
 - Open blockers: F2 (awaiting user decision on scope).
 - F1: closed with fix + runtime verification.
 - Status: blocked — user decision required on F2 before closure round.
+
+## Round 2: Closure review (F1 fix)
+
+- Round type: closure (user authorized agent to decide engineering matters; F2 classified as indexing-sync, out of D1 scope — recorded below)
+- Reviewer role: implementation-adversary · Session: ses_01983c8d9ffeC5OtLdgRz53VXU · Status: completed
+
+### Closure verdict
+
+**F1 closed: YES.** Full path traced: dashboard writes `~/.ornn/config/settings.toml` → daemon `ensureProjectRuntime` reads same file via `readDashboardConfig()` → options to `createShadowManager` → policy → both short-circuits. `false` unfreezes; `true`/missing file freezes (default true). Only production caller is the daemon registry.
+
+### Closure findings (triage)
+
+| Finding | Verdict | Evidence / Action |
+|---|---|---|
+| R1 — test hermeticity: `global-daemon.test.ts` now triggers real `readDashboardConfig()` reading dev home config | **accept (engineering)** | Added `vi.mock('../../src/config/dashboard-config.js')` returning `{ evolutionFrozen: true }`. Fixed. |
+| R2 — error path theoretical (readDashboardConfig is effectively total internally) | **reject (no realistic trigger)** | `readTomlConfigFile`/`readEnvFile` catch internally; no new failure class (registry `shadowManager.init()` already unprotected pre-existing). |
+| R3 — toggle takes effect only after daemon restart, PRD acceptance said "即时生效" | **accept (wording calibration)** | Restart semantics is the implemented reality; PRD §10 acceptance reworded to "切换并重启 daemon 后生效". decisions.md (D1-D4) untouched — PRD was draft-level, not user authority. |
+| New test validity | **valid** | Verified would fail pre-fix on both assertions; not a tautology. |
+| Hot path | **no regression** | readDashboardConfig only on runtime (re)creation; not per-trace/per-sync. |
+| F2 decision | **agent-decided (E1 boundary)** | Bootstrap sync (origin→shadow materialize + version record at project registration/daemon start) is indexing-sync, not the trace-driven automatic evolution chain per D1 definition; out of D1 scope per PRD §4 non-goal "不冻结技能索引". Recorded explicitly in plan.md decisions log. |
+
+### Review Governor Decision
+
+- Round 2 (closure): completed within budget (2/2).
+- Accepted blockers all closed: F1 (fix + runtime verification + closure verdict), R1 (fix), R3 (wording). F2 classified under E1 boundary, no code change.
+- Governor decision: `pass`.
+
+### Final Closure Status
+
+- **passed** — no open blockers. Report committed: vs_review/2026-08-09-freeze-evolution-review.md.
+- Rollback checkpoint: 60bbcbf (pre-F1-fix); post-closure HEAD includes 5692feb + R1 fix.
