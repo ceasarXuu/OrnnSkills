@@ -145,7 +145,19 @@ Reviewer role: implementation-adversary · Session: ses_01994df3dffe6PIsjRMvclkB
 | R3 — toggle takes effect only after daemon restart, PRD acceptance said "即时生效" | **accept (wording calibration)** | Restart semantics is the implemented reality; PRD §10 acceptance reworded to "切换并重启 daemon 后生效". decisions.md (D1-D4) untouched — PRD was draft-level, not user authority. |
 | New test validity | **valid** | Verified would fail pre-fix on both assertions; not a tautology. |
 | Hot path | **no regression** | readDashboardConfig only on runtime (re)creation; not per-trace/per-sync. |
-| F2 decision | **agent-decided (E1 boundary)** | Bootstrap sync (origin→shadow materialize + version record at project registration/daemon start) is indexing-sync, not the trace-driven automatic evolution chain per D1 definition; out of D1 scope per PRD §4 non-goal "不冻结技能索引". Recorded explicitly in plan.md decisions log. |
+| F2 decision | **superseded by user decision D5** | User explicitly overrode the E1-boundary classification: "影子skills 也是为了做演化能力才加入的，本身也是演化能力的一部分，需要纳入冻结" (2026-08-09). D5 recorded in decisions.md: no materialization, no display of shadows while frozen; restore after unfreeze. Implemented in dc68691 (bootstrap skip + families API frozen + UI empty state). |
+
+### User Decision After Round 2 (D5)
+
+- User overrode F2 classification: shadow skills mechanism itself is part of evolution capability and must be frozen (E0 > E1).
+- Confirmed boundaries: existing shadow data display also hidden; new projects do not materialize shadows; materialization auto-recovers after unfreeze.
+- D5 added to decisions.md (active). F2 row in prd.md/plan.md decision logs marked superseded.
+- Implementation (dc68691): `ShadowManager.init()` skips bootstrap when frozen; `/api/skills/families` returns `{families:[], frozen:true}` via `readEvolutionFrozenSync()`; SkillsWorkspace renders frozen empty state. Verified: 816 unit tests, 59 storybook tests, lint 0 errors, runtime curl `{"families":[],"frozen":true}`.
+
+### Final Closure Status (after D5)
+
+- **passed with scope extension** — no open blockers; D5 implemented and verified.
+- Automatic review budget consumed (2/2 rounds). D5 changes were user-directed (E0); a further review round requires explicit user approval if desired.
 
 ### Review Governor Decision
 
