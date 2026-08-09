@@ -140,7 +140,7 @@ export async function fetchProjectSnapshot(projectPath: string) {
 
 export async function fetchDashboardSkillFamilies() {
   const data = await fetchJson<DashboardSkillFamiliesResponse>('/api/skills/families')
-  return Array.isArray(data.families) ? data.families : []
+  return { families: Array.isArray(data.families) ? data.families : [], frozen: Boolean(data.frozen) }
 }
 
 export async function fetchDashboardSkillFamily(familyId: string) {

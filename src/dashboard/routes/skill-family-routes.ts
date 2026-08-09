@@ -5,6 +5,7 @@ import {
   readSkillFamilyInstances,
   readSkillFamilySignature,
 } from '../../core/skill-domain/projector.js';
+import { readEvolutionFrozenSync } from '../../config/dashboard-config.js';
 import { listProjects } from '../projects-registry.js';
 
 interface SkillFamilyRouteContext {
@@ -35,9 +36,14 @@ export function handleSkillFamilyRoutes(context: SkillFamilyRouteContext): boole
   }
 
   if (path === '/api/skills/families' && method === 'GET') {
+    if (readEvolutionFrozenSync()) {
+      // D5：冻结期间影子 skills 不展示
+      sendJsonWithOptionalEtag({ families: [], frozen: true }, 'frozen');
+      return true;
+    }
     const projectPaths = listProjectPaths();
     const etag = readAggregateSkillFamiliesSignature(projectPaths);
-    sendJsonWithOptionalEtag({ families: aggregateSkillFamilies(projectPaths) }, etag);
+    sendJsonWithOptionalEtag({ families: aggregateSkillFamilies(projectPaths), frozen: false }, etag);
     return true;
   }
 

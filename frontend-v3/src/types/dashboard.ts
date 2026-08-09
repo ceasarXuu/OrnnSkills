@@ -206,6 +206,7 @@ export interface DashboardProjectPickResponse {
 
 export interface DashboardSkillFamiliesResponse {
   families: DashboardSkillFamily[]
+  frozen?: boolean
 }
 
 export interface DashboardSkillFamilyResponse {

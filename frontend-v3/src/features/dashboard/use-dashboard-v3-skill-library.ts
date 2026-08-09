@@ -44,6 +44,7 @@ export function useDashboardV3SkillLibrary(preferredProjectPath: string) {
   const hasInitialCacheRef = useRef(Boolean(initialState))
   const hasInitialCache = hasInitialCacheRef.current
   const [families, setFamilies] = useState<DashboardSkillFamily[]>(initialState?.families ?? [])
+  const [evolutionFrozen, setEvolutionFrozen] = useState(false)
   const [selectedFamilyId, setSelectedFamilyId] = useState(initialState?.selectedFamilyId ?? '')
   const [selectedFamily, setSelectedFamily] = useState<DashboardSkillFamily | null>(initialState?.selectedFamily ?? null)
   const [instances, setInstances] = useState<DashboardSkillInstance[]>(initialState?.instances ?? [])
@@ -136,16 +137,17 @@ export function useDashboardV3SkillLibrary(preferredProjectPath: string) {
       }
       setFamiliesError(null)
       try {
-        const nextFamilies = await fetchDashboardSkillFamilies()
+        const result = await fetchDashboardSkillFamilies()
         if (cancelled) {
           return
         }
-        setFamilies(nextFamilies)
+        setEvolutionFrozen(result.frozen)
+        setFamilies(result.families)
         setSelectedFamilyId((current) => {
-          if (current && nextFamilies.some((family) => family.familyId === current)) {
+          if (current && result.families.some((family) => family.familyId === current)) {
             return current
           }
-          return nextFamilies[0]?.familyId ?? ''
+          return result.families[0]?.familyId ?? ''
         })
       } catch (error) {
         if (!cancelled) {
@@ -462,6 +464,7 @@ export function useDashboardV3SkillLibrary(preferredProjectPath: string) {
     diffContent: versionCompare.compareContent,
     diffVersion: versionCompare.compareVersion,
     draftContent,
+    evolutionFrozen,
     families: filteredFamilies,
     familiesError,
     instances,

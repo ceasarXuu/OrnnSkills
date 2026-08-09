@@ -34,6 +34,20 @@ describe('ShadowManager', () => {
       const manager = createShadowManager(testProjectPath);
       await expect(manager.init()).resolves.not.toThrow();
     });
+
+    it('skips shadow bootstrap materialization when evolution is frozen', async () => {
+      const sourceDir = join(testProjectPath, '.codex', 'skills', 'demo-skill');
+      mkdirSync(sourceDir, { recursive: true });
+      const { writeFileSync } = await import('node:fs');
+      writeFileSync(join(sourceDir, 'SKILL.md'), '# Demo Skill');
+
+      const manager = createShadowManager(testProjectPath, { evolutionFrozen: true });
+      await manager.init();
+
+      expect(existsSync(join(testProjectPath, '.ornn', 'shadows', 'codex', 'demo-skill.md'))).toBe(
+        false,
+      );
+    });
   });
 
   describe('processTrace', () => {

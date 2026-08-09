@@ -129,15 +129,22 @@ export class ShadowManager {
     if (!this.db) {
       throw new Error('ShadowManager database not initialized');
     }
-    bootstrapSkillsForMonitoring({
-      projectRoot: this.projectRoot,
-      db: this.db,
-      shadowRegistry: this.shadowRegistry,
-      traceSkillMapper: this.traceSkillMapper,
-      createVersionManager: (input) => createSkillVersionManager(input),
-      originPaths: configManager.getOriginPaths(),
-      enabledRuntimes: configManager.getGlobalConfig().observer.enabled_runtimes,
-    });
+    if (this.policy.evolution_frozen) {
+      // D5：冻结期间不物化影子 skills（跳过 bootstrap 扫描/复制/索引/初始版本）
+      logger.info('Evolution frozen: skipping shadow bootstrap', {
+        projectRoot: this.projectRoot,
+      });
+    } else {
+      bootstrapSkillsForMonitoring({
+        projectRoot: this.projectRoot,
+        db: this.db,
+        shadowRegistry: this.shadowRegistry,
+        traceSkillMapper: this.traceSkillMapper,
+        createVersionManager: (input) => createSkillVersionManager(input),
+        originPaths: configManager.getOriginPaths(),
+        enabledRuntimes: configManager.getGlobalConfig().observer.enabled_runtimes,
+      });
+    }
     logger.debug('Shadow manager initialized');
   }
 
