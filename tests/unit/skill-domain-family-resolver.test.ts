@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { existsSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-describe('skill domain family resolver', () => {
+describe('skill domain family resolver (host direct read)', () => {
   const rootDir = join(tmpdir(), `ornn-skill-domain-family-${Date.now()}`);
   const projectA = join(rootDir, 'project-a');
   const projectB = join(rootDir, 'project-b');
@@ -22,51 +22,21 @@ describe('skill domain family resolver', () => {
   it('merges same-named skills across projects into one family and marks divergent content', async () => {
     const { aggregateSkillFamilies } = await import('../../src/core/skill-domain/projector.js');
 
-    for (const [projectPath, runtime, body, updatedAt] of [
-      [projectA, 'codex', '# alpha\n', '2026-04-18T10:00:00.000Z'],
-      [projectB, 'claude', '# beta\n', '2026-04-18T12:00:00.000Z'],
+    for (const [projectPath, runtime, body] of [
+      [projectA, 'codex', '# alpha\n'],
+      [projectB, 'claude', '# beta\n'],
     ] as const) {
-      mkdirSync(join(projectPath, '.ornn', 'shadows', runtime), { recursive: true });
       mkdirSync(join(projectPath, '.ornn', 'state'), { recursive: true });
+      const hostDir = runtime === 'codex' ? '.codex' : '.claude';
+      mkdirSync(join(projectPath, hostDir, 'skills', 'test-driven-development'), { recursive: true });
       writeFileSync(
-        join(projectPath, '.ornn', 'shadows', 'index.json'),
-        JSON.stringify([
-          {
-            skillId: 'test-driven-development',
-            runtime,
-            version: '1',
-            status: 'active',
-            createdAt: '2026-04-18T09:00:00.000Z',
-            updatedAt,
-            traceCount: 1,
-          },
-        ]),
-        'utf-8'
-      );
-      writeFileSync(
-        join(projectPath, '.ornn', 'shadows', runtime, 'test-driven-development.md'),
+        join(projectPath, hostDir, 'skills', 'test-driven-development', 'SKILL.md'),
         body,
         'utf-8'
       );
-      const versionsDir = join(projectPath, '.ornn', 'skills', runtime, 'test-driven-development', 'versions');
-      mkdirSync(join(versionsDir, 'v1'), { recursive: true });
-      writeFileSync(join(versionsDir, 'v1', 'skill.md'), body, 'utf-8');
-      writeFileSync(
-        join(versionsDir, 'v1', 'metadata.json'),
-        JSON.stringify({
-          version: 1,
-          createdAt: updatedAt,
-          reason: 'seed',
-          traceIds: [],
-          previousVersion: null,
-          isDisabled: false,
-        }),
-        'utf-8'
-      );
-      symlinkSync('v1', join(versionsDir, 'latest'));
     }
 
-    const families = aggregateSkillFamilies([projectA, projectB]);
+    const families = aggregateSkillFamilies([projectA, projectB], { includeGlobalRoots: false });
 
     expect(families).toHaveLength(1);
     expect(families[0]).toMatchObject({
@@ -77,7 +47,14 @@ describe('skill domain family resolver', () => {
       identityMethod: 'normalized_skill_id',
       identityConfidence: 1,
       hasDivergedContent: true,
-      lastSeenAt: '2026-04-18T12:00:00.000Z',
     });
+  });
+
+  it('excludes global skill roots when includeGlobalRoots is disabled', async () => {
+    const { aggregateSkillFamilies } = await import('../../src/core/skill-domain/projector.js');
+
+    const families = aggregateSkillFamilies([projectA], { includeGlobalRoots: false });
+
+    expect(families).toHaveLength(0);
   });
 });

@@ -123,5 +123,5 @@ export function readSkillFamilyInstancesFromProjections(
   return projections
     .flatMap((projection) => projection.instances)
     .filter((instance) => instance.familyId === familyId)
-    .sort((left, right) => left.projectPath.localeCompare(right.projectPath) || left.runtime.localeCompare(right.runtime));
+    .sort((left, right) => left.projectPath.localeCompare(right.projectPath) || (left.runtime ?? 'generic').localeCompare(right.runtime ?? 'generic'));
 }

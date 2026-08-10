@@ -17,11 +17,11 @@ export function buildFamilyId(skillId: string): string {
   return `family_${hashContent(`family:${buildSkillKey(skillId)}`).slice(0, 16)}`;
 }
 
-export function buildInstanceNaturalKey(projectPath: string, runtime: SkillDomainRuntime, shadowPath: string): string {
-  return `${projectPath}::${runtime}::${shadowPath}`;
+export function buildInstanceNaturalKey(projectPath: string, runtime: SkillDomainRuntime | null, shadowPath: string): string {
+  return `${projectPath}::${runtime ?? 'generic'}::${shadowPath}`;
 }
 
-export function buildInstanceId(projectPath: string, runtime: SkillDomainRuntime, shadowPath: string): string {
+export function buildInstanceId(projectPath: string, runtime: SkillDomainRuntime | null, shadowPath: string): string {
   return `instance_${hashContent(buildInstanceNaturalKey(projectPath, runtime, shadowPath)).slice(0, 16)}`;
 }
 

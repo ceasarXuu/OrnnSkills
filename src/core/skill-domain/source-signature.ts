@@ -1,5 +1,7 @@
 import { existsSync, lstatSync, readdirSync, readlinkSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { homedir } from 'node:os';
+import { configManager } from '../../config/index.js';
 
 export function readFileSignature(filePath: string): string {
   if (!existsSync(filePath)) return 'missing';
@@ -137,7 +139,10 @@ export function collectSkillVersionTreeSignature(path: string): string {
   return entries.join(',');
 }
 
-export function readSkillDomainSourceSignature(projectPath: string): string {
+export function readSkillDomainSourceSignature(
+  projectPath: string,
+  options: { includeGlobalRoots?: boolean } = {}
+): string {
   const stateDir = join(projectPath, '.ornn', 'state');
   const traceSignatures = existsSync(stateDir)
     ? readdirSync(stateDir, { withFileTypes: true })
@@ -148,11 +153,41 @@ export function readSkillDomainSourceSignature(projectPath: string): string {
       .join(',')
     : 'missing';
 
+  const hostRootSignatures = projectSkillRootsForSignature(projectPath)
+    .map((root) => `${root}:${collectDirectoryContentSignature(root)}`)
+    .join('|');
+
+  const globalRootSignatures =
+    options.includeGlobalRoots === false
+      ? ''
+      : globalSkillRootsForSignature()
+          .map((root) => `${root}:${collectDirectoryContentSignature(root)}`)
+          .join('|');
+
   return [
+    hostRootSignatures || 'missing',
+    globalRootSignatures || 'missing',
     collectDirectoryContentSignature(join(projectPath, '.ornn', 'shadows')),
     collectDirectoryContentSignature(join(projectPath, '.ornn', 'skills')),
     traceSignatures || 'missing',
     readFileSignature(join(stateDir, 'agent-usage.ndjson')),
     readFileSignature(join(stateDir, 'agent-usage-summary.json')),
   ].join('|');
+}
+
+function projectSkillRootsForSignature(projectPath: string): string[] {
+  return [
+    '.codex/skills',
+    '.claude/skills',
+    '.opencode/skills',
+    'skills',
+    '.skills',
+    '.agents/skills',
+  ].map((relative) => join(projectPath, relative));
+}
+
+function globalSkillRootsForSignature(): string[] {
+  const roots = [...configManager.getOriginPaths()];
+  roots.push(join(homedir(), '.agents', 'skills'), join(homedir(), '.codex', 'skills'));
+  return roots;
 }

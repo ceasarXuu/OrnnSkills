@@ -69,7 +69,7 @@ export interface SkillInstance {
   projectId: string;
   projectPath: string;
   skillId: string;
-  runtime: SkillDomainRuntime;
+  runtime: SkillDomainRuntime | null;
   installPath: string;
   shadowPath: string;
   status: string;
@@ -92,7 +92,7 @@ export interface ProjectSkillGroup {
   skillKey: string;
   instanceCount: number;
   runtimeCount: number;
-  runtimes: SkillDomainRuntime[];
+  runtimes: (SkillDomainRuntime | null)[];
   status: string;
   lastUsedAt: string | null;
   observedCalls: number;
@@ -111,7 +111,7 @@ export interface SkillFamily {
   runtimeCount: number;
   revisionCount: number;
   projectPaths: string[];
-  runtimes: SkillDomainRuntime[];
+  runtimes: (SkillDomainRuntime | null)[];
   installedAt: string | null;
   firstSeenAt: string | null;
   lastSeenAt: string | null;

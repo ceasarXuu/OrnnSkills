@@ -36,8 +36,11 @@ export function handleSkillFamilyRoutes(context: SkillFamilyRouteContext): boole
 
   if (path === '/api/skills/families' && method === 'GET') {
     const projectPaths = listProjectPaths();
-    const etag = readAggregateSkillFamiliesSignature(projectPaths);
-    sendJsonWithOptionalEtag({ families: aggregateSkillFamilies(projectPaths) }, etag);
+    const etag = readAggregateSkillFamiliesSignature(projectPaths, { includeGlobalRoots: true });
+    sendJsonWithOptionalEtag(
+      { families: aggregateSkillFamilies(projectPaths, { includeGlobalRoots: true }) },
+      etag
+    );
     return true;
   }
 

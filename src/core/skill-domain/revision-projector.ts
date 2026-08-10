@@ -6,9 +6,11 @@ export function projectSkillRevisions(projectPath: string, instances: SkillInsta
   const revisions: SkillRevision[] = [];
 
   for (const instance of instances) {
-    const versions = listLegacyVersions(projectPath, instance.skillId, instance.runtime);
+    const runtime = instance.runtime;
+    if (!runtime) continue;
+    const versions = listLegacyVersions(projectPath, instance.skillId, runtime);
     for (const version of versions) {
-      const record = readLegacyVersionRecord(projectPath, instance.skillId, instance.runtime, version);
+      const record = readLegacyVersionRecord(projectPath, instance.skillId, runtime, version);
       if (!record) {
         continue;
       }
@@ -21,7 +23,7 @@ export function projectSkillRevisions(projectPath: string, instances: SkillInsta
         projectId: instance.projectId,
         projectPath: instance.projectPath,
         skillId: instance.skillId,
-        runtime: instance.runtime,
+        runtime,
         version,
         previousVersion: typeof record.metadata.previousVersion === 'number' ? record.metadata.previousVersion : null,
         previousRevisionId:

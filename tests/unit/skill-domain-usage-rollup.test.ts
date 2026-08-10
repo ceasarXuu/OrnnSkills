@@ -3,13 +3,13 @@ import { existsSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-describe('skill domain usage rollup', () => {
+describe('skill domain usage rollup (host direct read)', () => {
   const testDir = join(tmpdir(), `ornn-skill-domain-usage-${Date.now()}`);
 
   beforeEach(() => {
     mkdirSync(join(testDir, '.ornn', 'state'), { recursive: true });
-    mkdirSync(join(testDir, '.ornn', 'shadows', 'codex'), { recursive: true });
-    mkdirSync(join(testDir, '.ornn', 'shadows', 'claude'), { recursive: true });
+    mkdirSync(join(testDir, '.codex', 'skills', 'systematic-debugging'), { recursive: true });
+    mkdirSync(join(testDir, '.claude', 'skills', 'systematic-debugging'), { recursive: true });
   });
 
   afterEach(() => {
@@ -21,54 +21,8 @@ describe('skill domain usage rollup', () => {
   it('keeps ambiguous usage on family scope and only backfills instance scope when attribution is reliable', async () => {
     const { projectSkillDomain } = await import('../../src/core/skill-domain/projector.js');
 
-    writeFileSync(
-      join(testDir, '.ornn', 'shadows', 'index.json'),
-      JSON.stringify([
-        {
-          skillId: 'systematic-debugging',
-          runtime: 'codex',
-          version: '1',
-          status: 'active',
-          createdAt: '2026-04-18T09:00:00.000Z',
-          updatedAt: '2026-04-18T09:10:00.000Z',
-          traceCount: 0,
-        },
-        {
-          skillId: 'systematic-debugging',
-          runtime: 'claude',
-          version: '2',
-          status: 'active',
-          createdAt: '2026-04-18T09:05:00.000Z',
-          updatedAt: '2026-04-18T09:20:00.000Z',
-          traceCount: 0,
-        },
-      ]),
-      'utf-8'
-    );
-    writeFileSync(join(testDir, '.ornn', 'shadows', 'codex', 'systematic-debugging.md'), '# codex\n', 'utf-8');
-    writeFileSync(join(testDir, '.ornn', 'shadows', 'claude', 'systematic-debugging.md'), '# claude\n', 'utf-8');
-
-    for (const [runtime, version] of [
-      ['codex', 1],
-      ['claude', 2],
-    ] as const) {
-      const versionsDir = join(testDir, '.ornn', 'skills', runtime, 'systematic-debugging', 'versions');
-      mkdirSync(join(versionsDir, `v${version}`), { recursive: true });
-      writeFileSync(join(versionsDir, `v${version}`, 'skill.md'), `# ${runtime}\n`, 'utf-8');
-      writeFileSync(
-        join(versionsDir, `v${version}`, 'metadata.json'),
-        JSON.stringify({
-          version,
-          createdAt: `2026-04-18T09:${runtime === 'codex' ? '00' : '20'}:00.000Z`,
-          reason: version === 1 ? 'seed' : 'optimize',
-          traceIds: [],
-          previousVersion: version === 1 ? null : 1,
-          isDisabled: false,
-        }),
-        'utf-8'
-      );
-      symlinkSync(`v${version}`, join(versionsDir, 'latest'));
-    }
+    writeFileSync(join(testDir, '.codex', 'skills', 'systematic-debugging', 'SKILL.md'), '# codex\n', 'utf-8');
+    writeFileSync(join(testDir, '.claude', 'skills', 'systematic-debugging', 'SKILL.md'), '# claude\n', 'utf-8');
 
     writeFileSync(
       join(testDir, '.ornn', 'state', 'session-a.ndjson'),
@@ -116,7 +70,7 @@ describe('skill domain usage rollup', () => {
       'utf-8'
     );
 
-    const projection = projectSkillDomain(testDir);
+    const projection = projectSkillDomain(testDir, { includeGlobalRoots: false });
     const family = projection.families[0];
     const codexInstance = projection.instances.find((instance) => instance.runtime === 'codex');
     const claudeInstance = projection.instances.find((instance) => instance.runtime === 'claude');
@@ -124,7 +78,7 @@ describe('skill domain usage rollup', () => {
     expect(family?.usage).toMatchObject({
       observedCalls: 2,
       analyzedTouches: 1,
-      optimizedCount: 1,
+      optimizedCount: 0,
       lastUsedAt: '2026-04-18T10:10:00.000Z',
     });
     expect(codexInstance?.usage).toMatchObject({

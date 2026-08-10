@@ -111,6 +111,10 @@ export async function handleProjectSkillInstanceRoutes(
     }
 
     if (method === 'GET') {
+      if (!instance.runtime) {
+        notFound();
+        return true;
+      }
       const result = readSkillVersion(projectPath, instance.skillId, version, instance.runtime);
       if (!result) {
         notFound();

@@ -47,8 +47,8 @@ describe('dashboard skill family routes', () => {
     });
 
     expect(handled).toBe(true);
-    expect(mocks.aggregateSkillFamilies).toHaveBeenCalledWith(['/tmp/a', '/tmp/b']);
-    expect(mocks.readAggregateSkillFamiliesSignature).toHaveBeenCalledWith(['/tmp/a', '/tmp/b']);
+    expect(mocks.aggregateSkillFamilies).toHaveBeenCalledWith(['/tmp/a', '/tmp/b'], { includeGlobalRoots: true });
+    expect(mocks.readAggregateSkillFamiliesSignature).toHaveBeenCalledWith(['/tmp/a', '/tmp/b'], { includeGlobalRoots: true });
     expect(jsonWithEtag).toHaveBeenCalledWith({ families }, 'families-v1');
   });
 

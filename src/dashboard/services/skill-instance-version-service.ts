@@ -20,6 +20,10 @@ export function saveSkillInstanceVersion(params: {
   if (!instance) {
     return { ok: false as const, notFound: true as const };
   }
+  if (!instance.runtime) {
+    // D6 宿主直读模式：通用根实例无 shadow 版本操作
+    return { ok: false as const, notFound: true as const };
+  }
 
   const result = saveSkillVersion({
     projectPath: params.projectPath,
@@ -50,6 +54,9 @@ export function toggleSkillInstanceVersionState(params: {
 }) {
   const instance = getProjectedSkillInstanceById(params.projectPath, params.instanceId);
   if (!instance) {
+    return { ok: false as const, notFound: true as const };
+  }
+  if (!instance.runtime) {
     return { ok: false as const, notFound: true as const };
   }
 
@@ -125,7 +132,7 @@ export function applySkillInstanceToFamily(params: {
   let failedTargets = 0;
 
   for (const target of preview.targets) {
-    const targetContent = readSkillContent(target.projectPath, target.skillId, target.runtime);
+    const targetContent = readSkillContent(target.projectPath, target.skillId, target.runtime ?? 'codex');
     if (targetContent === null) {
       failedTargets++;
       params.logger.warn('Dashboard family apply target content not found', {
@@ -145,9 +152,9 @@ export function applySkillInstanceToFamily(params: {
     const result = saveSkillVersion({
       projectPath: target.projectPath,
       skillId: target.skillId,
-      runtime: target.runtime,
+      runtime: target.runtime ?? 'codex',
       content: params.content,
-      reason: `Apply from ${params.projectPath} (${preview.instance.runtime})`,
+      reason: `Apply from ${params.projectPath} (${preview.instance.runtime ?? 'generic'})`,
       logContext: 'Dashboard apply-to-family propagated skill instance version',
       logger: params.logger,
     });

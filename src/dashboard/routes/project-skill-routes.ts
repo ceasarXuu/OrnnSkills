@@ -1,4 +1,8 @@
 import { SkillVersionManager } from '../../core/skill-version/index.js';
+import { getProjectedSkillInstanceById } from '../../core/skill-domain/projector.js';
+import { resolveHostSkillFilePathFromInstall } from '../../core/skill-domain/instance-projector.js';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { listProjects } from '../projects-registry.js';
 import { readSkillContent, readSkills } from '../data-reader.js';
 import type { RuntimeType } from '../../types/index.js';
@@ -59,6 +63,38 @@ export async function handleProjectSkillRoutes(context: ProjectSkillRouteContext
   const skillMatch = subPath.match(/^\/skills\/([^/]+)$/);
   if (skillMatch && method === 'GET') {
     const skillId = decodeURIComponent(skillMatch[1]);
+    // D6 宿主直读模式：按 instanceId 读宿主 SKILL.md，不再读 shadow
+    const instanceId = url.searchParams.get('instanceId');
+    if (instanceId) {
+      const instance = getProjectedSkillInstanceById(projectPath, instanceId);
+      if (!instance) {
+        notFound();
+        return true;
+      }
+      const hostPath = resolveHostSkillFilePathFromInstall(instance.installPath);
+      if (!hostPath) {
+        notFound();
+        return true;
+      }
+      let content: string | null = null;
+      try {
+        const { readFileSync } = await import('node:fs');
+        content = readFileSync(hostPath, 'utf-8');
+      } catch (error) {
+        logger.warn('Failed to read host skill file', { projectPath, skillId, hostPath, error: String(error) });
+      }
+      json({
+        skillId,
+        runtime: instance.runtime,
+        content,
+        versions: [],
+        effectiveVersion: null,
+        status: instance.status,
+        installPath: instance.installPath,
+      });
+      return true;
+    }
+
     const runtime = resolveDashboardRuntime(undefined, url.searchParams.get('runtime'));
     const content = readSkillContent(projectPath, skillId, runtime);
     const skills = readSkills(projectPath);
@@ -92,9 +128,45 @@ export async function handleProjectSkillRoutes(context: ProjectSkillRouteContext
       content?: unknown;
       runtime?: unknown;
       reason?: unknown;
+      instanceId?: unknown;
     };
     if (typeof body.content !== 'string') {
       json({ ok: false, error: 'content must be a string' }, 400);
+      return true;
+    }
+
+    // D6 宿主直读模式：正文编辑写回宿主 SKILL.md
+    if (typeof body.instanceId === 'string') {
+      const instance = getProjectedSkillInstanceById(projectPath, body.instanceId);
+      if (!instance) {
+        notFound();
+        return true;
+      }
+      const hostPath = resolveHostSkillFilePathFromInstall(instance.installPath);
+      try {
+        if (hostPath) {
+          writeFileSync(hostPath, body.content, 'utf-8');
+        } else {
+          mkdirSync(instance.installPath, { recursive: true });
+          writeFileSync(join(instance.installPath, 'SKILL.md'), body.content, 'utf-8');
+        }
+      } catch (error) {
+        logger.error('Failed to write host skill file', {
+          projectPath,
+          skillId,
+          installPath: instance.installPath,
+          error: String(error),
+        });
+        json({ ok: false, error: String(error) }, 500);
+        return true;
+      }
+      json({
+        ok: true,
+        unchanged: false,
+        version: null,
+        metadata: null,
+        deployedPath: hostPath ?? join(instance.installPath, 'SKILL.md'),
+      });
       return true;
     }
 
