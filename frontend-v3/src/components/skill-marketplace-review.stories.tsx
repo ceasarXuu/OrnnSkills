@@ -39,7 +39,7 @@ const meta = {
     width: '960px',
   }),
   args: {
-    localContent: storySkillDetail.content,
+    localContent: storySkillDetail.content ?? '',
     marketplaceContent,
     onCancel: fn(),
     onApply: fn(),
@@ -99,7 +99,7 @@ export const AcceptAll: Story = {
 
 export const NoChanges: Story = {
   args: {
-    marketplaceContent: storySkillDetail.content,
+    marketplaceContent: storySkillDetail.content ?? '',
   },
   render: (args) => <InteractiveSkillMarketplaceReview {...args} />,
   play: async ({ canvas }) => {

@@ -37,10 +37,10 @@ describe('dashboard v3 skills layout contract', () => {
     expect(skillFamilyDetailSource).toContain('preferredProjectPath')
   })
 
-  it('removes the inline instances rail and keeps instance switching on the header selectors', () => {
+  it('removes the inline instances rail and runtime switching (D6 host direct read)', () => {
     expect(skillFamilyDetailSource).not.toContain('Instances')
     expect(skillFamilyDetailSource).not.toContain('onSelectInstance')
-    expect(skillFamilyDetailSource).toContain("t('switchRuntime')")
+    expect(skillFamilyDetailSource).not.toContain("t('switchRuntime')")
   })
 
   it('keeps the skills workspace fixed while merging family, version, and content controls into one detail frame', () => {
@@ -59,12 +59,12 @@ describe('dashboard v3 skills layout contract', () => {
     expect(skillFamilyDetailSource).not.toContain("t('divergedContent')")
     expect(skillFamilyDetailSource).not.toContain('grid-cols-[minmax(0,1fr)_340px]')
     expect(skillFamilyDetailSource).toContain('<SkillContentEditor')
-    expect(skillFamilyDetailSource).toContain('<SkillVersionHistory')
+    expect(skillFamilyDetailSource).not.toContain('<SkillVersionHistory')
     expect(skillFamilyDetailSource).toContain('flex min-w-0 flex-wrap items-center justify-end gap-2 border-t')
-    expect(skillFamilyDetailSource).toContain('grid w-[344px] max-w-full shrink-0 grid-cols-2')
     expect(skillFamilyDetailSource).not.toContain('2xl:grid-cols-[minmax(0,1fr)_340px]')
 
     expect(skillContentEditorSource).not.toContain('<SkillVersionHistory')
+    expect(skillContentEditorSource).not.toContain('<SkillVersionDiffViewer')
     expect(skillContentEditorSource).not.toContain('CardHeader')
     expect(skillContentEditorSource).not.toContain('xl:flex-row')
   })

@@ -33,37 +33,22 @@ export function SkillsWorkspace({
       <section className="min-w-0">
         <SkillFamilyDetail
           actionMessage={skillLibrary.actionMessage}
-          applyPreview={skillLibrary.applyPreview}
-          detail={skillLibrary.detail}
           detailError={skillLibrary.detailError}
-          diffContent={skillLibrary.diffContent}
-          diffVersion={skillLibrary.diffVersion}
           draftContent={skillLibrary.draftContent}
           family={skillLibrary.selectedFamily}
-          isApplying={skillLibrary.isApplying}
           isCheckingMarketplace={skillLibrary.isCheckingMarketplace}
           isLoading={skillLibrary.isLoadingFamilyDetail || skillLibrary.isLoadingSkillDetail}
           isSaving={skillLibrary.isSaving}
           marketplaceReview={skillLibrary.marketplaceReview}
           onApplyMarketplaceChanges={skillLibrary.applyMarketplaceChanges}
-          onApplyToFamily={skillLibrary.applyToFamily}
           onCheckMarketplace={skillLibrary.checkMarketplace}
-          onCloseApplyPreview={skillLibrary.closeApplyPreview}
           onCloseMarketplaceReview={skillLibrary.closeMarketplaceReview}
           onDraftChange={skillLibrary.setDraftContent}
-          onLoadApplyPreview={skillLibrary.loadApplyPreview}
           onPreferredProjectChange={onSelectProject}
-          onSelectDiffVersion={skillLibrary.loadDiffVersion}
-          onSelectVersion={skillLibrary.loadVersion}
           onSave={skillLibrary.save}
-          onSwitchRuntime={skillLibrary.switchRuntime}
-          onToggleVersionDisabled={skillLibrary.toggleVersionDisabled}
           preferredProjectPath={selectedProjectId}
-          preferredRuntime={skillLibrary.preferredRuntime}
           projects={projects}
           selectedInstance={skillLibrary.selectedInstance}
-          selectedVersion={skillLibrary.selectedVersion}
-          versionMetadataByNumber={skillLibrary.versionMetadataByNumber}
         />
       </section>
 

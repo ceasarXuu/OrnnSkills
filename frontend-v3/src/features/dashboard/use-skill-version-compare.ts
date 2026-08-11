@@ -30,7 +30,7 @@ export function useSkillVersionCompare({
 
   const selectCompareVersion = useCallback(
     async (version: number | null) => {
-      if (!selectedInstance || !baseVersion || version === null || version === baseVersion) {
+      if (!selectedInstance || !selectedInstance.runtime || !baseVersion || version === null || version === baseVersion) {
         setCompareContent(null)
         setCompareVersion(null)
         return

@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest'
 import {
   clearCachedSkillDetail,
   getCachedSkillDetail,
-  mergeCachedVersionMetadata,
   setCachedSkillDetail,
 } from '../../frontend-v3/src/lib/skill-detail-cache.ts'
 
@@ -12,43 +11,29 @@ const skillLibraryHookSource = readFileSync(
   'utf8',
 )
 
-describe('dashboard v3 skill detail loading', () => {
-  it('does not block content rendering on version metadata fan-out', () => {
+describe('dashboard v3 skill detail loading (host direct read)', () => {
+  it('loads content without version metadata fan-out (D6)', () => {
     const contentReadyIndex = skillLibraryHookSource.indexOf("logDashboardV3Event('skill_library.content_ready'")
-    const metadataLoadIndex = skillLibraryHookSource.indexOf('loadSkillVersionMetadata({')
 
     expect(contentReadyIndex).toBeGreaterThan(0)
-    expect(metadataLoadIndex).toBeGreaterThan(contentReadyIndex)
-    expect(skillLibraryHookSource).not.toContain('const versionEntries = await Promise.all')
+    expect(skillLibraryHookSource).not.toContain('loadSkillVersionMetadata({')
+    expect(skillLibraryHookSource).not.toContain('useSkillVersionCompare')
   })
 
-  it('caches loaded detail separately from background version metadata', () => {
+  it('caches loaded host detail for instant revisit', () => {
     clearCachedSkillDetail('instance-1')
     setCachedSkillDetail('instance-1', {
       detail: {
         content: 'content',
-        effectiveVersion: 1,
-        runtime: 'codex',
+        effectiveVersion: null,
+        runtime: null,
         skillId: 'demo',
-        versions: [1, 2],
+        versions: [],
       },
       draftContent: 'content',
-      selectedVersion: 1,
-      versionMetadataByNumber: {},
     })
 
     expect(getCachedSkillDetail('instance-1')?.draftContent).toBe('content')
-    mergeCachedVersionMetadata('instance-1', {
-      2: {
-        createdAt: '2026-04-26T00:00:00.000Z',
-        previousVersion: 1,
-        reason: 'test',
-        traceIds: [],
-        version: 2,
-      },
-    })
-
-    expect(getCachedSkillDetail('instance-1')?.versionMetadataByNumber[2]?.reason).toBe('test')
+    expect(getCachedSkillDetail('instance-1')?.detail.content).toBe('content')
   })
 })
-

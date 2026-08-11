@@ -1,9 +1,7 @@
 import type {
-  DashboardSkillApplyPreview,
   DashboardSkillDetail,
   DashboardSkillFamily,
   DashboardSkillInstance,
-  DashboardSkillVersionMetadata,
   SkillDomainRuntime,
 } from '@/types/dashboard'
 
@@ -16,7 +14,6 @@ import type {
 
 export interface SkillLibraryCacheState {
   actionMessage: string | null
-  applyPreview: DashboardSkillApplyPreview | null
   detail: DashboardSkillDetail | null
   detailError: string | null
   draftContent: string
@@ -24,13 +21,11 @@ export interface SkillLibraryCacheState {
   familiesError: string | null
   instances: DashboardSkillInstance[]
   preferredProjectPath: string
-  preferredRuntime: SkillDomainRuntime
+  preferredRuntime: SkillDomainRuntime | null
   query: string
   selectedFamily: DashboardSkillFamily | null
   selectedFamilyId: string
   selectedInstanceId: string
-  selectedVersion: number | null
-  versionMetadataByNumber: Record<number, DashboardSkillVersionMetadata>
 }
 
 let skillLibraryCache: SkillLibraryCacheState | null = null

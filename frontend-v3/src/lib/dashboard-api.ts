@@ -164,10 +164,19 @@ export async function fetchDashboardSkillFamilyInstances(familyId: string) {
 export async function fetchDashboardSkillDetail(
   projectPath: string,
   skillId: string,
-  runtime: SkillDomainRuntime,
+  runtime: SkillDomainRuntime | null,
+  instanceId?: string,
 ) {
+  const params = new URLSearchParams()
+  if (runtime) {
+    params.set('runtime', runtime)
+  }
+  if (instanceId) {
+    params.set('instanceId', instanceId)
+  }
+  const query = params.toString()
   return await fetchJson<DashboardSkillDetail>(
-    `/api/projects/${encodeProjectPath(projectPath)}/skills/${encodeURIComponent(skillId)}?runtime=${encodeURIComponent(runtime)}`,
+    `/api/projects/${encodeProjectPath(projectPath)}/skills/${encodeURIComponent(skillId)}${query ? `?${query}` : ''}`,
   )
 }
 
@@ -190,23 +199,24 @@ interface SaveDashboardSkillDetailInput {
   instanceId?: string | null
   projectPath: string
   reason: string
-  runtime: SkillDomainRuntime
+  runtime: SkillDomainRuntime | null
   skillId: string
 }
 
 export async function saveDashboardSkillDetail(input: SaveDashboardSkillDetailInput) {
-  const path = input.instanceId
-    ? `/api/projects/${encodeProjectPath(input.projectPath)}/skill-instances/${encodeURIComponent(input.instanceId)}`
-    : `/api/projects/${encodeProjectPath(input.projectPath)}/skills/${encodeURIComponent(input.skillId)}?runtime=${encodeURIComponent(input.runtime)}`
+  // D6 宿主直读模式：编辑写回宿主 SKILL.md（带 instanceId）
+  const path = `/api/projects/${encodeProjectPath(input.projectPath)}/skills/${encodeURIComponent(input.skillId)}`
 
   return await putJson<{
     ok: boolean
     unchanged?: boolean
     version?: number
+    deployedPath?: string | null
   }>(path, {
     content: input.content,
     reason: input.reason,
-    runtime: input.runtime,
+    runtime: input.runtime ?? undefined,
+    instanceId: input.instanceId ?? undefined,
   })
 }
 

@@ -52,7 +52,7 @@ export interface DashboardSkillInstance {
   familyName: string
   projectPath: string
   skillId: string
-  runtime: SkillDomainRuntime
+  runtime: SkillDomainRuntime | null
   status: string
   lastUsedAt?: string | null
   updatedAt?: string | null
@@ -79,11 +79,12 @@ export interface DashboardSkillVersionRecord {
 
 export interface DashboardSkillDetail {
   skillId: string
-  runtime: SkillDomainRuntime
-  content: string
+  runtime: SkillDomainRuntime | null
+  content: string | null
   versions: number[]
   effectiveVersion: number | null
   status?: string
+  installPath?: string
 }
 
 export interface DashboardSkillApplyPreviewTarget {

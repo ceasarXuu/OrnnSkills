@@ -1,34 +1,25 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  applyDashboardSkillToFamily,
-  fetchDashboardSkillApplyPreview,
   fetchDashboardSkillDetail,
   fetchDashboardSkillFamilies,
   fetchDashboardSkillFamily,
   fetchDashboardSkillFamilyInstances,
-  fetchDashboardSkillVersion,
   logDashboardV3Event,
   saveDashboardSkillDetail,
-  toggleDashboardSkillVersionDisabled,
 } from '@/lib/dashboard-api'
 import { filterSkillFamilies, selectPreferredSkillInstance, sortSkillFamilies } from '@/lib/skill-library'
 import {
   clearCachedSkillDetail,
   getCachedSkillDetail,
-  loadSkillVersionMetadata,
-  mergeCachedVersionMetadata,
   setCachedSkillDetail,
 } from '@/lib/skill-detail-cache'
-import { useSkillVersionCompare } from './use-skill-version-compare'
 import { getInitialSkillLibraryState, setSkillLibraryCache } from './use-dashboard-v3-skill-library-cache'
 import { useDashboardV3SkillMarketplace } from './use-dashboard-v3-skill-marketplace'
 import type { DashboardActionToastMessage } from '@/components/dashboard-action-toast'
 import type {
-  DashboardSkillApplyPreview,
   DashboardSkillDetail,
   DashboardSkillFamily,
   DashboardSkillInstance,
-  DashboardSkillVersionMetadata,
   SkillDomainRuntime,
 } from '@/types/dashboard'
 
@@ -50,11 +41,8 @@ export function useDashboardV3SkillLibrary(preferredProjectPath: string) {
   const [selectedInstanceId, setSelectedInstanceId] = useState(initialState?.selectedInstanceId ?? '')
   const [detail, setDetail] = useState<DashboardSkillDetail | null>(initialState?.detail ?? null)
   const [draftContent, setDraftContent] = useState(initialState?.draftContent ?? '')
-  const [selectedVersion, setSelectedVersion] = useState<number | null>(initialState?.selectedVersion ?? null)
-  const [versionMetadataByNumber, setVersionMetadataByNumber] = useState<Record<number, DashboardSkillVersionMetadata>>(initialState?.versionMetadataByNumber ?? {})
-  const [preferredRuntime, setPreferredRuntime] = useState<SkillDomainRuntime>(initialState?.preferredRuntime ?? 'codex')
+  const preferredRuntime = useState<SkillDomainRuntime | null>(initialState?.preferredRuntime ?? 'codex')[0]
   const [query, setQuery] = useState(initialState?.query ?? '')
-  const [applyPreview, setApplyPreview] = useState<DashboardSkillApplyPreview | null>(initialState?.applyPreview ?? null)
   const [actionMessage, setActionMessage] = useState<string | null>(initialState?.actionMessage ?? null)
   const toastSequenceRef = useRef(0)
   const [toastMessage, setToastMessage] = useState<DashboardActionToastMessage | null>(null)
@@ -64,7 +52,6 @@ export function useDashboardV3SkillLibrary(preferredProjectPath: string) {
   const [isLoadingFamilyDetail, setIsLoadingFamilyDetail] = useState(false)
   const [isLoadingSkillDetail, setIsLoadingSkillDetail] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
-  const [isApplying, setIsApplying] = useState(false)
   const [refreshToken, setRefreshToken] = useState(0)
   const filteredFamilies = useMemo(() => {
     return sortSkillFamilies(filterSkillFamilies(families, query))
@@ -72,15 +59,6 @@ export function useDashboardV3SkillLibrary(preferredProjectPath: string) {
   const selectedInstance = useMemo(() => {
     return instances.find((instance) => instance.instanceId === selectedInstanceId) ?? null
   }, [instances, selectedInstanceId])
-  const versionCompare = useSkillVersionCompare({
-    baseVersion: selectedVersion,
-    onActionMessage: setActionMessage,
-    onMetadataLoaded: (version, metadata) => {
-      setVersionMetadataByNumber((current) => ({ ...current, [version]: metadata }))
-    },
-    selectedFamilyId,
-    selectedInstance,
-  })
   const marketplace = useDashboardV3SkillMarketplace({
     draftContent,
     onActionMessage: setActionMessage,
@@ -91,7 +69,6 @@ export function useDashboardV3SkillLibrary(preferredProjectPath: string) {
   useEffect(() => {
     setSkillLibraryCache({
       actionMessage,
-      applyPreview,
       detail,
       detailError,
       draftContent,
@@ -104,12 +81,9 @@ export function useDashboardV3SkillLibrary(preferredProjectPath: string) {
       selectedFamily,
       selectedFamilyId,
       selectedInstanceId,
-      selectedVersion,
-      versionMetadataByNumber,
     })
   }, [
     actionMessage,
-    applyPreview,
     detail,
     detailError,
     draftContent,
@@ -122,12 +96,34 @@ export function useDashboardV3SkillLibrary(preferredProjectPath: string) {
     selectedFamily,
     selectedFamilyId,
     selectedInstanceId,
-    selectedVersion,
-    versionMetadataByNumber,
   ])
   const reload = useCallback(() => {
     setRefreshToken((current) => current + 1)
   }, [])
+  const save = useCallback(async () => {
+    if (!selectedInstance || !detail) {
+      return
+    }
+    setIsSaving(true)
+    setActionMessage('保存中')
+    try {
+      const result = await saveDashboardSkillDetail({
+        content: draftContent,
+        instanceId: selectedInstance.instanceId,
+        projectPath: selectedInstance.projectPath,
+        reason: 'Manual edit from dashboard v3',
+        runtime: selectedInstance.runtime,
+        skillId: selectedInstance.skillId,
+      })
+      setActionMessage(result.ok ? '已保存到宿主 skills 目录' : '保存失败。')
+      clearCachedSkillDetail(selectedInstance.instanceId)
+      reload()
+    } catch (error) {
+      setActionMessage(getErrorMessage(error, '保存失败。'))
+    } finally {
+      setIsSaving(false)
+    }
+  }, [detail, draftContent, reload, selectedInstance])
   useEffect(() => {
     let cancelled = false
     async function loadFamilies() {
@@ -209,9 +205,6 @@ export function useDashboardV3SkillLibrary(preferredProjectPath: string) {
     if (!selectedInstance) {
       setDetail(null)
       setDraftContent('')
-      setVersionMetadataByNumber({})
-      setSelectedVersion(null)
-      setApplyPreview(null)
       return
     }
     const instance = selectedInstance
@@ -221,10 +214,6 @@ export function useDashboardV3SkillLibrary(preferredProjectPath: string) {
       if (cached) {
         setDetail(cached.detail)
         setDraftContent(cached.draftContent)
-        setSelectedVersion(cached.selectedVersion)
-        setVersionMetadataByNumber(cached.versionMetadataByNumber)
-        setPreferredRuntime(instance.runtime)
-        setApplyPreview(null)
         setIsLoadingSkillDetail(false)
         return
       }
@@ -237,22 +226,16 @@ export function useDashboardV3SkillLibrary(preferredProjectPath: string) {
           instance.projectPath,
           instance.skillId,
           instance.runtime,
+          instance.instanceId,
         )
         if (cancelled) {
           return
         }
         setDetail(nextDetail)
         setDraftContent(nextDetail.content ?? '')
-        const nextSelectedVersion = nextDetail.effectiveVersion ?? nextDetail.versions[nextDetail.versions.length - 1] ?? null
-        setSelectedVersion(nextSelectedVersion)
-        setVersionMetadataByNumber({})
-        setPreferredRuntime(instance.runtime)
-        setApplyPreview(null)
         setCachedSkillDetail(instance.instanceId, {
           detail: nextDetail,
           draftContent: nextDetail.content ?? '',
-          selectedVersion: nextSelectedVersion,
-          versionMetadataByNumber: {},
         })
         setIsLoadingSkillDetail(false)
         logDashboardV3Event('skill_library.content_ready', {
@@ -260,33 +243,10 @@ export function useDashboardV3SkillLibrary(preferredProjectPath: string) {
           instanceId: instance.instanceId,
           versionCount: nextDetail.versions.length,
         })
-        void loadSkillVersionMetadata({
-          instanceId: instance.instanceId,
-          projectPath: instance.projectPath,
-          runtime: instance.runtime,
-          skillId: instance.skillId,
-          versions: nextDetail.versions,
-        })
-          .then((metadata) => {
-            if (!cancelled) {
-              setVersionMetadataByNumber(metadata)
-              mergeCachedVersionMetadata(instance.instanceId, metadata)
-            }
-          })
-          .catch((error) => {
-            if (!cancelled) {
-              logDashboardV3Event('skill_library.version_metadata_failed', {
-                instanceId: instance.instanceId,
-                message: getErrorMessage(error, '加载版本历史失败。'),
-              })
-            }
-          })
       } catch (error) {
         if (!cancelled) {
           setDetail(null)
           setDraftContent('')
-          setVersionMetadataByNumber({})
-          setSelectedVersion(null)
           setDetailError(getErrorMessage(error, '加载技能正文失败。'))
           setIsLoadingSkillDetail(false)
         }
@@ -302,193 +262,33 @@ export function useDashboardV3SkillLibrary(preferredProjectPath: string) {
     setActionMessage(null)
     logDashboardV3Event('skill_library.family_selected', { familyId })
   }, [])
-  const switchRuntime = useCallback(
-    (runtime: SkillDomainRuntime) => {
-      setPreferredRuntime(runtime)
-      const runtimeInstances = instances.filter((instance) => instance.runtime === runtime)
-      const preferredInstance = selectPreferredSkillInstance(runtimeInstances, {
-        preferredProjectPath,
-        preferredRuntime: runtime,
-      })
-      if (preferredInstance) {
-        setSelectedInstanceId(preferredInstance.instanceId)
-      }
-      logDashboardV3Event('skill_library.runtime_switched', {
-        familyId: selectedFamilyId,
-        runtime,
-      })
-    },
-    [instances, preferredProjectPath, selectedFamilyId],
-  )
-  const loadVersion = useCallback(
-    async (version: number) => {
-      if (!selectedInstance || !detail) {
-        return
-      }
-      try {
-        const record = await fetchDashboardSkillVersion(
-          selectedInstance.projectPath,
-          selectedInstance.skillId,
-          selectedInstance.runtime,
-          version,
-          selectedInstance.instanceId,
-        )
-        setDraftContent(record.content)
-        setSelectedVersion(version)
-        setVersionMetadataByNumber((current) => ({
-          ...current,
-          [version]: record.metadata,
-        }))
-        logDashboardV3Event('skill_library.version_selected', {
-          familyId: selectedFamilyId,
-          instanceId: selectedInstance.instanceId,
-          version,
-        })
-      } catch (error) {
-        setActionMessage(getErrorMessage(error, '加载版本失败。'))
-      }
-    },
-    [detail, selectedFamilyId, selectedInstance],
-  )
-  const save = useCallback(async () => {
-    if (!selectedInstance || !detail) {
-      return
-    }
-    setIsSaving(true)
-    setActionMessage('保存中')
-    try {
-      const result = await saveDashboardSkillDetail({
-        content: draftContent,
-        instanceId: selectedInstance.instanceId,
-        projectPath: selectedInstance.projectPath,
-        reason: 'Manual edit from dashboard v3',
-        runtime: selectedInstance.runtime,
-        skillId: selectedInstance.skillId,
-      })
-      setActionMessage(result.unchanged ? '没有正文变更' : `已保存 v${result.version ?? '--'}`)
-      clearCachedSkillDetail(selectedInstance.instanceId)
-      reload()
-    } catch (error) {
-      setActionMessage(getErrorMessage(error, '保存失败。'))
-    } finally {
-      setIsSaving(false)
-    }
-  }, [detail, draftContent, reload, selectedInstance])
-  const toggleVersionDisabled = useCallback(
-    async (version: number, disabled: boolean) => {
-      if (!selectedInstance || !detail) {
-        return
-      }
-      try {
-        const result = await toggleDashboardSkillVersionDisabled({
-          disabled,
-          instanceId: selectedInstance.instanceId,
-          projectPath: selectedInstance.projectPath,
-          runtime: selectedInstance.runtime,
-          skillId: selectedInstance.skillId,
-          version,
-        })
-        setVersionMetadataByNumber((current) => ({
-          ...current,
-          [version]: result.metadata ?? current[version],
-        }))
-        setDetail((current) => {
-          if (!current) {
-            return current
-          }
-          return {
-            ...current,
-            effectiveVersion: result.effectiveVersion ?? current.effectiveVersion,
-          }
-        })
-        setActionMessage(disabled ? `已停用 v${version}` : `已恢复 v${version}`)
-        clearCachedSkillDetail(selectedInstance.instanceId)
-        reload()
-      } catch (error) {
-        setActionMessage(getErrorMessage(error, '切换版本状态失败。'))
-      }
-    },
-    [detail, reload, selectedInstance],
-  )
-  const loadApplyPreview = useCallback(async () => {
-    if (!selectedInstance) {
-      return
-    }
-    try {
-      const preview = await fetchDashboardSkillApplyPreview(
-        selectedInstance.projectPath,
-        selectedInstance.instanceId,
-      )
-      setApplyPreview(preview)
-    } catch (error) {
-      setActionMessage(getErrorMessage(error, '加载传播预览失败。'))
-    }
-  }, [selectedInstance])
-  const applyToFamily = useCallback(async () => {
-    if (!selectedInstance) {
-      return
-    }
-    setIsApplying(true)
-    setActionMessage('正在应用到同族实例')
-    try {
-      const result = await applyDashboardSkillToFamily({
-        content: draftContent,
-        instanceId: selectedInstance.instanceId,
-        projectPath: selectedInstance.projectPath,
-        reason: 'Manual edit from dashboard v3',
-      })
-      setActionMessage(
-        `已更新 ${result.updatedTargets ?? 0} 个，跳过 ${result.skippedTargets ?? 0} 个`,
-      )
-      setApplyPreview(null)
-      reload()
-    } catch (error) {
-      setActionMessage(getErrorMessage(error, '应用到同族实例失败。'))
-    } finally {
-      setIsApplying(false)
-    }
-  }, [draftContent, reload, selectedInstance])
   return {
     actionMessage,
     applyMarketplaceChanges: marketplace.applyMarketplaceChanges,
-    applyToFamily,
-    applyPreview,
     checkMarketplace: marketplace.checkMarketplace,
     clearToastMessage: () => setToastMessage(null),
-    closeApplyPreview: () => setApplyPreview(null),
     closeMarketplaceReview: marketplace.closeMarketplaceReview,
     detail,
     detailError,
-    diffContent: versionCompare.compareContent,
-    diffVersion: versionCompare.compareVersion,
     draftContent,
     families: filteredFamilies,
     familiesError,
     instances,
-    isApplying,
     isCheckingMarketplace: marketplace.isCheckingMarketplace,
     isLoadingFamilies,
     isLoadingFamilyDetail,
     isLoadingSkillDetail,
     isSaving,
-    loadApplyPreview,
-    loadDiffVersion: versionCompare.selectCompareVersion,
-    loadVersion,
     marketplaceReview: marketplace.marketplaceReview,
-    preferredRuntime,
     query,
     save,
     selectedFamily,
     selectedFamilyId,
     selectedInstance,
     selectedInstanceId,
-    selectedVersion,
     selectFamily,
     setDraftContent,
     setQuery,
-    switchRuntime,
-    toggleVersionDisabled,
     toastMessage,
-    versionMetadataByNumber,
   }
 }
