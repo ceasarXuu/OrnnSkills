@@ -76,6 +76,7 @@ v0.1.13 的演化功能是隐式副作用流水线：`Observer -> Daemon -> Shad
 | W4 | runner 入口防御短路（D1） | 行为短路 | `src/core/shadow-manager/optimization-runner.ts` | run 入口 | 入口冻结检查，冻结直接 skip | 旁路路径也无法执行优化 | 双保险，防未来旁路 | 复杂度：+1 分支 | 单测：直接调用 runner 冻结时 skip | 回滚：删除短路分支 | verified |
 | W5 | 演化 UI 隐藏（D2） | 渲染分支 | `frontend-v3/src/components/config-workspace.tsx` | 「演进策略」TabsTrigger | 不渲染演化 tab | 配置页只显示「模型」tab | D2 核心达成 | 复杂度：-1 tab；契约测试需同步 | 契约测试：演化 tab 文案不出现；配置模型 tab 与自动保存回归 | 回滚：恢复 TabsTrigger | verified |
 | W5b | 影子机制冻结（D5） | 行为短路 | `src/core/shadow-manager/index.ts` | bootstrap 物化 | 冻结时跳过 bootstrap | 冻结期间无影子产生、无影子更新；**技能库展示保留**（展示层按用户纠正回滚） | D5 落地 | 复杂度：+1 分支 | 单测（init 不物化）；技能库展示回归（families API 正常返回） | 回滚：恢复 bootstrap 调用 | verified |
+| W5c | 技能库直读宿主（D6） | 读侧数据源替换 | `src/core/skill-domain/{instance-projector,projector,source-signature}.ts` / `src/dashboard/routes/{project-skill-routes,skill-family-routes}.ts` / `frontend-v3` | 宿主扫描器 / detail·save / 前端 | 技能库直扫宿主 roots（含全局）；详情按 instanceId 读宿主 SKILL.md；编辑写宿主；版本/传播/切换 UI 隐藏 | 宿主 skills 增删改实时反映；冻结期照常展示；shadow 不再承载展示 | D6 落地 | 复杂度：宿主扫描器 + 签名扩展 + 前端版本 UI 移除（净删除 646 行） | 单测（直扫/聚合/usage）+ 契约测试 + 运行期验证（改宿主文件即时反映） | 回滚：恢复 shadow 投影 | verified |
 | W6 | 冻结态零副作用验证 | 回归验证 | 测试 + 运行时 | 冻结行为 | 构造 episode 就绪场景，验证无 patch/新版本/部署事件；开关回切验证恢复 | 冻结与恢复均被验证 | 完成定义达成 | 无 | vitest 回归 + `npm run test:smoke` | 不适用 | in-progress（单元级验证完成：813 单测 + 59 storybook 全绿、lint 0 errors、API 返回 evolutionFrozen:true；24h 运行期观察窗口待执行） |
 
 ## 7. 阶段与 Product Decision Delta
@@ -116,5 +117,5 @@ v0.1.13 的演化功能是隐式副作用流水线：`Observer -> Daemon -> Shad
 ## 10. 计划状态
 
 - Plan validity: `valid`
-- Execution Tracking: A/B/C `verified`（含 D5 实施）；D `in-progress`（W6 单元级完成，24h 运行期观察待执行）
+- Execution Tracking: A/B/C `verified`（含 D5/D6 实施）；D `in-progress`（W6 单元级完成，24h 运行期观察待执行）
 - Plan Authoring: `planned`
