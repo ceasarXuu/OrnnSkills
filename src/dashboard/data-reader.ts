@@ -11,6 +11,7 @@ import {
 } from 'node:fs';
 import { basename, join } from 'node:path';
 import { homedir } from 'node:os';
+import { configManager } from '../config/index.js';
 import type { DecisionEventRecord } from '../core/decision-events/index.js';
 import {
   createEmptyTaskEpisodeSnapshot,
@@ -18,7 +19,7 @@ import {
   type TaskEpisode,
   type TaskEpisodeSnapshot,
 } from '../core/task-episode/index.js';
-import { collectSkillVersionTreeSignature, readFileSignature } from '../core/skill-domain/source-signature.js';
+import { collectDirectoryContentSignature, collectSkillVersionTreeSignature, readFileSignature } from '../core/skill-domain/source-signature.js';
 import type { ProjectSkillGroup, SkillInstance } from '../types/index.js';
 import {
   createRotatingLogCursor,
@@ -208,6 +209,12 @@ export function readProjectSnapshotVersion(projectRoot: string): string {
   const traceSignatures = listTraceNdjsonPaths(projectRoot)
     .map((filePath) => `${filePath}:${readFileSignature(filePath)}`)
     .join(',');
+  const hostRootSignatures = projectHostSkillRoots(projectRoot)
+    .map((root) => `${root}:${collectDirectoryContentSignature(root)}`)
+    .join('|');
+  const globalRootSignatures = globalHostSkillRoots()
+    .map((root) => `${root}:${collectDirectoryContentSignature(root)}`)
+    .join('|');
   const parts = [
     readFileSignature(join(projectRoot, '.ornn', 'daemon.pid')),
     readFileSignature(getGlobalDaemonPidPath()),
@@ -221,8 +228,22 @@ export function readProjectSnapshotVersion(projectRoot: string): string {
     readFileSignature(join(shadowsDir, 'index.json')),
     collectSkillVersionTreeSignature(skillsDir),
     readFileSignature(join(homedir(), '.ornn', 'projects.json')),
+    hostRootSignatures || 'missing',
+    globalRootSignatures || 'missing',
   ];
   return parts.join('|');
+}
+
+function projectHostSkillRoots(projectRoot: string): string[] {
+  return ['.codex', '.claude', '.opencode', '', '.skills', '.agents'].map((relative) =>
+    join(projectRoot, relative, 'skills')
+  );
+}
+
+function globalHostSkillRoots(): string[] {
+  const roots = configManager.getOriginPaths();
+  roots.push(join(homedir(), '.agents', 'skills'), join(homedir(), '.codex', 'skills'));
+  return roots;
 }
 
 export function readTaskEpisodeSnapshot(projectRoot: string): TaskEpisodeSnapshot {
