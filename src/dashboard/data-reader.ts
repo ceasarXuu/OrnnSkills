@@ -202,6 +202,40 @@ export function readProjectSnapshot(projectRoot: string): ProjectData {
   };
 }
 
+/**
+ * 宿主 skills 目录签名 TTL 缓存。
+ * 全量递归 stat 在 APFS 下无法用目录 mtime 跳过（文件内容修改不更新父目录 mtime），
+ * 因此以 15s TTL 降频：稳态每 15 秒一次全量扫描（10 项目 × 200 skills ≈ 140ms，占事件循环 ~1%），
+ * 变化检测延迟上限 ≈ TTL + 3s 广播周期。
+ */
+const HOST_SKILL_SIGNATURE_TTL_MS = 15_000;
+
+const projectHostSignatureCache = new Map<string, { at: number; value: string }>();
+let globalHostSignatureCache: { at: number; value: string } | null = null;
+
+function readProjectHostSkillSignature(projectRoot: string): string {
+  const cached = projectHostSignatureCache.get(projectRoot);
+  if (cached && Date.now() - cached.at < HOST_SKILL_SIGNATURE_TTL_MS) {
+    return cached.value;
+  }
+  const value = projectHostSkillRoots(projectRoot)
+    .map((root) => `${root}:${collectDirectoryContentSignature(root)}`)
+    .join('|');
+  projectHostSignatureCache.set(projectRoot, { at: Date.now(), value });
+  return value;
+}
+
+function readGlobalHostSkillSignature(): string {
+  if (globalHostSignatureCache && Date.now() - globalHostSignatureCache.at < HOST_SKILL_SIGNATURE_TTL_MS) {
+    return globalHostSignatureCache.value;
+  }
+  const value = globalHostSkillRoots()
+    .map((root) => `${root}:${collectDirectoryContentSignature(root)}`)
+    .join('|');
+  globalHostSignatureCache = { at: Date.now(), value };
+  return value;
+}
+
 export function readProjectSnapshotVersion(projectRoot: string): string {
   const stateDir = join(projectRoot, '.ornn', 'state');
   const shadowsDir = join(projectRoot, '.ornn', 'shadows');
@@ -209,12 +243,8 @@ export function readProjectSnapshotVersion(projectRoot: string): string {
   const traceSignatures = listTraceNdjsonPaths(projectRoot)
     .map((filePath) => `${filePath}:${readFileSignature(filePath)}`)
     .join(',');
-  const hostRootSignatures = projectHostSkillRoots(projectRoot)
-    .map((root) => `${root}:${collectDirectoryContentSignature(root)}`)
-    .join('|');
-  const globalRootSignatures = globalHostSkillRoots()
-    .map((root) => `${root}:${collectDirectoryContentSignature(root)}`)
-    .join('|');
+  const hostRootSignatures = readProjectHostSkillSignature(projectRoot);
+  const globalRootSignatures = readGlobalHostSkillSignature();
   const parts = [
     readFileSignature(join(projectRoot, '.ornn', 'daemon.pid')),
     readFileSignature(getGlobalDaemonPidPath()),
